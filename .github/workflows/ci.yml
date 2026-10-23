@@ -13,20 +13,20 @@ env:
   PONDER_TELEMETRY_DISABLED: "true"
 
 jobs:
-  attribution:
-    name: no Claude attribution (S178-L1)
+  commit-message-policy:
+    name: commit message policy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - run: scripts/check-attribution.sh --self-test
+      - run: scripts/check-commit-policy.sh --self-test
       - name: check every commit
         run: |
           rev=HEAD
           if [ "${{ github.event_name }}" = "pull_request" ]; then rev="${{ github.event.pull_request.head.sha }}"; fi
-          scripts/check-attribution.sh "$rev"
+          scripts/check-commit-policy.sh "$rev"
 
   check:
     name: typecheck + unit tests
