@@ -10,7 +10,10 @@ import { wrapFetchWithPayment } from "@x402/fetch";
 import { readVaultImpl, predictVault } from "./vault.ts";
 import { granteeVaultSigner, maxValidBefore, ValidBeforeExceeded, type GranteeKey, type GranteeVaultSignerConfig } from "./vault-signer.ts";
 
-export type EnvelopeSignerConfig = Omit<GranteeVaultSignerConfig, "maxTimeoutSeconds">;
+export type EnvelopeSignerConfig = Omit<GranteeVaultSignerConfig, "maxTimeoutSeconds" | "expiry"> & {
+  /** The live envelope's expiry, read from chain; called before every payment. Throws if the envelope is gone. */
+  readEnvelopeExpiry: () => Promise<bigint>;
+};
 
 /**
  * The official exact client scheme, with validBefore = min(envelope expiry, now + the seller's
@@ -21,12 +24,13 @@ export type EnvelopeSignerConfig = Omit<GranteeVaultSignerConfig, "maxTimeoutSec
  * the seller's; otherwise the seller's own value. The requirements the server sees in `accepted` are the
  * original ones (x402Client sets `accepted` itself). Each payment gets a signer bound to that seller window;
  * if the clock ticks between the two readings of `now` and the result would pass the envelope, the signer
- * refuses (ValidBeforeExceeded) and the payload is rebuilt.
+ * refuses (ValidBeforeExceeded) and the payload is rebuilt. The envelope expiry is re-read before every
+ * payment, so an envelope replaced or shortened since setup bounds the next payment.
  */
 export function envelopeExactScheme(cfg: EnvelopeSignerConfig): SchemeNetworkClient {
   const now = cfg.now ?? (() => Math.floor(Date.now() / 1000));
   // Only `scheme` and `findDefaultAsset` are read from this one; it never signs.
-  const probe = new ExactEvmScheme(granteeVaultSigner({ ...cfg, maxTimeoutSeconds: 1 }));
+  const probe = new ExactEvmScheme(granteeVaultSigner({ ...cfg, expiry: 0n, maxTimeoutSeconds: 1 }));
   return {
     scheme: probe.scheme,
     findDefaultAsset: probe.findDefaultAsset,
@@ -35,11 +39,12 @@ export function envelopeExactScheme(cfg: EnvelopeSignerConfig): SchemeNetworkCli
         throw new Error(`asset transfer method ${String(requirements.extra?.assetTransferMethod)} is out of scope`);
       }
       const seller = requirements.maxTimeoutSeconds;
-      const inner = new ExactEvmScheme(granteeVaultSigner({ ...cfg, maxTimeoutSeconds: seller, now }));
+      const expiry = await cfg.readEnvelopeExpiry();
+      const inner = new ExactEvmScheme(granteeVaultSigner({ ...cfg, expiry, maxTimeoutSeconds: seller, now }));
       for (let attempt = 0; ; attempt++) {
         const t = now();
-        const timeout = Number(maxValidBefore(cfg.expiry, seller, t) - BigInt(t));
-        if (timeout <= 6) throw new Error(`validBefore would be ${timeout} s away (envelope expiry ${cfg.expiry}, seller window ${seller} s); too late to pay`);
+        const timeout = Number(maxValidBefore(expiry, seller, t) - BigInt(t));
+        if (timeout <= 6) throw new Error(`validBefore would be ${timeout} s away (envelope expiry ${expiry}, seller window ${seller} s); too late to pay`);
         try {
           return await inner.createPaymentPayload(x402Version, { ...requirements, maxTimeoutSeconds: timeout }, context);
         } catch (e) {
@@ -64,7 +69,7 @@ export type GrantPayment = {
   token: Address;
   vault: Address;
   granteeKey: Hex;
-  /** The envelope expiry; no authorization's validBefore is later (R-S186-1). */
+  /** The envelope expiry at setup. It is re-read before every payment; no validBefore is later (R-S186-1). */
   expiry: bigint;
   client: x402Client;
   fetch: typeof fetch;
@@ -91,11 +96,15 @@ export async function payInsideGrant(opts: {
   const [wallet, granteeKey] = await pc.readContract({ address: mandate, abi: camAbi, functionName: "granteeOf", args: [account, grantId] });
   if (!isAddressEqual(wallet, opts.grantee.address)) throw new Error(`grant ${grantId}'s grantee is ${wallet}, not ${opts.grantee.address}`);
   const vault = predictVault(await readVaultImpl(pc, account), account, granteeKey);
-  const [envGrant, expiry] = await pc.readContract({ address: mandate, abi: camAbi, functionName: "envelopeOf", args: [account, granteeKey, token] });
-  if (envGrant.toLowerCase() !== grantId.toLowerCase()) throw new Error(`the live envelope is grant ${envGrant}, not ${grantId}`);
-  const { timestamp } = await pc.getBlock();
-  if (BigInt(expiry) <= timestamp) throw new Error(`envelope expired at ${expiry}`);
-  const scheme = envelopeExactScheme({ grantee: opts.grantee, vault, grantId, token, chainId, expiry: BigInt(expiry) });
+  const readEnvelopeExpiry = async () => {
+    const [envGrant, expiry] = await pc.readContract({ address: mandate, abi: camAbi, functionName: "envelopeOf", args: [account, granteeKey, token] });
+    if (envGrant.toLowerCase() !== grantId.toLowerCase()) throw new Error(`the live envelope is grant ${envGrant}, not ${grantId}`);
+    const { timestamp } = await pc.getBlock();
+    if (BigInt(expiry) <= timestamp) throw new Error(`envelope expired at ${expiry}`);
+    return BigInt(expiry);
+  };
+  const expiry = await readEnvelopeExpiry();
+  const scheme = envelopeExactScheme({ grantee: opts.grantee, vault, grantId, token, chainId, readEnvelopeExpiry });
   const client = new x402Client().register(`eip155:${chainId}`, scheme);
-  return { account, grantId, token, vault, granteeKey, expiry: BigInt(expiry), client, fetch: wrapFetchWithPayment(opts.fetch ?? fetch, client) };
+  return { account, grantId, token, vault, granteeKey, expiry, client, fetch: wrapFetchWithPayment(opts.fetch ?? fetch, client) };
 }

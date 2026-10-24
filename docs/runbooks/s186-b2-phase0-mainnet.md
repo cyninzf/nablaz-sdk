@@ -118,7 +118,9 @@ PAY_AUTHORIZED in the tx: writerAuth grantId, counterparty `0xCc88…0243`, coun
 ## Block D — SE, Codespace: seller and one payment
 
 Prerequisites: the Codespace has been reloaded so `B2_GRANTEE_HOT_KEY`, `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`
-and `ARB_ONE_RPC_URL` are in the environment. None is passed on a command line or printed. Packages:
+and an RPC are in the environment. The client reads `ARB_ONE_RPC_URL`, falling back to `READER_ARB_RPC_URL`
+(the Codespace has only the latter), and prints which name it used; the seller reads no RPC (CDP verifies and
+settles). None is passed on a command line or printed. Packages:
 `@x402/core`, `@x402/evm`, `@x402/fetch` 2.28.0, `@coinbase/cdp-sdk` 1.58.0, unpatched (lockfile).
 
 ```sh
@@ -135,8 +137,8 @@ node --experimental-strip-types tools/pay-once.ts \
   --url http://127.0.0.1:4021/paid
 ```
 
-The seller prints its maxTimeoutSeconds (300) and each settlement's tx hash. The client prints the vault and
-envelope expiry, then the authorization it signed (from, to, value, validAfter 0, validBefore = signing time
+The seller prints its maxTimeoutSeconds (300) and each settlement's tx hash. The client prints the RPC
+variable name it used, the vault and envelope expiry (re-read from chain again just before signing), then the authorization it signed (from, to, value, validAfter 0, validBefore = signing time
 + 300, nonce, the seller's maxTimeoutSeconds), the HTTP status and the settlement tx hash; both tx hashes
 match. Stop the seller after one settlement (`kill %1`).
 

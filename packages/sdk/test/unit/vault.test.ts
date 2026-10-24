@@ -131,8 +131,9 @@ describe("envelope exact scheme (official ExactEvmScheme underneath)", () => {
     vi.setSystemTime(NOW * 1000);
   });
   afterEach(() => vi.useRealTimers());
-  const scheme = (expiry: bigint, now?: () => number) =>
-    envelopeExactScheme({ grantee, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, expiry, now });
+  const schemeReading = (readEnvelopeExpiry: () => Promise<bigint>, now?: () => number) =>
+    envelopeExactScheme({ grantee, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, readEnvelopeExpiry, now });
+  const scheme = (expiry: bigint, now?: () => number) => schemeReading(async () => expiry, now);
   const req = (maxTimeoutSeconds: number) => ({
     scheme: "exact",
     network: "eip155:42161" as const,
@@ -154,6 +155,19 @@ describe("envelope exact scheme (official ExactEvmScheme underneath)", () => {
   it("R-S186-1 (b): seller window 7 days, envelope 1 hour out → validBefore = envelope expiry", async () => {
     const a = await scheme(BigInt(NOW + 3600)).createPaymentPayload(2, req(7 * 86_400));
     expect(auth(a).validBefore).toBe(String(NOW + 3600));
+  });
+  it("re-reads the envelope before every payment: a shortened envelope bounds the next one, a gone one refuses", async () => {
+    const reads: bigint[] = [BigInt(NOW + 8 * 86_400), BigInt(NOW + 120)];
+    let calls = 0;
+    const s = schemeReading(async () => {
+      const e = reads[calls++];
+      if (e === undefined) throw new Error("the live envelope is grant 0x00, not this grant");
+      return e;
+    });
+    expect(auth(await s.createPaymentPayload(2, req(3600))).validBefore).toBe(String(NOW + 3600));
+    expect(auth(await s.createPaymentPayload(2, req(3600))).validBefore).toBe(String(NOW + 120));
+    await expect(s.createPaymentPayload(2, req(3600))).rejects.toThrow(/live envelope is grant/);
+    expect(calls).toBe(3);
   });
   it("draws a fresh 32-byte nonce per payload", async () => {
     const s = scheme(BigInt(NOW + 8 * 86_400));
