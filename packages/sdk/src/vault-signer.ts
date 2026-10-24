@@ -8,9 +8,10 @@
 //   - the ERC-1271 bytes are abi.encode(Authorization{grantId, token, to, value, validAfter, validBefore,
 //     nonce, granteeSignature}) (L96-105), decoded at L151.
 //
-// R-B0-1: validBefore is pinned to the envelope expiry. The adapter refuses to sign anything else, so a
-// payload it signs can never outlive the envelope. The grantee may be any external signer (a viem
-// LocalAccount, a KMS or hardware wallet behind `toAccount`): only `address` and `signTypedData` are used.
+// R-S186-1 (the restrictive reading of R-B0-1): validBefore = min(envelope expiry, now + the seller's
+// maxTimeoutSeconds). The adapter refuses any larger value, so a payload it signs never outlives the envelope
+// and never outlives the seller's window. The grantee may be any external signer (a viem LocalAccount, a KMS
+// or hardware wallet behind `toAccount`): only `address` and `signTypedData` are used.
 
 import { encodeAbiParameters, getAddress, isAddressEqual, zeroHash, type Address, type Hex, type TypedDataDomain } from "viem";
 import type { ClientEvmSigner } from "@x402/evm";
@@ -78,18 +79,29 @@ export type GranteeVaultSignerConfig = {
   grantId: Hex;
   token: Address;
   chainId: number;
-  /** The envelope expiry (CAM V4 envelopeOf). Every authorization signed has exactly this validBefore. */
-  validBefore: bigint;
+  /** The envelope expiry (CAM V4 envelopeOf). No authorization signed has a later validBefore. */
+  expiry: bigint;
+  /** The seller's maxTimeoutSeconds for the payment being signed. No validBefore later than now + this. */
+  maxTimeoutSeconds: number;
+  /** Unix seconds; defaults to the wall clock, the clock the official exact scheme reads. */
+  now?: () => number;
 };
 
-/** Thrown when asked to sign a validBefore other than the envelope expiry. */
-export class ValidBeforeMismatch extends Error {
+/** R-S186-1: the latest validBefore the adapter signs, min(envelope expiry, now + seller maxTimeoutSeconds). */
+export function maxValidBefore(expiry: bigint, maxTimeoutSeconds: number, now: number): bigint {
+  if (!Number.isSafeInteger(maxTimeoutSeconds) || maxTimeoutSeconds <= 0) throw new Error(`maxTimeoutSeconds ${maxTimeoutSeconds} is not a positive integer`);
+  const window = BigInt(now) + BigInt(maxTimeoutSeconds);
+  return window < expiry ? window : expiry;
+}
+
+/** Thrown when asked to sign a validBefore above min(envelope expiry, now + seller maxTimeoutSeconds). */
+export class ValidBeforeExceeded extends Error {
   readonly got: bigint;
-  readonly want: bigint;
-  constructor(got: bigint, want: bigint) {
-    super(`validBefore ${got} is not the envelope expiry ${want}`);
+  readonly max: bigint;
+  constructor(got: bigint, max: bigint) {
+    super(`validBefore ${got} is above ${max} = min(envelope expiry, now + seller maxTimeoutSeconds)`);
     this.got = got;
-    this.want = want;
+    this.max = max;
   }
 }
 
@@ -126,10 +138,15 @@ export function encodeVaultSignature(grantId: Hex, token: Address, m: TransferWi
   ]);
 }
 
-/** A ClientEvmSigner whose address is the vault. Signs EIP-3009 TransferWithAuthorization from the vault only. */
+/**
+ * A ClientEvmSigner whose address is the vault. Signs EIP-3009 TransferWithAuthorization from the vault only,
+ * for one seller window: build one per payment requirement.
+ */
 export function granteeVaultSigner(cfg: GranteeVaultSignerConfig): ClientEvmSigner {
   const vault = getAddress(cfg.vault);
   const token = getAddress(cfg.token);
+  const now = cfg.now ?? (() => Math.floor(Date.now() / 1000));
+  maxValidBefore(cfg.expiry, cfg.maxTimeoutSeconds, 0); // refuse a bad window at construction
   return {
     address: vault,
     async signTypedData({ domain, primaryType, message }) {
@@ -149,7 +166,8 @@ export function granteeVaultSigner(cfg: GranteeVaultSignerConfig): ClientEvmSign
         nonce: raw.nonce as Hex,
       };
       if (!isAddressEqual(m.from, vault)) throw new Error(`from ${m.from} is not the vault ${vault}`);
-      if (m.validBefore !== cfg.validBefore) throw new ValidBeforeMismatch(m.validBefore, cfg.validBefore);
+      const max = maxValidBefore(cfg.expiry, cfg.maxTimeoutSeconds, now());
+      if (m.validBefore > max) throw new ValidBeforeExceeded(m.validBefore, max);
       if (!/^0x[0-9a-fA-F]{64}$/.test(m.nonce)) throw new Error("nonce is not 32 bytes");
       const granteeSignature = await cfg.grantee.signTypedData(granteeTypedData(d, vault, cfg.chainId, m));
       return encodeVaultSignature(cfg.grantId, token, m, granteeSignature);

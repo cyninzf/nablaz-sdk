@@ -1,8 +1,9 @@
 # S186 B2 Phase 0 — first live x402 payment from a NablaZ account (Arbitrum One)
 
 Produced, not executed. Every value below was derived from proto `4a38c373` and live reads at Arbitrum
-block 517955000, and the exact Block A and Block C calldata was replayed on a fork (see the S186 report).
-The CTO adapts the paths to the operator's machine and issues it.
+block 517955000 (`grantNonce[TEST]` re-read as 0 at block 517972848), and the exact Block A and Block C
+calldata was replayed byte for byte on a fork with the real grantee key (`runbook.fork.test.ts`; see the
+S186-B2-P0b report). The CTO adapts the paths to the operator's machine and issues it.
 
 | | |
 |---|---|
@@ -16,6 +17,7 @@ The CTO adapts the paths to the operator's machine and issues it.
 | payTo | `0x1633647e98534880807A4ea19862b9bb47a00645` |
 | startTime | `1792800000` = 2026-10-24 00:00:00 UTC |
 | expiry (grant and envelope) | `1793491200` = 2026-11-01 00:00:00 UTC |
+| validBefore (R-S186-1) | min(envelope expiry, signing time + the seller's maxTimeoutSeconds); seller default 300 s |
 
 ## Derivations (deterministic)
 
@@ -125,15 +127,18 @@ cd packages/sdk
 # CDP_API_KEY_ID / CDP_API_KEY_SECRET from the environment). Prints each settlement's tx hash.
 node --experimental-strip-types tools/seller.ts --cdp --pay-to 0x1633647e98534880807A4ea19862b9bb47a00645 --price '$0.01' --port 4021 &
 
-# Client: ONE request from the vault; validBefore = the live envelope expiry (1793491200), read from chain.
+# Client: ONE request from the vault. validBefore = min(live envelope expiry 1793491200, now + the seller's
+# maxTimeoutSeconds 300) = signing time + 300 (R-S186-1); the adapter refuses to sign anything later.
 node --experimental-strip-types tools/pay-once.ts \
   --account 0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c \
   --grant-id 0xefc5e61448596750c570eac19e80354a2671c1ae063b963ed1db28fa3ab4be8f \
   --url http://127.0.0.1:4021/paid
 ```
 
-The client prints the vault, validBefore, the HTTP status and the settlement tx hash; the seller prints the
-same tx hash. Stop the seller after one settlement (`kill %1`).
+The seller prints its maxTimeoutSeconds (300) and each settlement's tx hash. The client prints the vault and
+envelope expiry, then the authorization it signed (from, to, value, validAfter 0, validBefore = signing time
++ 300, nonce, the seller's maxTimeoutSeconds), the HTTP status and the settlement tx hash; both tx hashes
+match. Stop the seller after one settlement (`kill %1`).
 
 ## Expected on-chain outcome (CTO verifies)
 
@@ -141,6 +146,7 @@ In the settlement tx (`transferWithAuthorization(address,address,uint256,uint256
 selector `0xcf092995`, `to` = USDC, submitted by CDP's facilitator):
 
 1. USDC `AuthorizationUsed(authorizer = 0x46414CFb3F27735F2a9824abfb63699bF80ed001, nonce)`, the nonce the client printed.
+   The tx's `validBefore` argument is the value the client printed: ≤ 1793491200 and ≤ the signing time + 300.
 2. USDC `Transfer(from = 0x4641…d001, to = 0x1633…0645, value = 10000)`, immediately after it.
 3. The calldata ends with an ERC-8021 suffix: last 16 bytes `0x80218021802180218021802180218021`, preceded by a
    schema byte and a codes-length byte.
@@ -156,8 +162,11 @@ selector `0xcf092995`, `to` = USDC, submitted by CDP's facilitator):
 
 - **CDP verify refuses the vault** (the seller prints `verify REFUSED` and the facilitator's reason: payer
   screening, `invalid_exact_evm_payload_signature` / ERC-1271, a simulation failure, or a validBefore-range
-  rule on the hosted side — validBefore here is ~8 days out, the official local facilitator imposes no upper
-  bound, the hosted one was not observed). Nothing has moved. Report the full seller and client output.
+  rule on the hosted side — validBefore here is the seller's own window, signing time + 300, as the official
+  client would sign it; the hosted facilitator's upper bound was not observed). Nothing has moved. Report the
+  full seller and client output.
+- **The client refuses to sign** (`ValidBeforeExceeded` or `too late to pay`): the clock or the envelope is
+  off; nothing was sent. Report the client output and `date -u`.
 - **CDP settle fails after verify** (`settle FAILED: <reason>`): read the vault's USDC balance and
   `authorizationState(vault, nonce)` on USDC before anything else; report both with the output.
 - **The record read-back disagrees with the chain** (grantOf / granteeOf / envelopeOf / granteeVault / the

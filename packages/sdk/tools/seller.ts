@@ -21,6 +21,9 @@ import {
 import type { Network, Price } from "@x402/core/types";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 
+/** The seller's window when none is given: validBefore lands at most this far out (R-S186-1). */
+export const DEFAULT_MAX_TIMEOUT_SECONDS = 300;
+
 export type SellerRoute = { path: string; payTo: string; price: Price };
 
 /** What the seller saw for one paid request, in order. */
@@ -48,7 +51,7 @@ export async function startSeller(opts: {
       opts.routes.map((r) => [
         `GET ${r.path}`,
         {
-          accepts: { scheme: "exact", network: opts.network, payTo: r.payTo, price: r.price, maxTimeoutSeconds: opts.maxTimeoutSeconds ?? 300 },
+          accepts: { scheme: "exact", network: opts.network, payTo: r.payTo, price: r.price, maxTimeoutSeconds: opts.maxTimeoutSeconds ?? DEFAULT_MAX_TIMEOUT_SECONDS },
           description: "Phase 0 test resource",
           mimeType: "application/json",
         },
@@ -133,7 +136,7 @@ async function main() {
     routes: [{ path: values.path!, payTo: values["pay-to"], price: values.price! }],
     port: Number(values.port),
   });
-  console.log(`seller listening on ${seller.url}${values.path} (eip155:42161, exact, ${values.price}, payTo ${values["pay-to"]})`);
+  console.log(`seller listening on ${seller.url}${values.path} (eip155:42161, exact, ${values.price}, payTo ${values["pay-to"]}, maxTimeoutSeconds ${DEFAULT_MAX_TIMEOUT_SECONDS})`);
   let seen = 0;
   setInterval(() => {
     for (; seen < seller.events.length; seen++) {

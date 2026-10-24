@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeAbiParameters, hashTypedData, keccak256, stringToHex, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
@@ -9,7 +9,8 @@ import {
   granteeTypedData,
   granteeVaultSigner,
   predictVault,
-  ValidBeforeMismatch,
+  maxValidBefore,
+  ValidBeforeExceeded,
 } from "../../src/index";
 
 const C = ARBITRUM_ONE.contracts;
@@ -69,16 +70,20 @@ describe("vault signer adapter", () => {
   const grantee = privateKeyToAccount(keccak256(stringToHex("unit-test grantee")));
   const grantId = keccak256(stringToHex("grant"));
   const vault = M.from;
-  const signer = granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, validBefore: M.validBefore });
-  const sign = (m: Partial<typeof M>, primaryType = "TransferWithAuthorization", domain: Record<string, unknown> = USDC_DOMAIN) =>
-    signer.signTypedData({ domain, types: {}, primaryType, message: { ...M, ...m } });
+  // Envelope expiry M.validBefore; seller window 3600 s; the clock 8 days before expiry. Bound = now + 3600.
+  const NOW = Number(M.validBefore) - 8 * 86_400;
+  const BOUND = BigInt(NOW + 3600);
+  const signer = granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 3600, now: () => NOW });
+  const sign = (m: Partial<typeof M>, primaryType = "TransferWithAuthorization", domain: Record<string, unknown> = USDC_DOMAIN, s = signer) =>
+    s.signTypedData({ domain, types: {}, primaryType, message: { ...M, validBefore: BOUND, ...m } });
 
   it("hashes what GranteeVaultV2.granteeDigest hashes", () => {
     expect(hashTypedData(granteeTypedData(USDC_DOMAIN, LIVE.vaultImpl, 42161, { ...M }))).toBe(LIVE.digest);
   });
 
   it("returns abi.encode(Authorization) carrying the grantee's signature over the digest", async () => {
-    const sig = await sign({});
+    const sig = await sign({ validBefore: M.validBefore }, "TransferWithAuthorization", USDC_DOMAIN,
+      granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 3600, now: () => Number(M.validBefore) - 60 }));
     const [a] = decodeAbiParameters(
       [{ type: "tuple", components: [
         { name: "grantId", type: "bytes32" }, { name: "token", type: "address" }, { name: "to", type: "address" },
@@ -92,8 +97,22 @@ describe("vault signer adapter", () => {
     expect(signer.address).toBe(vault);
   });
 
-  it("refuses a validBefore other than the envelope expiry (R-B0-1)", async () => {
-    await expect(sign({ validBefore: M.validBefore - 1n })).rejects.toBeInstanceOf(ValidBeforeMismatch);
+  it("R-S186-1 (c): refuses any validBefore above min(envelope expiry, now + seller window), signs at or below it", async () => {
+    expect(maxValidBefore(M.validBefore, 3600, NOW)).toBe(BOUND);
+    await expect(sign({ validBefore: BOUND + 1n })).rejects.toBeInstanceOf(ValidBeforeExceeded);
+    await expect(sign({ validBefore: M.validBefore })).rejects.toBeInstanceOf(ValidBeforeExceeded); // the P0 value
+    await expect(sign({ validBefore: M.validBefore + 1n })).rejects.toBeInstanceOf(ValidBeforeExceeded);
+    await expect(sign({ validBefore: BOUND })).resolves.toMatch(/^0x/);
+    await expect(sign({ validBefore: BOUND - 1n })).resolves.toMatch(/^0x/);
+    // Envelope inside the seller window: the envelope is the bound, whatever the window.
+    const late = granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 7 * 86_400, now: () => Number(M.validBefore) - 3600 });
+    await expect(sign({ validBefore: M.validBefore + 1n }, "TransferWithAuthorization", USDC_DOMAIN, late)).rejects.toBeInstanceOf(ValidBeforeExceeded);
+    await expect(sign({ validBefore: M.validBefore }, "TransferWithAuthorization", USDC_DOMAIN, late)).resolves.toMatch(/^0x/);
+  });
+  it("refuses a non-positive or fractional seller window", () => {
+    for (const t of [0, -1, 1.5, Number.NaN]) {
+      expect(() => granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: t })).toThrow(/positive integer/);
+    }
   });
   it("refuses another payer, token, chain or payload type", async () => {
     await expect(sign({ from: PAY_TO })).rejects.toThrow(/not the vault/);
@@ -105,36 +124,50 @@ describe("vault signer adapter", () => {
 
 describe("envelope exact scheme (official ExactEvmScheme underneath)", () => {
   const grantee = privateKeyToAccount(keccak256(stringToHex("unit-test grantee")));
-  const validBefore = 2_000_000_000n;
-  const signer = granteeVaultSigner({ grantee, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, validBefore });
-  const req = {
+  // The official scheme reads Date.now(); freeze it so both clocks agree to the second.
+  const NOW = 1_800_000_000;
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW * 1000);
+  });
+  afterEach(() => vi.useRealTimers());
+  const scheme = (expiry: bigint, now?: () => number) =>
+    envelopeExactScheme({ grantee, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, expiry, now });
+  const req = (maxTimeoutSeconds: number) => ({
     scheme: "exact",
     network: "eip155:42161" as const,
     asset: USDC,
     amount: "10000",
     payTo: PAY_TO,
-    maxTimeoutSeconds: 60,
+    maxTimeoutSeconds,
     extra: { name: "USD Coin", version: "2" },
-  };
+  });
+  const auth = (p: Awaited<ReturnType<ReturnType<typeof scheme>["createPaymentPayload"]>>) =>
+    (p.payload as { authorization: Record<string, string> }).authorization;
 
-  it("lands validBefore on the envelope expiry with a random 32-byte nonce", async () => {
-    const scheme = envelopeExactScheme(signer, validBefore);
-    const a = await scheme.createPaymentPayload(2, req);
-    const b = await scheme.createPaymentPayload(2, req);
-    const auth = (p: typeof a) => (p.payload as { authorization: Record<string, string> }).authorization;
-    expect(auth(a).validBefore).toBe(validBefore.toString());
+  it("R-S186-1 (a): seller window 3600 s, envelope 8 days out → validBefore = now + 3600", async () => {
+    const a = await scheme(BigInt(NOW + 8 * 86_400)).createPaymentPayload(2, req(3600));
+    expect(auth(a).validBefore).toBe(String(NOW + 3600));
     expect(auth(a).from).toBe(M.from);
     expect(auth(a).nonce).toMatch(/^0x[0-9a-f]{64}$/);
-    expect(auth(a).nonce).not.toBe(auth(b).nonce);
   });
-  it("never signs another validBefore, even when its clock and the official scheme's disagree", async () => {
-    // The official scheme reads Date.now(); this clock is 100 s off, so every attempt is refused.
-    const scheme = envelopeExactScheme(signer, validBefore, () => Math.floor(Date.now() / 1000) + 100);
-    await expect(scheme.createPaymentPayload(2, req)).rejects.toBeInstanceOf(ValidBeforeMismatch);
+  it("R-S186-1 (b): seller window 7 days, envelope 1 hour out → validBefore = envelope expiry", async () => {
+    const a = await scheme(BigInt(NOW + 3600)).createPaymentPayload(2, req(7 * 86_400));
+    expect(auth(a).validBefore).toBe(String(NOW + 3600));
   });
-  it("refuses Permit2 and an expired envelope", async () => {
-    await expect(envelopeExactScheme(signer, validBefore).createPaymentPayload(2, { ...req, extra: { ...req.extra, assetTransferMethod: "permit2" } })).rejects.toThrow(/out of scope/);
-    await expect(envelopeExactScheme(signer, 5n).createPaymentPayload(2, req)).rejects.toThrow(/too late/);
+  it("draws a fresh 32-byte nonce per payload", async () => {
+    const s = scheme(BigInt(NOW + 8 * 86_400));
+    expect(auth(await s.createPaymentPayload(2, req(60))).nonce).not.toBe(auth(await s.createPaymentPayload(2, req(60))).nonce);
+  });
+  it("never signs past the bound when its clock is behind the official scheme's", async () => {
+    // This clock is 100 s behind Date.now(): the official scheme's validBefore lands 100 s past the bound.
+    await expect(scheme(BigInt(NOW + 3600), () => NOW - 100).createPaymentPayload(2, req(7 * 86_400))).rejects.toBeInstanceOf(ValidBeforeExceeded);
+    await expect(scheme(BigInt(NOW + 8 * 86_400), () => NOW - 100).createPaymentPayload(2, req(3600))).rejects.toBeInstanceOf(ValidBeforeExceeded);
+  });
+  it("refuses Permit2, an expired envelope and a seller window too short to pay in", async () => {
+    await expect(scheme(BigInt(NOW + 3600)).createPaymentPayload(2, { ...req(60), extra: { name: "USD Coin", version: "2", assetTransferMethod: "permit2" } })).rejects.toThrow(/out of scope/);
+    await expect(scheme(5n).createPaymentPayload(2, req(60))).rejects.toThrow(/too late/);
+    await expect(scheme(BigInt(NOW + 3600)).createPaymentPayload(2, req(6))).rejects.toThrow(/too late/);
+    await expect(scheme(BigInt(NOW + 3600)).createPaymentPayload(2, req(0))).rejects.toThrow(/positive integer/);
   });
 });
-

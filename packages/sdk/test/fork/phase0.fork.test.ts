@@ -55,6 +55,7 @@ const OTHER_PAYEE: Address = "0x00000000000000000000000000000000000e0001";
 const FACILITATOR: Address = "0x00000000000000000000000000000000000fac01";
 const USDC_WHALE: Address = "0x724dc807b04555b71ed48a6896b6F41593b8C637";
 const READER_DIR = new URL("../../../reader/", import.meta.url).pathname;
+const SELLER_WINDOW = 300; // tools/seller.ts default maxTimeoutSeconds
 const KIND = (n: string) => keccak256(stringToHex(n));
 const PAY_ACTION_KEY = keccak256(concat([USDC, toFunctionSelector("transfer(address,uint256)")]));
 // ERC-8021 suffix: codes, codesLength, schemaId 0, then the 16-byte marker (read from the end).
@@ -189,6 +190,7 @@ beforeAll(async () => {
   seller = await startSeller({
     facilitator: localFacilitator(),
     network: NETWORK,
+    maxTimeoutSeconds: SELLER_WINDOW,
     routes: [
       { path: "/paid", payTo: PAY_TO, price: "$0.01" },
       { path: "/over-per-tx", payTo: PAY_TO, price: { amount: "1000001", asset: USDC, extra: { name: "USD Coin", version: "2" } } },
@@ -308,10 +310,12 @@ describe("S186 B2 Phase 0 on an Arbitrum One fork", () => {
     const sent: string[] = [];
     S.pay = await payInsideGrant({ publicClient: pub, account: TEST, grantId: S.grantId, token: USDC, grantee, fetch: capturingFetch(sent) });
     expect(S.pay.vault).toBe(S.vault);
-    expect(S.pay.validBefore).toBe(S.expiry);
+    expect(S.pay.expiry).toBe(S.expiry);
     const before = await balances();
     const n = calls.length;
+    const t0 = BigInt(Math.floor(Date.now() / 1000));
     const res = await S.pay.fetch(`${seller.url}/paid`);
+    const t1 = BigInt(Math.floor(Date.now() / 1000));
     const mine = calls.slice(n);
     expect(sent).toHaveLength(1);
     S.firstHeader = sent[0]!;
@@ -327,16 +331,17 @@ describe("S186 B2 Phase 0 on an Arbitrum One fork", () => {
     const structHash = keccak256(
       encodeAbiParameters(
         [{ type: "bytes32" }, { type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes32" }],
-        [keccak256(stringToHex("TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)")), S.vault, PAY_TO, 10_000n, 0n, S.expiry, S.firstNonce],
+        [keccak256(stringToHex("TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)")), S.vault, PAY_TO, 10_000n, 0n, BigInt(auth.validBefore!), S.firstNonce],
       ),
     );
     const domainSeparator = await pub.readContract({ address: USDC, abi: usdcAbi, functionName: "DOMAIN_SEPARATOR" });
     const vaultDigest = await pub.readContract({ address: S.vault, abi: GranteeVaultV2Abi, functionName: "granteeDigest", args: [domainSeparator, structHash] });
-    const sdkDigest = hashTypedData(granteeTypedData({ name: "USD Coin", version: "2", chainId: 42161, verifyingContract: USDC }, S.vault, 42161, { from: S.vault, to: PAY_TO, value: 10_000n, validAfter: 0n, validBefore: S.expiry, nonce: S.firstNonce }));
+    const sdkDigest = hashTypedData(granteeTypedData({ name: "USD Coin", version: "2", chainId: 42161, verifyingContract: USDC }, S.vault, 42161, { from: S.vault, to: PAY_TO, value: 10_000n, validAfter: 0n, validBefore: BigInt(auth.validBefore!), nonce: S.firstNonce }));
     report["4.5"] = {
       httpStatus: res.status,
       facilitatorCalls: mine,
       authorization: auth,
+      validBeforeRule: { envelopeExpiry: S.expiry, sellerMaxTimeoutSeconds: SELLER_WINDOW, wallClockAtRequest: [t0, t1] },
       accepted: payload.accepted,
       signatureBytes: (payload.payload.signature.length - 2) / 2,
       settleTx: settle.transaction,
@@ -354,7 +359,12 @@ describe("S186 B2 Phase 0 on an Arbitrum One fork", () => {
     expect(getAddress(auth.from!)).toBe(S.vault);
     expect(getAddress(auth.to!)).toBe(PAY_TO);
     expect(auth.value).toBe("10000");
-    expect(auth.validBefore).toBe(S.expiry.toString()); // R-B0-1
+    // R-S186-1: validBefore = min(envelope expiry, now + seller window); the seller's window is not stretched.
+    const vb = BigInt(auth.validBefore!);
+    expect(S.expiry).toBeGreaterThan(t1 + BigInt(SELLER_WINDOW)); // the envelope is days out, so the window binds
+    expect(vb).toBeGreaterThanOrEqual(t0 + BigInt(SELLER_WINDOW));
+    expect(vb).toBeLessThanOrEqual(t1 + BigInt(SELLER_WINDOW));
+    expect(payload.accepted.maxTimeoutSeconds).toBe(SELLER_WINDOW);
     expect(auth.nonce).toMatch(/^0x[0-9a-f]{64}$/);
     expect(vaultDigest).toBe(sdkDigest);
     expect(usdcLogs.map((l) => l.eventName)).toEqual(["AuthorizationUsed", "Transfer"]);
@@ -370,7 +380,7 @@ describe("S186 B2 Phase 0 on an Arbitrum One fork", () => {
     const p = await S.pay.client.createPaymentPayload({
       x402Version: 2,
       resource: { url: `${seller.url}/paid` },
-      accepts: [{ scheme: "exact", network: NETWORK, asset: USDC, amount: "10000", payTo: PAY_TO, maxTimeoutSeconds: 300, extra: { name: "USD Coin", version: "2" } }],
+      accepts: [{ scheme: "exact", network: NETWORK, asset: USDC, amount: "10000", payTo: PAY_TO, maxTimeoutSeconds: SELLER_WINDOW, extra: { name: "USD Coin", version: "2" } }],
     } as never);
     const a = (p.payload as { authorization: Record<string, string>; signature: Hex });
     const data = concat([

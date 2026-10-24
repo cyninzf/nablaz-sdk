@@ -4,13 +4,14 @@
 //   node --experimental-strip-types tools/pay-once.ts --account 0x… --grant-id 0x… --url http://127.0.0.1:4021/paid
 //
 // The grantee key is read from B2_GRANTEE_HOT_KEY and the RPC from ARB_ONE_RPC_URL; neither is ever printed
-// or passed on the command line. validBefore = the live envelope's expiry, read from chain (R-B0-1).
+// or passed on the command line. validBefore = min(live envelope expiry, now + the seller's
+// maxTimeoutSeconds) (R-S186-1); the client prints the value it signed and the nonce.
 
 import { parseArgs } from "node:util";
 import { createPublicClient, http, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arbitrum } from "viem/chains";
-import { decodePaymentResponseHeader } from "@x402/core/http";
+import { decodePaymentResponseHeader, decodePaymentSignatureHeader } from "@x402/core/http";
 import { payInsideGrant } from "../src/pay.ts";
 
 const { values } = parseArgs({
@@ -29,6 +30,13 @@ if (!rpc) throw new Error("ARB_ONE_RPC_URL is not set");
 
 const grantee = privateKeyToAccount((key.startsWith("0x") ? key : `0x${key}`) as Hex);
 const publicClient = createPublicClient({ chain: arbitrum, transport: http(rpc) });
+// The PAYMENT-SIGNATURE header the client sends: authorization fields only are printed, never the signature.
+let sent: string | null = null;
+const capturing: typeof fetch = async (input, init) => {
+  const req = new Request(input, init);
+  sent = req.headers.get("payment-signature") ?? sent;
+  return fetch(req);
+};
 try {
   const p = await payInsideGrant({
     publicClient,
@@ -36,9 +44,15 @@ try {
     grantId: values["grant-id"] as Hex,
     token: values.token as Address,
     grantee,
+    fetch: capturing,
   });
-  console.log(`grantee ${grantee.address} vault ${p.vault} validBefore ${p.validBefore}`);
+  console.log(`grantee ${grantee.address} vault ${p.vault} envelope expiry ${p.expiry}`);
   const res = await p.fetch(values.url!);
+  if (sent) {
+    const sig = decodePaymentSignatureHeader(sent);
+    const a = (sig.payload as { authorization: Record<string, string> }).authorization;
+    console.log(`signed from ${a.from} to ${a.to} value ${a.value} validAfter ${a.validAfter} validBefore ${a.validBefore} nonce ${a.nonce} (seller maxTimeoutSeconds ${sig.accepted.maxTimeoutSeconds})`);
+  }
   const header = res.headers.get("payment-response");
   console.log(`HTTP ${res.status}`);
   if (header) {
