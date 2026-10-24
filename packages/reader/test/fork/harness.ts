@@ -48,8 +48,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Child = { proc: ChildProcess; output: () => string };
 
-function run(cmd: string, args: string[], env: NodeJS.ProcessEnv): Child {
-  const proc = spawn(cmd, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+function run(cmd: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Child {
+  const proc = spawn(cmd, args, { env, cwd, stdio: ["ignore", "pipe", "pipe"] });
   let buf = "";
   proc.stdout!.on("data", (d) => (buf += d));
   proc.stderr!.on("data", (d) => (buf += d));
@@ -89,8 +89,11 @@ export async function startAnvil(forkBlock: number): Promise<Anvil> {
 
 export type IndexRun = { tables: Tables; output: string };
 
-/** Index from scratch into a fresh PGlite directory, wait for /ready, stop, and dump every table. */
-export async function indexOnce(opts: { rpcUrl: string; startBlock?: number; endBlock: number }): Promise<IndexRun> {
+/**
+ * Index from scratch into a fresh PGlite directory, wait for /ready, stop, and dump every table.
+ * `cwd` is the reader package directory (default: the current directory).
+ */
+export async function indexOnce(opts: { rpcUrl: string; startBlock?: number; endBlock: number; cwd?: string }): Promise<IndexRun> {
   const dir = mkdtempSync(join(tmpdir(), "reader-pglite-"));
   const port = await freePort();
   const env: NodeJS.ProcessEnv = {
@@ -102,7 +105,7 @@ export async function indexOnce(opts: { rpcUrl: string; startBlock?: number; end
   };
   if (opts.startBlock !== undefined) env.READER_START_BLOCK = String(opts.startBlock);
   else delete env.READER_START_BLOCK;
-  const c = run("node_modules/.bin/ponder", ["start", "--schema", "reader", "--port", String(port)], env);
+  const c = run("node_modules/.bin/ponder", ["start", "--schema", "reader", "--port", String(port)], env, opts.cwd);
   try {
     for (let i = 0; ; i++) {
       if (c.proc.exitCode !== null) throw new Error(`indexer exited (${c.proc.exitCode}):\n${c.output()}`);

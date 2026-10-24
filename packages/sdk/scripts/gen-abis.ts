@@ -20,6 +20,8 @@ const CONTRACTS = [
   "ConsumerAIMandateV4",
   "GranteeVault",
   "NablaAccountV3",
+  "GranteeVaultV2",
+  "NablaAccountV3_1",
 ] as const;
 
 const [mode, proto] = process.argv.slice(2);

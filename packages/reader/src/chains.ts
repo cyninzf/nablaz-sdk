@@ -19,7 +19,6 @@ export type ChainSources = {
     NablaAccountFactoryPermanent: Address;
     AccountRegistryV6: Address | null;
     ConsumerAIMandateV4: Address | null;
-    GranteeVault: Address | null;
   };
 };
 
@@ -42,7 +41,6 @@ export const CHAINS: Record<number, ChainSources> = {
       NablaAccountFactoryPermanent: arb.NablaAccountFactoryPermanent.address,
       AccountRegistryV6: arb.AccountRegistryV6.address,
       ConsumerAIMandateV4: arb.ConsumerAIMandateV4.address,
-      GranteeVault: arb.GranteeVault.address,
     },
   },
   // Base: present, disabled. The permanent factory's address is the same as on Arbitrum; as read on
@@ -59,7 +57,6 @@ export const CHAINS: Record<number, ChainSources> = {
       NablaAccountFactoryPermanent: arb.NablaAccountFactoryPermanent.address,
       AccountRegistryV6: null,
       ConsumerAIMandateV4: null,
-      GranteeVault: null,
     },
   },
 };

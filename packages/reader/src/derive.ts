@@ -1,12 +1,8 @@
 // Pure derivations shared by the Ponder handlers and the tests. No I/O.
 
 import {
-  concat,
-  encodeAbiParameters,
   getAddress,
-  getContractAddress,
   keccak256,
-  numberToHex,
   pad,
   stringToHex,
   toHex,
@@ -27,6 +23,7 @@ export const KIND_NAMES = [
   "PAY",
   "APPROVE",
   "PAY_AUTHORIZED",
+  "VAULT_SWEPT",
   "OBLIGATION_OPENED",
   "REPAY",
   "OBLIGATION_CLOSED",
@@ -88,30 +85,9 @@ export function obligationRole(kind: KindName): ObligationRole | null {
 
 // ── Grantee key and vault address ───────────────────────────────────
 
-/** CAM V4 granteeKeyOf: agentId grants key by agentId, address grants by the grantee. Pure. */
-export function granteeKeyOf(grantee: Address, agentId: bigint): Hex {
-  return agentId !== 0n
-    ? keccak256(encodeAbiParameters([{ type: "uint8" }, { type: "uint256" }], [1, agentId]))
-    : keccak256(encodeAbiParameters([{ type: "uint8" }, { type: "address" }], [0, grantee]));
-}
-
-/**
- * The vault the account deploys for `granteeKey`: an EIP-1167 clone of `vaultImpl` with immutable args
- * `(account, granteeKey)`, salt `granteeKey`, deployer `account` (OpenZeppelin Clones layout).
- */
-export function predictVault(vaultImpl: Address, account: Address, granteeKey: Hex): Address {
-  const args = encodeAbiParameters([{ type: "address" }, { type: "bytes32" }], [account, granteeKey]);
-  const argsLen = (args.length - 2) / 2;
-  const initCode = concat([
-    "0x61",
-    numberToHex(argsLen + 0x2d, { size: 2 }),
-    "0x3d81600a3d39f3363d3d373d3d3d363d73",
-    vaultImpl,
-    "0x5af43d82803e903d91602b57fd5bf3",
-    args,
-  ]);
-  return getContractAddress({ opcode: "CREATE2", from: account, salt: granteeKey, bytecode: initCode });
-}
+// One implementation, in the SDK. predictVault takes the vault implementation as an argument: the handler
+// passes the account's own VAULT_IMPL() at the funding block, never a constant.
+export { granteeKeyOf, predictVault } from "@nablaz/sdk/vault";
 
 export function bytes32ToAddress(b: Hex): Address {
   return getAddress(`0x${b.slice(-40)}`);

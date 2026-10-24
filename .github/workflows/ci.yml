@@ -46,8 +46,8 @@ jobs:
           if git ls-files | grep -iE '\.sol$'; then echo "Solidity source found"; exit 1; fi
       - name: generated ABI module matches abis/*.json
         run: |
-          pnpm gen:abis-ts
-          git diff --exit-code -- src/generated/abis.ts
+          pnpm --filter @nablaz/sdk gen:abis-ts
+          git diff --exit-code -- packages/sdk/src/generated/abis.ts
       - run: pnpm typecheck
       - run: pnpm test
 

@@ -27,18 +27,29 @@ const topicOf = (a: Address) => pad(a, { size: 32 }).toLowerCase() as Hex;
 describe("kinds", () => {
   it("hashes kind names", () => {
     expect(KIND.PAY_AUTHORIZED).toBe(keccak256(stringToHex("PAY_AUTHORIZED")));
+    expect(kindName(keccak256(stringToHex("VAULT_SWEPT")))).toBe("VAULT_SWEPT");
     expect(kindName(KIND.OBLIGATION_OPENED)).toBe("OBLIGATION_OPENED");
     expect(kindName(keccak256(stringToHex("NOT_A_KIND")))).toBeNull();
   });
 });
 
 describe("vault address from logs (P0-4)", () => {
-  // Known answer from the Phase 0 fork run at Arbitrum block 517348000: agent key 0xB0A6E47's vault on
-  // account 0xF7C3…41b8 is 0x6F30…343b.
-  it("predicts the vault from (impl, account, granteeKeyOf(grantee, 0))", () => {
+  // The vault implementation is the account's own VAULT_IMPL(), never a table constant (Finding 1).
+  it("predicts a V3_1 account's vault from GranteeVaultV2", () => {
+    // Known answer, eth_call at Arbitrum block 517955000: TEST account 0x8E65…b11c (NablaAccountV3_1,
+    // VAULT_IMPL = GranteeVaultV2) answers granteeVault(granteeKeyOf(0xCc88…0243, 0)) = 0x4641…d001.
+    const key = granteeKeyOf("0xCc885831ef9B284E7D5F199A6f4f72D290CC0243", 0n);
+    expect(key).toBe(keccak256(encodeAbiParameters([{ type: "uint8" }, { type: "address" }], [0, "0xCc885831ef9B284E7D5F199A6f4f72D290CC0243"])));
+    expect(predictVault(ARBITRUM_ONE.contracts.GranteeVaultV2.address, "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c", key)).toBe(
+      "0x46414CFb3F27735F2a9824abfb63699bF80ed001",
+    );
+  });
+
+  it("predicts a V3 account's vault from its own implementation, GranteeVault (v1)", () => {
+    // Known answer from the S184 fork run at block 517348000, when new accounts were NablaAccountV3 and
+    // VAULT_IMPL was the v1 GranteeVault: agent key 0xB0A6E47's vault on account 0xF7C3…41b8 is 0x6F30…343b.
     const agent = privateKeyToAddress(pad("0xB0A6E47", { size: 32 }));
     const key = granteeKeyOf(agent, 0n);
-    expect(key).toBe(keccak256(encodeAbiParameters([{ type: "uint8" }, { type: "address" }], [0, agent])));
     expect(predictVault(ARBITRUM_ONE.contracts.GranteeVault.address, "0xF7C3E8dBC88c98c6D2E4700cA2996dA8adE441b8", key)).toBe(
       "0x6F30607A57d9671d0323d95E6DBbB32c46C5343b",
     );

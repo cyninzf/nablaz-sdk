@@ -11,7 +11,7 @@ import {
   vaultPayments,
   vaults,
 } from "ponder:schema";
-import { getAddress, type Address, type Hex } from "viem";
+import { BaseError, ContractFunctionRevertedError, getAddress, parseAbi, type Address, type Hex } from "viem";
 import { chainById } from "./chains";
 import {
   COUNTERPARTY_KINDS,
@@ -39,6 +39,7 @@ import {
 import { ConsumerAIMandateV4Abi } from "@nablaz/sdk/abis";
 
 const lc = (a: string) => a.toLowerCase() as Hex;
+const VaultImplAbi = parseAbi(["function VAULT_IMPL() view returns (address)"]);
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 type LogLike = { address: Address; topics: readonly Hex[]; logIndex: number };
@@ -265,7 +266,6 @@ async function onPayAuthorized(
     amount: bigint;
   },
 ) {
-  const chain = chainById(ev.chainId);
   const vault = bytes32ToAddress(a.counterpartyAuth);
   const token = getAddress(a.asset);
 
@@ -280,8 +280,17 @@ async function onPayAuthorized(
 
   const grant = await context.db.find(grants, { id: `${ev.chainId}-${lc(a.subject)}-${lc(a.writerAuth)}` });
   const granteeKey = grant?.granteeKey ?? null;
+  // The account's own vault implementation at the funding block (V3 accounts: GranteeVault, V3_1:
+  // GranteeVaultV2), never a constant. null only if the account reverts on VAULT_IMPL(); any other error
+  // (RPC) propagates, so a transient failure never becomes a stored null.
+  const vaultImpl = await context.client
+    .readContract({ address: a.subject, abi: VaultImplAbi, functionName: "VAULT_IMPL", blockNumber: ev.blockNumber })
+    .catch((e: unknown) => {
+      if (e instanceof BaseError && e.walk((x) => x instanceof ContractFunctionRevertedError)) return null;
+      throw e;
+    });
   const create2Matches =
-    granteeKey === null ? null : lc(predictVault(chain.contracts.GranteeVault, a.subject, granteeKey)) === lc(vault);
+    granteeKey === null || vaultImpl === null ? null : lc(predictVault(vaultImpl, a.subject, granteeKey)) === lc(vault);
 
   const vid = `${ev.chainId}-${lc(vault)}`;
   if (!(await context.db.find(vaults, { id: vid }))) {

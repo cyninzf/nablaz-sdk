@@ -5,7 +5,8 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 
 export const UPSTREAM = process.env.READER_ARB_RPC_URL;
-export const FORK_BLOCK = 517_348_000;
+// ≥ 517949578 (the CTO's read of the live TEST account); head was 517955766 when pinned.
+export const FORK_BLOCK = 517_955_000;
 
 export function redact(s: string): string {
   if (!UPSTREAM) return s;
