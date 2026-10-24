@@ -6,17 +6,22 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  packages/reader:
     dependencies:
+      '@nablaz/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       hono:
         specifier: 4.13.13
         version: 4.13.13
       ponder:
         specifier: 0.18.1
-        version: 0.18.1(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3))
+        version: 0.18.1(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76)
       viem:
         specifier: 2.57.4
-        version: 2.57.4(typescript@5.9.3)
+        version: 2.57.4(typescript@5.9.3)(zod@3.25.76)
     devDependencies:
       '@electric-sql/pglite':
         specifier: 0.2.13
@@ -24,6 +29,31 @@ importers:
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(vite@8.3.1(@types/node@22.20.5))
+
+  packages/sdk:
+    dependencies:
+      '@x402/evm':
+        specifier: 2.28.0
+        version: 2.28.0(typescript@5.9.3)
+      viem:
+        specifier: 2.57.4
+        version: 2.57.4(typescript@5.9.3)(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: 22.20.5
+        version: 22.20.5
+      '@x402/core':
+        specifier: 2.28.0
+        version: 2.28.0
+      '@x402/fetch':
+        specifier: 2.28.0
+        version: 2.28.0
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -345,6 +375,15 @@ packages:
   '@whatwg-node/server@0.10.18':
     resolution: {integrity: sha512-kMwLlxUbduttIgaPdSkmEarFpP+mSY8FEm+QWMBRJwxOHWkri+cxd8KZHO9EMrB9vgUuz+5WEaCawaL5wGVoXg==}
     engines: {node: '>=18.0.0'}
+
+  '@x402/core@2.28.0':
+    resolution: {integrity: sha512-Da/7zKxCKqpBoB4Msc9tFgkAv7tJTD8nG+DSSm+QdXAyJS4PQsmgVSKe17rDJTtlu0pwNbLcOje6MyQ6kaDkig==}
+
+  '@x402/evm@2.28.0':
+    resolution: {integrity: sha512-BZuoaCKMoPQQuMTa4oibvoyI06WdCpgrzgdicUu8d+5NBMAfWb6LAmSQf1KkeiS8C+25/+2JGB4cHSL0VLGnSA==}
+
+  '@x402/fetch@2.28.0':
+    resolution: {integrity: sha512-kF5IjZIz/izg2TD/Zav+SVj0jtC0zBDfE7WcKCnMZWIsZcLCyL2GgvwXCn7CCSsNjpQ/z3Rz4OqTCA4AaeKySQ==}
 
   abitype@0.10.3:
     resolution: {integrity: sha512-tRN+7XIa7J9xugdbRzFv/95ka5ivR/sRe01eiWvM0HWWjHuigSZEACgKa0sj4wGuekTDtghCx+5Izk/cOi78pQ==}
@@ -1121,6 +1160,9 @@ packages:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
@@ -1288,9 +1330,9 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@ponder/utils@0.3.0(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3))':
+  '@ponder/utils@0.3.0(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))':
     dependencies:
-      viem: 2.57.4(typescript@5.9.3)
+      viem: 2.57.4(typescript@5.9.3)(zod@3.25.76)
     optionalDependencies:
       typescript: 5.9.3
 
@@ -1417,13 +1459,33 @@ snapshots:
       '@whatwg-node/promise-helpers': 1.3.2
       tslib: 2.8.1
 
-  abitype@0.10.3(typescript@5.9.3):
-    optionalDependencies:
-      typescript: 5.9.3
+  '@x402/core@2.28.0':
+    dependencies:
+      zod: 3.25.76
 
-  abitype@1.2.3(typescript@5.9.3):
+  '@x402/evm@2.28.0(typescript@5.9.3)':
+    dependencies:
+      '@x402/core': 2.28.0
+      viem: 2.57.4(typescript@5.9.3)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+
+  '@x402/fetch@2.28.0':
+    dependencies:
+      '@x402/core': 2.28.0
+
+  abitype@0.10.3(typescript@5.9.3)(zod@3.25.76):
     optionalDependencies:
       typescript: 5.9.3
+      zod: 3.25.76
+
+  abitype@1.2.3(typescript@5.9.3)(zod@3.25.76):
+    optionalDependencies:
+      typescript: 5.9.3
+      zod: 3.25.76
 
   abort-controller@3.0.0:
     dependencies:
@@ -1650,7 +1712,7 @@ snapshots:
 
   on-exit-leak-free@2.1.2: {}
 
-  ox@0.14.54(typescript@5.9.3):
+  ox@0.14.54(typescript@5.9.3)(zod@3.25.76):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
       '@noble/ciphers': 1.3.0
@@ -1658,7 +1720,7 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.2.3(typescript@5.9.3)
+      abitype: 1.2.3(typescript@5.9.3)(zod@3.25.76)
       eventemitter3: 5.0.1
     optionalDependencies:
       typescript: 5.9.3
@@ -1740,7 +1802,7 @@ snapshots:
       sonic-boom: 3.8.1
       thread-stream: 2.7.0
 
-  ponder@0.18.1(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)):
+  ponder@0.18.1(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76):
     dependencies:
       '@babel/code-frame': 7.29.7
       '@commander-js/extra-typings': 12.1.0(commander@12.1.0)
@@ -1749,8 +1811,8 @@ snapshots:
       '@escape.tech/graphql-armor-max-depth': 2.4.2
       '@escape.tech/graphql-armor-max-tokens': 2.5.1
       '@hono/node-server': 1.19.5(hono@4.13.13)
-      '@ponder/utils': 0.3.0(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3))
-      abitype: 0.10.3(typescript@5.9.3)
+      '@ponder/utils': 0.3.0(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))
+      abitype: 0.10.3(typescript@5.9.3)(zod@3.25.76)
       ansi-escapes: 7.3.0
       commander: 12.1.0
       dataloader: 2.2.3
@@ -1771,7 +1833,7 @@ snapshots:
       stacktrace-parser: 0.1.11
       superjson: 2.2.6
       terminal-size: 4.0.1
-      viem: 2.57.4(typescript@5.9.3)
+      viem: 2.57.4(typescript@5.9.3)(zod@3.25.76)
       vite: 8.3.1(@types/node@22.20.5)
       ws: 8.22.0
     optionalDependencies:
@@ -1963,15 +2025,15 @@ snapshots:
 
   urlpattern-polyfill@10.1.0: {}
 
-  viem@2.57.4(typescript@5.9.3):
+  viem@2.57.4(typescript@5.9.3)(zod@3.25.76):
     dependencies:
       '@noble/curves': 1.9.1
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.2.3(typescript@5.9.3)
+      abitype: 1.2.3(typescript@5.9.3)(zod@3.25.76)
       isows: 1.0.7(ws@8.21.0)
-      ox: 0.14.54(typescript@5.9.3)
+      ox: 0.14.54(typescript@5.9.3)(zod@3.25.76)
       ws: 8.21.0
     optionalDependencies:
       typescript: 5.9.3
@@ -2036,3 +2098,5 @@ snapshots:
   ws@8.22.0: {}
 
   xtend@4.0.2: {}
+
+  zod@3.25.76: {}

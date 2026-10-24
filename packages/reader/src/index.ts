@@ -36,7 +36,7 @@ import {
   type EnvelopeRead,
   type ReceiptLog,
 } from "./derive";
-import { ConsumerAIMandateV4Abi } from "./generated/abis";
+import { ConsumerAIMandateV4Abi } from "@nablaz/sdk/abis";
 
 const lc = (a: string) => a.toLowerCase() as Hex;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";

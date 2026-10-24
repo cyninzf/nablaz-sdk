@@ -18,8 +18,8 @@ import {
   type ReceiptLog,
 } from "../../src/derive";
 import { CHAINS, enabledChains } from "../../src/chains";
-import { ARBITRUM_ONE, PROTO_SHA } from "../../src/generated/addresses";
-import { ABI_PROTO_SHA } from "../../src/generated/abis";
+import { ARBITRUM_ONE, PROTO_SHA } from "@nablaz/sdk/addresses";
+import { ABI_PROTO_SHA } from "@nablaz/sdk/abis";
 
 const USDC: Address = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 const topicOf = (a: Address) => pad(a, { size: 32 }).toLowerCase() as Hex;

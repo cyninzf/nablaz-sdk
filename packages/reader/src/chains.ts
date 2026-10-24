@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import { ARBITRUM_ONE } from "./generated/addresses";
+import { ARBITRUM_ONE } from "@nablaz/sdk/addresses";
 
 /** One chain's sources. Every address is public on chain; nothing here is a secret. */
 export type ChainSources = {

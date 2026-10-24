@@ -2,7 +2,7 @@
 // Determinism: a second index from scratch over the same chain gives identical tables.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ARBITRUM_ONE } from "../../src/generated/addresses";
+import { ARBITRUM_ONE } from "@nablaz/sdk/addresses";
 import { ENVELOPE_CHANGED, ENVELOPE_LABEL } from "../../src/derive";
 import { TABLES, indexOnce, startAnvil, type Anvil, type Tables } from "./harness";
 import { FORK_BLOCK, runScenario, type Scenario } from "./scenario";

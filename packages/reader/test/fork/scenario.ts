@@ -23,14 +23,14 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arbitrum } from "viem/chains";
-import { ARBITRUM_ONE } from "../../src/generated/addresses";
+import { ARBITRUM_ONE } from "@nablaz/sdk/addresses";
 import {
   ConsumerAIMandateV4Abi,
   GranteeVaultAbi,
   NablaAccountFactoryPermanentAbi,
   NablaAccountV3Abi,
   NablaRecordAbi,
-} from "../../src/generated/abis";
+} from "@nablaz/sdk/abis";
 
 export const FORK_BLOCK = 517_348_000;
 export const USDC: Address = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";

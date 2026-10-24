@@ -1,7 +1,7 @@
 import { createConfig, factory } from "ponder";
 import { getAbiItem, parseAbi } from "viem";
 import { enabledChains } from "./src/chains";
-import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi } from "./src/generated/abis";
+import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi } from "@nablaz/sdk/abis";
 
 // Every source is parameterized by chain (src/chains.ts). Only enabled chains are configured.
 // Optional overrides, used by the tests: READER_START_BLOCK, READER_END_BLOCK, READER_PGLITE_DIR.
