@@ -50,7 +50,7 @@ const res = await p.fetch("https://seller.example/resource");
 1. the account's mandate (`dependencies()`), then `granteeOf(account, grantId)`: the grant's grantee
    wallet and its grantee key;
 2. the account's own `VAULT_IMPL()`, and from it the vault: `predictVault(VAULT_IMPL, account, granteeKey)`;
-3. `envelopeOf(account, granteeKey, token)`: the live envelope's grantId and expiry.
+3. `envelopeOf(account, granteeKey, token)`: the current envelope's grantId and expiry.
 
 It returns `p.fetch`, the official `@x402/fetch` wrapper over an `x402Client` with the envelope-bound
 `exact` scheme registered for `eip155:<chainId>`. The envelope is re-read before every payment.
@@ -73,7 +73,7 @@ the class.
 | Case | Where | What is thrown |
 |---|---|---|
 | The key is not the grant's grantee | setup | `Error`: `grant <grantId>'s grantee is <wallet>, not <address>` |
-| The live envelope is another grant's | setup, and before each payment | `Error`: `the live envelope is grant <id>, not <grantId>` |
+| The current envelope is another grant's | setup, and before each payment | `Error`: `the live envelope is grant <id>, not <grantId>` |
 | The envelope has expired | setup, and before each payment | `Error`: `envelope expired at <expiry>` |
 | Too little time left to pay | each payment | `Error`: `validBefore would be <n> s away (…); too late to pay` |
 | validBefore above min(envelope expiry, now + seller `maxTimeoutSeconds`) | each payment | `ValidBeforeExceeded` (`got`, `max`) |
