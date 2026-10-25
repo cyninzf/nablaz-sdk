@@ -1,5 +1,5 @@
 {
-  "name": "nablaz-reader",
+  "name": "nablaz-sdk",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
   "remoteEnv": { "PATH": "${containerEnv:PATH}:/home/node/.foundry/bin" },
   "customizations": {
