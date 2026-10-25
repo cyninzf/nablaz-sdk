@@ -1,6 +1,5 @@
 {
-  "name": "nablaz-reader",
-  "version": "0.1.0",
+  "name": "nablaz-sdk",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -9,25 +8,8 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "ponder dev",
-    "start": "ponder start",
-    "codegen": "ponder codegen",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --project unit",
-    "test:fork": "vitest run --project fork",
-    "gen:abis-ts": "node --experimental-strip-types scripts/gen-abis.ts ts",
-    "gen:abis": "node --experimental-strip-types scripts/gen-abis.ts import",
-    "gen:addresses": "node --experimental-strip-types scripts/gen-addresses.ts"
-  },
-  "dependencies": {
-    "hono": "4.13.13",
-    "ponder": "0.18.1",
-    "viem": "2.57.4"
-  },
-  "devDependencies": {
-    "@electric-sql/pglite": "0.2.13",
-    "@types/node": "22.20.5",
-    "typescript": "5.9.3",
-    "vitest": "5.0.3"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:fork": "pnpm -r --workspace-concurrency=1 test:fork"
   }
 }

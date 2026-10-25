@@ -1,0 +1,15 @@
+{
+  "source": "nablaz-protocol forge build output (abi field only)",
+  "protoSha": "4a38c373fce7c19153e412c2778b6b6dc69d36ab",
+  "forge": "forge Version: 1.5.1-v1.5.1",
+  "contracts": [
+    "NablaRecord",
+    "NablaAccountFactoryPermanent",
+    "AccountRegistryV6",
+    "ConsumerAIMandateV4",
+    "GranteeVault",
+    "NablaAccountV3",
+    "GranteeVaultV2",
+    "NablaAccountV3_1"
+  ]
+}
