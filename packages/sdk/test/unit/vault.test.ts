@@ -8,9 +8,12 @@ import {
   granteeKeyOf,
   granteeTypedData,
   granteeVaultSigner,
+  granteeVaultSignerFromChain,
   predictVault,
   maxValidBefore,
+  NeverPaymentTarget,
   ValidBeforeExceeded,
+  VaultMismatch,
 } from "../../src/index";
 
 const C = ARBITRUM_ONE.contracts;
@@ -34,6 +37,8 @@ const LIVE = {
   // implementation itself address(this) = the implementation.
   digest: "0x6ea7d6a702fd2d31cb9f4677c6065973cf2ac8729f87eba45abe92622f1aeaef" as Hex,
 };
+// What binds a signer to its vault: the TEST account, its VAULT_IMPL and the hot key's grantee key.
+const BIND = { account: TEST, vaultImpl: LIVE.vaultImpl, granteeKey: LIVE.vaults[0].key as Hex };
 const M = {
   from: "0x46414CFb3F27735F2a9824abfb63699bF80ed001" as Address,
   to: PAY_TO,
@@ -73,7 +78,7 @@ describe("vault signer adapter", () => {
   // Envelope expiry M.validBefore; seller window 3600 s; the clock 8 days before expiry. Bound = now + 3600.
   const NOW = Number(M.validBefore) - 8 * 86_400;
   const BOUND = BigInt(NOW + 3600);
-  const signer = granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 3600, now: () => NOW });
+  const signer = granteeVaultSigner({ grantee, ...BIND, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 3600, now: () => NOW });
   const sign = (m: Partial<typeof M>, primaryType = "TransferWithAuthorization", domain: Record<string, unknown> = USDC_DOMAIN, s = signer) =>
     s.signTypedData({ domain, types: {}, primaryType, message: { ...M, validBefore: BOUND, ...m } });
 
@@ -83,7 +88,7 @@ describe("vault signer adapter", () => {
 
   it("returns abi.encode(Authorization) carrying the grantee's signature over the digest", async () => {
     const sig = await sign({ validBefore: M.validBefore }, "TransferWithAuthorization", USDC_DOMAIN,
-      granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 3600, now: () => Number(M.validBefore) - 60 }));
+      granteeVaultSigner({ grantee, ...BIND, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 3600, now: () => Number(M.validBefore) - 60 }));
     const [a] = decodeAbiParameters(
       [{ type: "tuple", components: [
         { name: "grantId", type: "bytes32" }, { name: "token", type: "address" }, { name: "to", type: "address" },
@@ -105,13 +110,13 @@ describe("vault signer adapter", () => {
     await expect(sign({ validBefore: BOUND })).resolves.toMatch(/^0x/);
     await expect(sign({ validBefore: BOUND - 1n })).resolves.toMatch(/^0x/);
     // Envelope inside the seller window: the envelope is the bound, whatever the window.
-    const late = granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 7 * 86_400, now: () => Number(M.validBefore) - 3600 });
+    const late = granteeVaultSigner({ grantee, ...BIND, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 7 * 86_400, now: () => Number(M.validBefore) - 3600 });
     await expect(sign({ validBefore: M.validBefore + 1n }, "TransferWithAuthorization", USDC_DOMAIN, late)).rejects.toBeInstanceOf(ValidBeforeExceeded);
     await expect(sign({ validBefore: M.validBefore }, "TransferWithAuthorization", USDC_DOMAIN, late)).resolves.toMatch(/^0x/);
   });
   it("refuses a non-positive or fractional seller window", () => {
     for (const t of [0, -1, 1.5, Number.NaN]) {
-      expect(() => granteeVaultSigner({ grantee, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: t })).toThrow(/positive integer/);
+      expect(() => granteeVaultSigner({ grantee, ...BIND, vault, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: t })).toThrow(/positive integer/);
     }
   });
   it("refuses another payer, token, chain or payload type", async () => {
@@ -119,6 +124,56 @@ describe("vault signer adapter", () => {
     await expect(sign({}, "TransferWithAuthorization", { ...USDC_DOMAIN, verifyingContract: PAY_TO })).rejects.toThrow(/not the envelope token/);
     await expect(sign({}, "TransferWithAuthorization", { ...USDC_DOMAIN, chainId: 8453 })).rejects.toThrow(/chainId/);
     await expect(sign({}, "Permit")).rejects.toThrow(/TransferWithAuthorization only/);
+  });
+});
+
+describe("vault signer refuses a vault it cannot derive (R-B0-1, R-S184-5)", () => {
+  const grantee = privateKeyToAccount(keccak256(stringToHex("unit-test grantee")));
+  const grantId = keccak256(stringToHex("grant"));
+  const base = { grantee, ...BIND, vault: M.from, grantId, token: USDC, chainId: 42161, expiry: M.validBefore, maxTimeoutSeconds: 3600 };
+  const [hot, , agent7] = LIVE.vaults;
+
+  it("constructs when vault = predictVault(VAULT_IMPL, account, granteeKey)", () => {
+    expect(granteeVaultSigner(base).address).toBe(hot.vault);
+    // Case does not matter.
+    expect(granteeVaultSigner({ ...base, vault: M.from.toLowerCase() as Address }).address).toBe(hot.vault);
+  });
+  it("throws VaultMismatch with got/expected for any other vault", () => {
+    for (const vault of [PAY_TO, TEST, LIVE.vaults[1].vault]) {
+      let e: unknown;
+      try {
+        granteeVaultSigner({ ...base, vault });
+      } catch (x) {
+        e = x;
+      }
+      expect(e).toBeInstanceOf(VaultMismatch);
+      expect((e as VaultMismatch).got).toBe(vault);
+      expect((e as VaultMismatch).expected).toBe(hot.vault);
+    }
+    // Same vault, another account or implementation: the vault no longer derives.
+    expect(() => granteeVaultSigner({ ...base, account: PAY_TO })).toThrow(VaultMismatch);
+    expect(() => granteeVaultSigner({ ...base, vaultImpl: C.NablaAccountV3_1.address })).toThrow(VaultMismatch);
+  });
+  it("throws NeverPaymentTarget for the v1 implementation, even when the vault derives from it", () => {
+    const v1 = C.GranteeVault.address;
+    const v1Vault = predictVault(v1, TEST, hot.key);
+    expect(() => granteeVaultSigner({ ...base, vaultImpl: v1, vault: v1Vault })).toThrow(NeverPaymentTarget);
+  });
+  it("an agentId grant passes with its own key and fails with the grantee-address key", () => {
+    expect(granteeVaultSigner({ ...base, granteeKey: granteeKeyOf(grantee.address, agent7.agentId), vault: agent7.vault }).address).toBe(agent7.vault);
+    expect(() => granteeVaultSigner({ ...base, granteeKey: granteeKeyOf(grantee.address, 0n), vault: agent7.vault })).toThrow(VaultMismatch);
+  });
+  it("envelopeExactScheme carries the same check", () => {
+    expect(() => envelopeExactScheme({ ...base, vault: PAY_TO, readEnvelopeExpiry: async () => M.validBefore })).toThrow(VaultMismatch);
+  });
+  it("granteeVaultSignerFromChain reads VAULT_IMPL from the account and refuses v1", async () => {
+    const reads: unknown[] = [];
+    const client = (impl: Address) => ({ readContract: async (a: unknown) => (reads.push(a), impl) }) as never;
+    const { vaultImpl: _, ...cfg } = base;
+    expect((await granteeVaultSignerFromChain(client(LIVE.vaultImpl), cfg)).address).toBe(hot.vault);
+    expect(reads[0]).toMatchObject({ address: TEST, functionName: "VAULT_IMPL" });
+    await expect(granteeVaultSignerFromChain(client(C.GranteeVault.address), { ...cfg, vault: predictVault(C.GranteeVault.address, TEST, hot.key) })).rejects.toBeInstanceOf(NeverPaymentTarget);
+    await expect(granteeVaultSignerFromChain(client(C.NablaAccountV3_1.address), cfg)).rejects.toBeInstanceOf(VaultMismatch);
   });
 });
 
@@ -132,7 +187,7 @@ describe("envelope exact scheme (official ExactEvmScheme underneath)", () => {
   });
   afterEach(() => vi.useRealTimers());
   const schemeReading = (readEnvelopeExpiry: () => Promise<bigint>, now?: () => number) =>
-    envelopeExactScheme({ grantee, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, readEnvelopeExpiry, now });
+    envelopeExactScheme({ grantee, ...BIND, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, readEnvelopeExpiry, now });
   const scheme = (expiry: bigint, now?: () => number) => schemeReading(async () => expiry, now);
   const req = (maxTimeoutSeconds: number) => ({
     scheme: "exact",

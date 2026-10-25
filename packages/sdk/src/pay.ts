@@ -95,7 +95,8 @@ export async function payInsideGrant(opts: {
   const [mandate] = await pc.readContract({ address: account, abi: accountAbi, functionName: "dependencies" });
   const [wallet, granteeKey] = await pc.readContract({ address: mandate, abi: camAbi, functionName: "granteeOf", args: [account, grantId] });
   if (!isAddressEqual(wallet, opts.grantee.address)) throw new Error(`grant ${grantId}'s grantee is ${wallet}, not ${opts.grantee.address}`);
-  const vault = predictVault(await readVaultImpl(pc, account), account, granteeKey);
+  const vaultImpl = await readVaultImpl(pc, account);
+  const vault = predictVault(vaultImpl, account, granteeKey);
   const readEnvelopeExpiry = async () => {
     const [envGrant, expiry] = await pc.readContract({ address: mandate, abi: camAbi, functionName: "envelopeOf", args: [account, granteeKey, token] });
     if (envGrant.toLowerCase() !== grantId.toLowerCase()) throw new Error(`the live envelope is grant ${envGrant}, not ${grantId}`);
@@ -104,7 +105,7 @@ export async function payInsideGrant(opts: {
     return BigInt(expiry);
   };
   const expiry = await readEnvelopeExpiry();
-  const scheme = envelopeExactScheme({ grantee: opts.grantee, vault, grantId, token, chainId, readEnvelopeExpiry });
+  const scheme = envelopeExactScheme({ grantee: opts.grantee, account, vaultImpl, granteeKey, vault, grantId, token, chainId, readEnvelopeExpiry });
   const client = new x402Client().register(`eip155:${chainId}`, scheme);
   return { account, grantId, token, vault, granteeKey, expiry, client, fetch: wrapFetchWithPayment(opts.fetch ?? fetch, client) };
 }

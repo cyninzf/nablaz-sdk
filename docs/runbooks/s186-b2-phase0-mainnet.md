@@ -142,6 +142,24 @@ variable name it used, the vault and envelope expiry (re-read from chain again j
 + 300, nonce, the seller's maxTimeoutSeconds), the HTTP status and the settlement tx hash; both tx hashes
 match. Stop the seller after one settlement (`kill %1`).
 
+### Block D — executed
+
+Read back from Arbitrum One by RPC (`eth_getTransactionReceipt`, `eth_getLogs`), not from the run's output.
+
+| | |
+|---|---|
+| Settlement tx | `0x0ce09b201fd76ec8b439a23ef71b2204996c6ec57381d64495d77d7afb643ee0` |
+| Block | 518234369 (2026-10-25 20:00:58 UTC), status 1 |
+| Call | `transferWithAuthorization` (`0xcf092995`) to USDC `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`; calldata ends `0x80218021802180218021802180218021` |
+| Submitter (`tx.from`) | `0x8f5cb67b49555e614892b7233cfddebfb746e531` |
+| Facilitator | CDP hosted facilitator, verify and settle (from the seller run; not an on-chain field) |
+| Log 0 | USDC `AuthorizationUsed(authorizer = 0x46414CFb3F27735F2a9824abfb63699bF80ed001, nonce = 0x8ea09dae8e888968066f475b19edeca496ae6dd9db9ce14d63dae57a1b27c0ac)` |
+| Log 1 | USDC `Transfer(from = 0x46414CFb3F27735F2a9824abfb63699bF80ed001, to = 0x1633647e98534880807A4ea19862b9bb47a00645, value = 10000)` (0.01 USDC, 6 dp) |
+| Reservation | `PAY_AUTHORIZED` `RecordEntry` from `NablaRecord`, block 518233895, tx `0x6f5abcb1ab381d5adfcabd8385eb134a80bbdd3e2b5f8175969f6cc8b9e57602`, log 6: writerAuth = grantId `0xefc5…be8f`, counterpartyAuth = the vault, amount 2000000 |
+
+The settlement wrote no `NablaRecord` entry. Citation of this payment: the `PAY_AUTHORIZED` log above plus
+the settlement tx and block.
+
 ## Expected on-chain outcome (CTO verifies)
 
 In the settlement tx (`transferWithAuthorization(address,address,uint256,uint256,uint256,bytes32,bytes)`,

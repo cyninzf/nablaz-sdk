@@ -1,4 +1,4 @@
-# nablaz-reader
+# nablaz-sdk
 
 An open-source indexer for the NablaZ record. It rebuilds, from public chain data, what NablaZ accounts
 wrote to the record and what their grantee vaults settled, and keeps every fact next to the command that
@@ -32,6 +32,12 @@ Rows hold facts and counts. The reader passes no judgement on any subject and pr
 
 In `vault_payments`, the party that submitted the settlement transaction (`tx.from`) is recorded as
 `submitter`. It is never treated as the counterparty; the counterparty is the `Transfer` recipient.
+
+A settlement writes no `NablaRecord` entry. A payment's record is two parts, paired by the reader: the
+`PAY_AUTHORIZED` entry the account wrote when it reserved funds into the grantee vault (the reservation,
+in `record_entries`), and USDC's own `AuthorizationUsed` and `Transfer` events (the settlement, one
+`vault_payments` row). A citation of a payment cites both: the `PAY_AUTHORIZED` log (block, transaction
+hash, log index) and the USDC settlement transaction and its block.
 
 ## Citation rule
 

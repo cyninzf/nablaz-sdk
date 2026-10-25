@@ -51,15 +51,28 @@ export function predictVault(vaultImpl: Address, account: Address, granteeKey: H
 
 const accountAbi = parseAbi(["function VAULT_IMPL() view returns (address)"]);
 
+/** Thrown for a vault implementation listed in NEVER_PAYMENT_TARGET (R-S184-5). */
+export class NeverPaymentTarget extends Error {
+  readonly impl: Address;
+  constructor(impl: Address, account?: Address) {
+    super(`${account ? `account ${account} uses ` : ""}vault implementation ${impl}, which is never a payment target`);
+    this.impl = impl;
+  }
+}
+
+/** Refuses an implementation listed in NEVER_PAYMENT_TARGET. Returns it checksummed. */
+export function assertPaymentTarget(vaultImpl: Address, account?: Address): Address {
+  const impl = getAddress(vaultImpl);
+  if (NEVER_PAYMENT_TARGET.some((a) => a.toLowerCase() === impl.toLowerCase())) throw new NeverPaymentTarget(impl, account);
+  return impl;
+}
+
 /** The account's vault implementation. Refuses an implementation that is never a payment target. */
 export async function readVaultImpl(client: PublicClient, account: Address, blockNumber?: bigint): Promise<Address> {
-  const impl = getAddress(
+  return assertPaymentTarget(
     await client.readContract({ address: account, abi: accountAbi, functionName: "VAULT_IMPL", blockNumber }),
+    account,
   );
-  if (NEVER_PAYMENT_TARGET.some((a) => a.toLowerCase() === impl.toLowerCase())) {
-    throw new Error(`account ${account} uses vault implementation ${impl}, which is never a payment target`);
-  }
-  return impl;
 }
 
 /** The grantee vault for `granteeKey` on `account`, predicted from the account's own VAULT_IMPL. */
