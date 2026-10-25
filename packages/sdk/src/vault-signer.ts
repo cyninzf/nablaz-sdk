@@ -12,9 +12,15 @@
 // maxTimeoutSeconds). The adapter refuses any larger value, so a payload it signs never outlives the envelope
 // and never outlives the seller's window. The grantee may be any external signer (a viem LocalAccount, a KMS
 // or hardware wallet behind `toAccount`): only `address` and `signTypedData` are used.
+//
+// The vault is never taken on trust: at construction the adapter requires vault = predictVault(vaultImpl,
+// account, granteeKey) and refuses a vaultImpl that is never a payment target (R-S184-5). vaultImpl must be
+// the account's own VAULT_IMPL; `granteeVaultSignerFromChain` reads it. granteeKey is the grant's own key
+// (CAM V4 granteeOf / granteeKeyOf): an agentId grant is not keyed by the grantee address.
 
-import { encodeAbiParameters, getAddress, isAddressEqual, zeroHash, type Address, type Hex, type TypedDataDomain } from "viem";
+import { encodeAbiParameters, getAddress, isAddressEqual, zeroHash, type Address, type Hex, type PublicClient, type TypedDataDomain } from "viem";
 import type { ClientEvmSigner } from "@x402/evm";
+import { assertPaymentTarget, predictVault, readVaultImpl } from "./vault.ts";
 
 export const GRANTEE_VAULT_NAME = "NablaZGranteeVault";
 export const GRANTEE_VAULT_VERSION = "2";
@@ -75,6 +81,13 @@ export type GranteeKey = {
 
 export type GranteeVaultSignerConfig = {
   grantee: GranteeKey;
+  /** The NablaZ account the grant is on. */
+  account: Address;
+  /** The account's own VAULT_IMPL (never the address table). */
+  vaultImpl: Address;
+  /** The grant's grantee key (CAM V4 granteeOf); for an agentId grant it is not keyed by the grantee address. */
+  granteeKey: Hex;
+  /** Must equal predictVault(vaultImpl, account, granteeKey); checked at construction. */
   vault: Address;
   grantId: Hex;
   token: Address;
@@ -102,6 +115,17 @@ export class ValidBeforeExceeded extends Error {
     super(`validBefore ${got} is above ${max} = min(envelope expiry, now + seller maxTimeoutSeconds)`);
     this.got = got;
     this.max = max;
+  }
+}
+
+/** Thrown when the configured vault is not predictVault(vaultImpl, account, granteeKey). */
+export class VaultMismatch extends Error {
+  readonly got: Address;
+  readonly expected: Address;
+  constructor(got: Address, expected: Address) {
+    super(`vault ${got} is not ${expected} = predictVault(vaultImpl, account, granteeKey)`);
+    this.got = got;
+    this.expected = expected;
   }
 }
 
@@ -144,6 +168,8 @@ export function encodeVaultSignature(grantId: Hex, token: Address, m: TransferWi
  */
 export function granteeVaultSigner(cfg: GranteeVaultSignerConfig): ClientEvmSigner {
   const vault = getAddress(cfg.vault);
+  const expected = getAddress(predictVault(assertPaymentTarget(cfg.vaultImpl, cfg.account), getAddress(cfg.account), cfg.granteeKey));
+  if (vault !== expected) throw new VaultMismatch(vault, expected);
   const token = getAddress(cfg.token);
   const now = cfg.now ?? (() => Math.floor(Date.now() / 1000));
   maxValidBefore(cfg.expiry, cfg.maxTimeoutSeconds, 0); // refuse a bad window at construction
@@ -173,4 +199,13 @@ export function granteeVaultSigner(cfg: GranteeVaultSignerConfig): ClientEvmSign
       return encodeVaultSignature(cfg.grantId, token, m, granteeSignature);
     },
   };
+}
+
+/** granteeVaultSigner with vaultImpl read from the account's own VAULT_IMPL (readVaultImpl). */
+export async function granteeVaultSignerFromChain(
+  client: PublicClient,
+  cfg: Omit<GranteeVaultSignerConfig, "vaultImpl">,
+  blockNumber?: bigint,
+): Promise<ClientEvmSigner> {
+  return granteeVaultSigner({ ...cfg, vaultImpl: await readVaultImpl(client, getAddress(cfg.account), blockNumber) });
 }
