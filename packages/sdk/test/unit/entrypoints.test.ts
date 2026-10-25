@@ -11,6 +11,11 @@ describe("dev-only packages stay out of src/", () => {
   const src = join(import.meta.dirname, "../../src");
   const files = (readdirSync(src, { recursive: true }) as string[]).filter((f) => /\.[cm]?[jt]s$/.test(f));
   it("finds the source files", () => expect(files).toContain("vault-signer.ts"));
+  it("@coinbase/cdp-sdk is pinned as a devDependency, not a dependency", () => {
+    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "../../package.json"), "utf8"));
+    expect(pkg.dependencies["@coinbase/cdp-sdk"]).toBeUndefined();
+    expect(pkg.devDependencies["@coinbase/cdp-sdk"]).toBe("1.58.0");
+  });
   for (const f of files) {
     it(`src/${f} does not import @coinbase/cdp-sdk`, () => {
       expect(readFileSync(join(src, f), "utf8")).not.toMatch(/["'`]@coinbase\/cdp-sdk/);
