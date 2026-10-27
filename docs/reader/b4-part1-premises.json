@@ -1,0 +1,1700 @@
+{
+  "8453": {
+    "head": "53160134",
+    "redemptions": {
+      "from": "53155135",
+      "to": "53160134",
+      "rows": [
+        {
+          "block": "53160025",
+          "tx": "0x7a940f6d9bd84edd5d5909b829096d2d7b6f94d2da9a54520e1e7923a54ed063",
+          "logIndex": 237,
+          "rootDelegator": "0xcaf770Cbb4d95EdDCd963538d2394165E5906532",
+          "redeemer": "0xC066ac5D385419B1A8c43A0E146fA439837a8B8c",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0xcaf770Cbb4d95EdDCd963538d2394165E5906532",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x910ae59927d89f7cd2467a7ba90e8040033d15fb10c242aac6aaea6aa3389710",
+          "enforcers": [
+            {
+              "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+              "name": "SpecificActionERC20TransferBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0xcaf770Cbb4d95EdDCd963538d2394165E5906532",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "17639",
+              "logIndex": 236
+            }
+          ]
+        },
+        {
+          "block": "53160045",
+          "tx": "0x219d9d6572b34d525f3c142e605baa302c34689e17a22a23c072ff89c0459782",
+          "logIndex": 311,
+          "rootDelegator": "0xcc2176e410aa65065156D39279Bf76649Fcc9b31",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0xcc2176e410aa65065156D39279Bf76649Fcc9b31",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xe9de80779d5a84e816ce04643252dc6ca75b879d3537ade85b1e16ba09f9ec92",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1046bb45C8d673d4ea75321280DB34899413c069",
+              "name": "TimestampEnforcer",
+              "class": "scope-only",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            },
+            {
+              "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+              "name": "ExactExecutionBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0xcc2176e410aa65065156D39279Bf76649Fcc9b31",
+              "to": "0xE5982DE43baa099a3F3A662995baCf0Ec40D2335",
+              "amount": "771100000",
+              "logIndex": 309
+            },
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0xcc2176e410aa65065156D39279Bf76649Fcc9b31",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "5286",
+              "logIndex": 310
+            }
+          ]
+        },
+        {
+          "block": "53160047",
+          "tx": "0xe25d05788d4c05fcf500a84b60298e2ee2de99981fa6a7447254da8b48de41da",
+          "logIndex": 469,
+          "rootDelegator": "0x92397432579b91B6De49f0f14AfF64628912667D",
+          "redeemer": "0xB01caEa8c6C47bbf4F4b4c5080Ca642043359C2E",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x92397432579b91B6De49f0f14AfF64628912667D",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xcc00159c2f81a3516fe7ca67bf37d4f467673b8652ac7c566ac9cdd04b8bb67b",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+              "name": "ExactExecutionBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0x498581fF718922c3f8e6A244956aF099B2652b2b",
+              "amount": "350000000",
+              "logIndex": 466
+            },
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "11645",
+              "logIndex": 468
+            }
+          ]
+        },
+        {
+          "block": "53160065",
+          "tx": "0x93774af1f00d8a2f4d7511589f4147c2628f088bc38dd5520c1f3065ebb55dc2",
+          "logIndex": 660,
+          "rootDelegator": "0x92397432579b91B6De49f0f14AfF64628912667D",
+          "redeemer": "0xC066ac5D385419B1A8c43A0E146fA439837a8B8c",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x92397432579b91B6De49f0f14AfF64628912667D",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x5226eadf89f1786d1214d278c6ab17847c0abf7fafe3b083ca4bb0e00f007b75",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+              "name": "ExactExecutionBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x03D01595769333174036832e18fA2f17C74f8161",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0x0000000000000000000000000000000000000000",
+              "amount": "313546046",
+              "logIndex": 654
+            },
+            {
+              "token": "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0x90DA57E0A6C0d166Bf15764E03b83745Dc90025B",
+              "amount": "313876115",
+              "logIndex": 657
+            },
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "7696",
+              "logIndex": 659
+            }
+          ]
+        },
+        {
+          "block": "53160081",
+          "tx": "0x19c3dfe9edf7eae156f26c936a059a535bcac1e8625c7195229b3927754e8e84",
+          "logIndex": 113,
+          "rootDelegator": "0x7838450D39ad8f9bB41F4d229f7d32408718E97b",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x7838450D39ad8f9bB41F4d229f7d32408718E97b",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x06baffa1e5a0e0faef9254d8ca6177cbdbcc14993dc5cafbe1b6de08974406b9",
+          "enforcers": [
+            {
+              "address": "0x146713078D39eCC1F5338309c28405ccf85Abfbb",
+              "name": "ExactExecutionEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x7838450D39ad8f9bB41F4d229f7d32408718E97b",
+              "to": "0x0a2854Fbbd9B3Ef66F17d47284E7f899b9509330",
+              "amount": "7207421",
+              "logIndex": 105
+            }
+          ]
+        },
+        {
+          "block": "53160099",
+          "tx": "0x9f839882543833cdb31a4caf7114fbc7776294e28702ce7ad7920f9e00d38e84",
+          "logIndex": 289,
+          "rootDelegator": "0x92397432579b91B6De49f0f14AfF64628912667D",
+          "redeemer": "0xB01caEa8c6C47bbf4F4b4c5080Ca642043359C2E",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x92397432579b91B6De49f0f14AfF64628912667D",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xe569cecac00c52c2b183517c69b154536b70129ae32b9f7b4a806cd8deae6e01",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+              "name": "ExactExecutionBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0x498581fF718922c3f8e6A244956aF099B2652b2b",
+              "amount": "26000000",
+              "logIndex": 279
+            },
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "12735",
+              "logIndex": 288
+            }
+          ]
+        },
+        {
+          "block": "53160102",
+          "tx": "0x8933f1ed90df4969103392bf84e14d47c99f979edc3197e7f0c424c1fcc2e643",
+          "logIndex": 747,
+          "rootDelegator": "0x5699A1C6724DCa1E89f5E0273F0D490795771361",
+          "redeemer": "0xC066ac5D385419B1A8c43A0E146fA439837a8B8c",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x5699A1C6724DCa1E89f5E0273F0D490795771361",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xac50b077fce9d10046b4689021e99b96b97f76b538b2814f909ae787d7656d19",
+          "enforcers": [
+            {
+              "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+              "name": "SpecificActionERC20TransferBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x5699A1C6724DCa1E89f5E0273F0D490795771361",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "5636",
+              "logIndex": 746
+            }
+          ]
+        },
+        {
+          "block": "53160108",
+          "tx": "0xf1a66ed187c2792b26ac5519831dd225bef2773731a78b8d7c18a7d6f80cf26f",
+          "logIndex": 118,
+          "rootDelegator": "0x5699A1C6724DCa1E89f5E0273F0D490795771361",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x5699A1C6724DCa1E89f5E0273F0D490795771361",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x076054347ff723a5830136fa80fb7d7c8b609918e6cf05aaec00a9d97ee62239",
+          "enforcers": [
+            {
+              "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+              "name": "SpecificActionERC20TransferBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x5699A1C6724DCa1E89f5E0273F0D490795771361",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "5174",
+              "logIndex": 117
+            }
+          ]
+        },
+        {
+          "block": "53160111",
+          "tx": "0x7e9887131cc9db2e54061dbc88e83d11db41b6c6919950ad0da81ef426d20068",
+          "logIndex": 229,
+          "rootDelegator": "0x36233a76D0794aB43ecd6C1aad81feD8f245B9B2",
+          "redeemer": "0xB01caEa8c6C47bbf4F4b4c5080Ca642043359C2E",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x36233a76D0794aB43ecd6C1aad81feD8f245B9B2",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x7b6182a0d517f98791b37a56b378a2e6cc8220869bc3d961238324f6069c831b",
+          "enforcers": [
+            {
+              "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+              "name": "SpecificActionERC20TransferBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x36233a76D0794aB43ecd6C1aad81feD8f245B9B2",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "9105",
+              "logIndex": 228
+            }
+          ]
+        },
+        {
+          "block": "53160113",
+          "tx": "0x6f4596d1c1ba8f8928b576fb07ed9350f86b18d3b8d61d724162b2fecdcb44e9",
+          "logIndex": 439,
+          "rootDelegator": "0x5A558786753494B24Df1e07fa877a5c34A2A4C3f",
+          "redeemer": "0xcA11bde05977b3631167028862bE2a173976CA11",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x5A558786753494B24Df1e07fa877a5c34A2A4C3f",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x019ffdc3961d40cadad84dcc9ca0963f03eadf9f79e89fcefdf7ae59003f83fb",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1046bb45C8d673d4ea75321280DB34899413c069",
+              "name": "TimestampEnforcer",
+              "class": "scope-only",
+              "mode": null
+            },
+            {
+              "address": "0x146713078D39eCC1F5338309c28405ccf85Abfbb",
+              "name": "ExactExecutionEnforcer",
+              "class": "exact-call",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x5A558786753494B24Df1e07fa877a5c34A2A4C3f",
+              "to": "0x4cD00E387622C35bDDB9b4c962C136462338BC31",
+              "amount": "5000000",
+              "logIndex": 438
+            }
+          ]
+        },
+        {
+          "block": "53160126",
+          "tx": "0x5665950ff828dc79a6a7ab52f0203f48f360b6438de181b8ec51e71f7bcd1b46",
+          "logIndex": 652,
+          "rootDelegator": "0x3AbEB2572bb4DA7F95eb244b36D420C80b821D1D",
+          "redeemer": "0xC066ac5D385419B1A8c43A0E146fA439837a8B8c",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x3AbEB2572bb4DA7F95eb244b36D420C80b821D1D",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xe808b249a4f6ca6caeedef80b605139526e04dfea123c2bb7bb64d80fe15cc7a",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+              "name": "ExactExecutionBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+              "from": "0x3AbEB2572bb4DA7F95eb244b36D420C80b821D1D",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "8869",
+              "logIndex": 651
+            }
+          ]
+        },
+        {
+          "block": "53160127",
+          "tx": "0xde725607cea8edb0cffc561a5ed908986e1e0a4849523355c2e2b5db79135e71",
+          "logIndex": 274,
+          "rootDelegator": "0x92397432579b91B6De49f0f14AfF64628912667D",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x92397432579b91B6De49f0f14AfF64628912667D",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xa55eca008b695ea20e46da6fa98d59f15473b934aa88d554541bbf8c206b7066",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+              "name": "ExactExecutionBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0x03D01595769333174036832e18fA2f17C74f8161",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0x0000000000000000000000000000000000000000",
+              "amount": "22599810",
+              "logIndex": 268
+            },
+            {
+              "token": "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0x90DA57E0A6C0d166Bf15764E03b83745Dc90025B",
+              "amount": "22599815",
+              "logIndex": 271
+            },
+            {
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "from": "0x92397432579b91B6De49f0f14AfF64628912667D",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "7889",
+              "logIndex": 273
+            }
+          ]
+        }
+      ]
+    },
+    "spm": {
+      "used": {
+        "from": "53135135",
+        "rows": [
+          {
+            "block": "53159477",
+            "tx": "0xeb420b8581052c42b141f1d4cd87dccee87e340a2d6b27a9dbdd4d60e0193890",
+            "logIndex": 521,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x32bed74fb5e3fdb2caa462c1118a48c4d3b8d83fc7af73032b295b734b41c2ca",
+              "account": "0x33248361B6Fe38243F5cF14E5471D92241F6eF57",
+              "spender": "0xf3DaAb8c050E60e9A89C074C927F60D5Fd9De9C0",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "798000"
+              }
+            }
+          },
+          {
+            "block": "53159483",
+            "tx": "0xb44c5ec6f6923dbfe7b332c1f4bbe2331c97663da4a1ca2d6fc9b8a88ff70fd4",
+            "logIndex": 79,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x5a5bc63bd93cfa80c838d44bb73e2ceb49a2e845260e50cd06386a0656f028e8",
+              "account": "0xFC9Cd96a5A530f543E08f3FEcc819C73294f82b4",
+              "spender": "0x771aD9c25B651D4a3fda8EABeeC75A8B08274ab8",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "970000"
+              }
+            }
+          },
+          {
+            "block": "53159529",
+            "tx": "0x60fc4d73b57922741ee512b07daac358e03017237cfa3faecce5ff67c6ccdb53",
+            "logIndex": 150,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0xd8dd2ec468f44b247aa72fa62be58c1b3e474838fda1171dee3767f2e5de2bb5",
+              "account": "0x85363c5a6BD499Fa5B8EE10b96E14d92C9Bc26B3",
+              "spender": "0x930e35e63Bf1475bCf9dA82219352aC365AaF636",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "818000"
+              }
+            }
+          },
+          {
+            "block": "53159565",
+            "tx": "0xf480dd4900d50c4201cdf075f4ba71ea3c6e335dc29f9c685542d6b83d0db292",
+            "logIndex": 211,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x137c04e9cae050c85a6a763118ff2a510068c538c4917f400baf3c7b07da6609",
+              "account": "0x5DA31BFB03e191c4ebB366dC733902a9c7A83781",
+              "spender": "0x9E26f8F17B3573eb28ce8a300e9f9288920D9da6",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "822000"
+              }
+            }
+          },
+          {
+            "block": "53159642",
+            "tx": "0xd461f7c8d82c76edee9ad8575519807adf3c1a77d084feed6dabedef67a4b809",
+            "logIndex": 947,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ae0aa4a",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x854d40a46dd67eefcb654d1feb2214673a7cc6175ca18676fe9b59886cea2aa1",
+              "account": "0x6019B97fc10A0A2705E6F2A9be08367b6CCA8adD",
+              "spender": "0x8b0105f141193AA89467C92e36CbdB1FBfb8F292",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793108554,
+                "end": 1793113954,
+                "spend": "9990000"
+              }
+            }
+          },
+          {
+            "block": "53159659",
+            "tx": "0x93dce45b752a5695f12b0e3bf18c69d7a682aea32c42a5fee9b1203738221256",
+            "logIndex": 534,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x2ebeb6a6460da28758b83431889291d930ae064abddd69c0f5f1c2002005d625",
+              "account": "0x52E74Eb836D68a716Bd6a0a387d70b3015B8586a",
+              "spender": "0xD618960f6A7ee45dE921329109c344182727137E",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "890000"
+              }
+            }
+          },
+          {
+            "block": "53159785",
+            "tx": "0x7c3c8b19af4cf9b93d4db150b0ee17ee227a7fe13a84419acc12d484a0fb3e86",
+            "logIndex": 70,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x6f677cfcf0ccf6a7daea0a77e2a7a6cfb8924ce815d8bfb2fa1086b9970148bb",
+              "account": "0xD2ded18f254539EF6d40146E6e3433DE9C6f6DF5",
+              "spender": "0x7E82Ad619a149db42aB305C655f2f8a96fd662bD",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "970000"
+              }
+            }
+          },
+          {
+            "block": "53159836",
+            "tx": "0x8a3085acc3278bf5ca64ba2c48a4c733c363e2d9406ecfb51a10993c2d4fdfe7",
+            "logIndex": 1383,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0xf7a577e0061c3824b8c9ac238fd2f3693ecfc1edb35c7c01f449786676444fba",
+              "account": "0xCF34C6e887406De8a95c9947dd4634df3e667B33",
+              "spender": "0x40f83860A7c0EB91b817ea87d07d8E2fb386C3e9",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "1000000"
+              }
+            }
+          },
+          {
+            "block": "53159997",
+            "tx": "0x7d3315e12fc4cac407684a8142527d9353bc31e2d8070bc8886c76bd44a8597c",
+            "logIndex": 106,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0xcc5810c668c68c8368ad4c54be512b339e788e989b6028169bb3781d1bba51c2",
+              "account": "0x6A6B971A9Fa645110cC219C2838eB171212D00FC",
+              "spender": "0x411627F6C6dC5da036dDB78DB018D595F9dA2813",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "810000"
+              }
+            }
+          },
+          {
+            "block": "53160037",
+            "tx": "0xc8abc90359c5a4e7c099d5f34d473d085dc8ab5a61df63782f7b7621132dcb91",
+            "logIndex": 264,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adfcd60",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0xdbc10c1c06e04af908ea5d4e67e1df8dcd0af1db6f0991376f836c475384ccc7",
+              "account": "0x19e6498c9eBCff3Df309F9fe0db447C3465075E6",
+              "spender": "0x1DFE28d0E021a3CE35334F6a813eaC1eE1119A9d",
+              "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "periodSpend": {
+                "start": 1793052000,
+                "end": 1793138400,
+                "spend": "970000"
+              }
+            }
+          }
+        ]
+      },
+      "approved": {
+        "from": "52910135",
+        "rows": [
+          {
+            "block": "53159156",
+            "tx": "0x3d8b59313b347595dd522a5e812f597be05ba6d91c35874ee402dcda75eae586",
+            "logIndex": 516,
+            "topicCount": 2,
+            "dataWord1": "0x000000000000000000000000cc52a83ddefe21db70872c0ba73685a663e2b670",
+            "event": "SpendPermissionApproved",
+            "args": {
+              "hash": "0x36b179c994f65f7f2d30f4b0f6992d4324e4c4601b64e9a0ba0acef8cec93e8e",
+              "spendPermission": {
+                "account": "0xcC52A83dDEfE21Db70872c0BA73685A663e2B670",
+                "spender": "0x0B41423e96aE3182Ce454A08e242920D7e8144ec",
+                "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "allowance": "29990000",
+                "period": 86400,
+                "start": 1793107424,
+                "end": 1793112824,
+                "salt": "66429615312599997443858790275287420975056130233220528470569512819731555866797",
+                "extraData": "0x"
+              }
+            }
+          },
+          {
+            "block": "53159336",
+            "tx": "0xd3fee338f066209f143f81038bb15549a56391ead9c6b5e0377c035f125dfcb0",
+            "logIndex": 972,
+            "topicCount": 2,
+            "dataWord1": "0x000000000000000000000000dc0d7964ad3b44f9867a2627ac76436016bc8f71",
+            "event": "SpendPermissionApproved",
+            "args": {
+              "hash": "0xcbfc26ef0e50545a563d105e0e3a0a2a39a755014e04ddda3108c8be6130d0d3",
+              "spendPermission": {
+                "account": "0xdC0D7964Ad3B44F9867A2627AC76436016bC8F71",
+                "spender": "0x3De8DE7Ab6189849FF12691CD941D4bEaF626396",
+                "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "allowance": "17990000",
+                "period": 86400,
+                "start": 1793107998,
+                "end": 1793113398,
+                "salt": "5966146293290794446444499169057115648361284294960388971459682112950071835186",
+                "extraData": "0x"
+              }
+            }
+          },
+          {
+            "block": "53159636",
+            "tx": "0x189e4427b3ad1c59f8bff67f834dea9d363b606a88963f9f93a9e870e3e60713",
+            "logIndex": 9,
+            "topicCount": 2,
+            "dataWord1": "0x0000000000000000000000006019b97fc10a0a2705e6f2a9be08367b6cca8add",
+            "event": "SpendPermissionApproved",
+            "args": {
+              "hash": "0x854d40a46dd67eefcb654d1feb2214673a7cc6175ca18676fe9b59886cea2aa1",
+              "spendPermission": {
+                "account": "0x6019B97fc10A0A2705E6F2A9be08367b6CCA8adD",
+                "spender": "0x8b0105f141193AA89467C92e36CbdB1FBfb8F292",
+                "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "allowance": "9990000",
+                "period": 86400,
+                "start": 1793108554,
+                "end": 1793113954,
+                "salt": "4989038072531476739157797432996562255348473654897403584711328405245245363203",
+                "extraData": "0x"
+              }
+            }
+          }
+        ]
+      },
+      "revoked": {
+        "from": "52660135",
+        "rows": [
+          {
+            "block": "52954114",
+            "tx": "0x3c30ad5056be6020a4b397805e3a092e7e2b054cbb766ee3d8121d999c11e821",
+            "logIndex": 225,
+            "topicCount": 2,
+            "dataWord1": "0x00000000000000000000000055b65be661881b081dd5c13261656bb65c9a772a",
+            "event": "SpendPermissionRevoked",
+            "args": {
+              "hash": "0x10880e40f0f6233749809b14047bf528bae35f7c80d25da0aa8b5c1b28b4726b",
+              "spendPermission": {
+                "account": "0x55b65Be661881b081Dd5C13261656BB65c9A772a",
+                "spender": "0x9f99Dfdc7E0f89EAdf67148568A94747a4E06B03",
+                "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "allowance": "9000000",
+                "period": 2592000,
+                "start": 1793565178,
+                "end": 1824669178,
+                "salt": "53595461957592523573020012206865124869222174883435361702599518294315675142211",
+                "extraData": "0x00000000000000000000000055b65be661881b081dd5c13261656bb65c9a772a1df39c08ca57555196b1d4bea7b6d05c4e1776e6d6a847f75afd871c8e0fa2ca"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "creditLines": {
+      "Borrowed": {
+        "topic0": "0x629355c554c974447ea37d858c9e39385b02dcfd05e66f0e83248b951e38fc43",
+        "hits": 0,
+        "from": "51160135",
+        "to": "53160134"
+      },
+      "Repaid": {
+        "topic0": "0xa7de81cb918e3d3d2e10d944b5a81f22d525eab1b926370283d4b9e997d445bb",
+        "hits": 0,
+        "from": "51160135",
+        "to": "53160134"
+      },
+      "Defaulted": {
+        "topic0": "0xea69a7290a8c5d33d720c1f1d3c299e3dd66d74e4ee6e570048e59068d9b04df",
+        "hits": 0,
+        "from": "51160135",
+        "to": "53160134"
+      }
+    }
+  },
+  "42161": {
+    "head": "518759926",
+    "redemptions": {
+      "from": "518754927",
+      "to": "518759926",
+      "rows": [
+        {
+          "block": "518758411",
+          "tx": "0xe6dd7f54c89a1b70c802d4456fa0a2a0e9a8ffef74e3fd8244c6edb6dbbc1478",
+          "logIndex": 3,
+          "rootDelegator": "0xAE90e0933E75aE33727a960839361A677A60FBe0",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0xAE90e0933E75aE33727a960839361A677A60FBe0",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x0722fc0f74339514c232b823672ef3313d95d1c9900d8bf0f38116fe9ed21d16",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+              "name": "ExactExecutionBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0xAE90e0933E75aE33727a960839361A677A60FBe0",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "19241",
+              "logIndex": 2
+            }
+          ]
+        },
+        {
+          "block": "518758620",
+          "tx": "0xab20e32de61fc21a21eb9dfe57f2b17b32746e2d676f59f76cbea17c511e94aa",
+          "logIndex": 20,
+          "rootDelegator": "0x4170f8991954bCD12Dee88ED4bB2f6eFF9ba2DDA",
+          "redeemer": "0xB01caEa8c6C47bbf4F4b4c5080Ca642043359C2E",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x4170f8991954bCD12Dee88ED4bB2f6eFF9ba2DDA",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xd8c85be7c186cd4fc943259712c32ed346bd457c6a992c3cd7aa67ee773a74fe",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x146713078D39eCC1F5338309c28405ccf85Abfbb",
+              "name": "ExactExecutionEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0x4170f8991954bCD12Dee88ED4bB2f6eFF9ba2DDA",
+              "to": "0x7a70cb77A12FA2dc3FA1BC1dCBCA4C79Db71a289",
+              "amount": "10000000",
+              "logIndex": 14
+            }
+          ]
+        },
+        {
+          "block": "518758640",
+          "tx": "0xdd34cb012aacf38320894bc3ed38ee27bf35ef1de292d5cfa9b86fd8f8cebd73",
+          "logIndex": 6,
+          "rootDelegator": "0x74C816Cf0eD62Bf3DB62983B659124FCeAb9a43e",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x74C816Cf0eD62Bf3DB62983B659124FCeAb9a43e",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x403bbd670f962b26e3421e44b7517399aa20722b7031d2941606d78fafcc14b8",
+          "enforcers": [
+            {
+              "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+              "name": "SpecificActionERC20TransferBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0x74C816Cf0eD62Bf3DB62983B659124FCeAb9a43e",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "41636",
+              "logIndex": 5
+            }
+          ]
+        },
+        {
+          "block": "518758702",
+          "tx": "0x9dfe64c035638a82ac420df80b5d850694e88c68eabb26d357e2d18038b776c6",
+          "logIndex": 4,
+          "rootDelegator": "0xcB283631b9703aa9fAff58877905cf1AcB1A05e4",
+          "redeemer": "0xcB283631b9703aa9fAff58877905cf1AcB1A05e4",
+          "delegate": "0xcB283631b9703aa9fAff58877905cf1AcB1A05e4",
+          "delegator": "0xcB283631b9703aa9fAff58877905cf1AcB1A05e4",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x7772a9a58ba95283a8005e797c9e4c8c5d7e9c022146fd4962ceb875caabc699",
+          "enforcers": [
+            {
+              "address": "0xbD7B277507723490Cd50b12EaaFe87C616be6880",
+              "name": "NativeBalanceChangeEnforcer",
+              "class": "amount",
+              "mode": "decrease"
+            }
+          ],
+          "shape": "a",
+          "label": "(a) allowance, per execution",
+          "erc20TransfersFromDelegator": []
+        },
+        {
+          "block": "518758895",
+          "tx": "0x57a7d9b807292fa56976763aabcde30e0b97c414b44806d4f729c1d472436479",
+          "logIndex": 15,
+          "rootDelegator": "0x4170f8991954bCD12Dee88ED4bB2f6eFF9ba2DDA",
+          "redeemer": "0xB01caEa8c6C47bbf4F4b4c5080Ca642043359C2E",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x4170f8991954bCD12Dee88ED4bB2f6eFF9ba2DDA",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x8059982a1a986dbac269f67d9eb9d686ccb9875fb70a203b6c3b71fac4c268f4",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x146713078D39eCC1F5338309c28405ccf85Abfbb",
+              "name": "ExactExecutionEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0x4170f8991954bCD12Dee88ED4bB2f6eFF9ba2DDA",
+              "to": "0x0a2854Fbbd9B3Ef66F17d47284E7f899b9509330",
+              "amount": "5000000",
+              "logIndex": 6
+            }
+          ]
+        },
+        {
+          "block": "518758967",
+          "tx": "0x9c38d30ac358c627c922a8f40ecf661f05cb3b6a571b1b7cad352e435cf86e43",
+          "logIndex": 9,
+          "rootDelegator": "0xe15B49c98CB94498D3109Ba682a3af16b132bA51",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0xe15B49c98CB94498D3109Ba682a3af16b132bA51",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xac8e34ac959f800edc4c140ac68aac824e257430e5eb1d0f5c547ce510cef5eb",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1046bb45C8d673d4ea75321280DB34899413c069",
+              "name": "TimestampEnforcer",
+              "class": "scope-only",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            },
+            {
+              "address": "0x146713078D39eCC1F5338309c28405ccf85Abfbb",
+              "name": "ExactExecutionEnforcer",
+              "class": "exact-call",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0xe15B49c98CB94498D3109Ba682a3af16b132bA51",
+              "to": "0x0a2854Fbbd9B3Ef66F17d47284E7f899b9509330",
+              "amount": "10000000",
+              "logIndex": 2
+            }
+          ]
+        },
+        {
+          "block": "518759190",
+          "tx": "0xffc1006c54adce8526816e6673297719e8f047d8b956c3306ff09f447937da39",
+          "logIndex": 5,
+          "rootDelegator": "0x930919E48B45BfbD56d2CE8e65bc648e4c8FC821",
+          "redeemer": "0xB01caEa8c6C47bbf4F4b4c5080Ca642043359C2E",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x930919E48B45BfbD56d2CE8e65bc648e4c8FC821",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x148f97a358d7af029d2cc252ee39ef330955bdc4bd0ea66c86c81bd937f84db6",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+              "name": "ExactExecutionBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0x930919E48B45BfbD56d2CE8e65bc648e4c8FC821",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "31120",
+              "logIndex": 4
+            }
+          ]
+        },
+        {
+          "block": "518759489",
+          "tx": "0xec9c7fb6f5d47cdaae7cacdab0c795e8c004350e1e2062c4078808fa6320bd19",
+          "logIndex": 8,
+          "rootDelegator": "0xb5651d6cf64d8E8ee28fA9E32bfdb4C222bf8129",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0xb5651d6cf64d8E8ee28fA9E32bfdb4C222bf8129",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x8514f7c8e96effda2b1d00903da500e8337b5cf516de07ba4b8c23998ee59e8e",
+          "enforcers": [
+            {
+              "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+              "name": "SpecificActionERC20TransferBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+              "from": "0xb5651d6cf64d8E8ee28fA9E32bfdb4C222bf8129",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "30913",
+              "logIndex": 7
+            }
+          ]
+        },
+        {
+          "block": "518759543",
+          "tx": "0xeb4582e7bb0d55a45cc704c8ba86f8bb066cbc045901a7ab282b00c11cff8614",
+          "logIndex": 7,
+          "rootDelegator": "0xb5651d6cf64d8E8ee28fA9E32bfdb4C222bf8129",
+          "redeemer": "0xB01caEa8c6C47bbf4F4b4c5080Ca642043359C2E",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0xb5651d6cf64d8E8ee28fA9E32bfdb4C222bf8129",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x8065ff1a47f85628ea57e777de95a69d05c3fc397d9da6ce2c4eed09b4cc2168",
+          "enforcers": [
+            {
+              "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+              "name": "SpecificActionERC20TransferBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+              "from": "0xb5651d6cf64d8E8ee28fA9E32bfdb4C222bf8129",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "32757",
+              "logIndex": 6
+            }
+          ]
+        },
+        {
+          "block": "518759634",
+          "tx": "0x8fc88f69586f6f6853f03c6eea674cf8abba27d9590d807c7b72428dd40c5906",
+          "logIndex": 2,
+          "rootDelegator": "0x4c422DB7e7FaCd30B28B995556948aB7CDcdb066",
+          "redeemer": "0xcA11bde05977b3631167028862bE2a173976CA11",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x4c422DB7e7FaCd30B28B995556948aB7CDcdb066",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0xec3904955ee9b57b77013bd7b6d9fda1525aef3821edc5c914124a292740539a",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x146713078D39eCC1F5338309c28405ccf85Abfbb",
+              "name": "ExactExecutionEnforcer",
+              "class": "exact-call",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0x4c422DB7e7FaCd30B28B995556948aB7CDcdb066",
+              "to": "0x4cD00E387622C35bDDB9b4c962C136462338BC31",
+              "amount": "59980000",
+              "logIndex": 1
+            }
+          ]
+        },
+        {
+          "block": "518759681",
+          "tx": "0xc7cca23a01e0d5082872409e0445b535309e4cc06546e0290f34bcc21031285a",
+          "logIndex": 8,
+          "rootDelegator": "0x4a6a0073382d3f44b2a32720dd5795D9B7A74B04",
+          "redeemer": "0xB42F812A44c22cc6b861478900401ee759EbEAD6",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x4a6a0073382d3f44b2a32720dd5795D9B7A74B04",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x1aeb6c396ab10cb15815ebcf6ec7b6c0b09dedf797df9a279dfd7f06ccdd6752",
+          "enforcers": [
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0x146713078D39eCC1F5338309c28405ccf85Abfbb",
+              "name": "ExactExecutionEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0x4a6a0073382d3f44b2a32720dd5795D9B7A74B04",
+              "to": "0x7a70cb77A12FA2dc3FA1BC1dCBCA4C79Db71a289",
+              "amount": "97000000",
+              "logIndex": 2
+            }
+          ]
+        },
+        {
+          "block": "518759884",
+          "tx": "0xe75b7e7146ea4da3c93e662c8214120191b15576a7c7a8efdcae74625be92cf9",
+          "logIndex": 7,
+          "rootDelegator": "0x900B26E6a00ebe15c9692c4889CA2BD40e4E1b7a",
+          "redeemer": "0xB01caEa8c6C47bbf4F4b4c5080Ca642043359C2E",
+          "delegate": "0x0000000000000000000000000000000000000a11",
+          "delegator": "0x900B26E6a00ebe15c9692c4889CA2BD40e4E1b7a",
+          "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "hop": "root",
+          "authorityIsParentInTx": null,
+          "redeemedEventsInTx": 1,
+          "delegationHash": "0x0405b018ee264db4354d99fe480a02702ab79b8ae20e50fb0281dedb920d9d98",
+          "enforcers": [
+            {
+              "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+              "name": "SpecificActionERC20TransferBatchEnforcer",
+              "class": "exact-call",
+              "mode": null
+            },
+            {
+              "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+              "name": "LimitedCallsEnforcer",
+              "class": "call-term",
+              "mode": null
+            },
+            {
+              "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+              "name": "RedeemerEnforcer",
+              "class": "scope-only",
+              "mode": null
+            }
+          ],
+          "shape": "b",
+          "label": "(b) exact execution, once",
+          "erc20TransfersFromDelegator": [
+            {
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "from": "0x900B26E6a00ebe15c9692c4889CA2BD40e4E1b7a",
+              "to": "0x7e59E42F7324e4e04FbD825e617bD896000aD171",
+              "amount": "140746721",
+              "logIndex": 5
+            },
+            {
+              "token": "0x912CE59144191C1204E64559FE8253a0e49E6548",
+              "from": "0x900B26E6a00ebe15c9692c4889CA2BD40e4E1b7a",
+              "to": "0xe3478b0BB1A5084567C319096437924948Be1964",
+              "amount": "123378812885536412",
+              "logIndex": 6
+            }
+          ]
+        }
+      ]
+    },
+    "spm": {
+      "used": {
+        "from": "512159927",
+        "rows": [
+          {
+            "block": "512282118",
+            "tx": "0x62adb710ee2f4748887ab390b627c83eafc7adefd5f9c593fc27b5de5e1f9c71",
+            "logIndex": 2,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ac4199a",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x75ca1cbc3d1e00f3674d79aac405a744a0669d3f48f955ff0254caaa03d6635b",
+              "account": "0x5b272b203eEDC60434BAD315b01Cd1c5Dc89f3c0",
+              "spender": "0x94c6E8a48A8fD90a285240EE27d9EE1FaBE521aB",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1791236506,
+                "end": 1791322906,
+                "spend": "50000"
+              }
+            }
+          },
+          {
+            "block": "512284997",
+            "tx": "0x66d97043d35deaee4e23f4924fdf64dbd17bc370b57a02e70f86ee2565bb0cd3",
+            "logIndex": 31,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ac4199a",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x75ca1cbc3d1e00f3674d79aac405a744a0669d3f48f955ff0254caaa03d6635b",
+              "account": "0x5b272b203eEDC60434BAD315b01Cd1c5Dc89f3c0",
+              "spender": "0x94c6E8a48A8fD90a285240EE27d9EE1FaBE521aB",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1791236506,
+                "end": 1791322906,
+                "spend": "20000"
+              }
+            }
+          },
+          {
+            "block": "512411893",
+            "tx": "0xb46fd5cce3329ca5f47a0ef56e4d055a0b9edff4d488a18e715e77ef7b4a9ed3",
+            "logIndex": 2,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ac54f49",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0xa4a84a3dede496d18e769b9728e84d444762f17e083444ad9e1b031c3b508ab1",
+              "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+              "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1791315785,
+                "end": 1791402185,
+                "spend": "100000"
+              }
+            }
+          },
+          {
+            "block": "515795464",
+            "tx": "0x494d7694d31f00a9e959c73d087d3636de0f592fe615838c12db6f9155208ed8",
+            "logIndex": 2,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ad3cfc9",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0xa4a84a3dede496d18e769b9728e84d444762f17e083444ad9e1b031c3b508ab1",
+              "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+              "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1792266185,
+                "end": 1792352585,
+                "spend": "10000"
+              }
+            }
+          },
+          {
+            "block": "515818959",
+            "tx": "0x4569953df98290adc8dc3cc3164d334ed5aca3592e4e3b9f33679b524f10a174",
+            "logIndex": 45,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ad3d086",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x5d0b2fdf391eecb0d13782d8223f3877edc849696e4b212834e874f19d960583",
+              "account": "0xc363Daa9e1dFfB6Ed08CE8621c1405eaC03Da15A",
+              "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1792266374,
+                "end": 1792352774,
+                "spend": "100000"
+              }
+            }
+          },
+          {
+            "block": "515820232",
+            "tx": "0x46b607f8e0c5a7a936306679666d743bbb2472176822d8dc59e8c15812e59059",
+            "logIndex": 20,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ad3fb70",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x96418cfc893786137208b7b94942ff1bf15bd55d629c337e10e6c6ac15a781ca",
+              "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+              "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1792277360,
+                "end": 1792363760,
+                "spend": "100000"
+              }
+            }
+          },
+          {
+            "block": "516658369",
+            "tx": "0xef8cf1233d8fc8628c9f840ab547a168922675edb10b064013f3b2ed3d8c22b1",
+            "logIndex": 5,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ad69e70",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x96418cfc893786137208b7b94942ff1bf15bd55d629c337e10e6c6ac15a781ca",
+              "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+              "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1792450160,
+                "end": 1792536560,
+                "spend": "100000"
+              }
+            }
+          },
+          {
+            "block": "516674270",
+            "tx": "0x7219245489061af097c390813d2682fef154c7d8d9ef97df5ad8916b710b742f",
+            "logIndex": 11,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ad6afe3",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x51289a7aa3299b2f7518259346bdc9e2ba8468b3d8642b75577ccfd32f281368",
+              "account": "0xd15Af96e50F7818bDF37E1296D7FeFbb64f105E0",
+              "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1792454627,
+                "end": 1792541027,
+                "spend": "1000000"
+              }
+            }
+          },
+          {
+            "block": "517405922",
+            "tx": "0x311a1c00cdb64cbbbf18edefcaafdf9bc6241d97e779d0d254ff5ff891e9f616",
+            "logIndex": 3,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006ada92f0",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x96418cfc893786137208b7b94942ff1bf15bd55d629c337e10e6c6ac15a781ca",
+              "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+              "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1792709360,
+                "end": 1792795760,
+                "spend": "100000"
+              }
+            }
+          },
+          {
+            "block": "517694769",
+            "tx": "0x844eee77cdf272ca21596062e7f6810259204f61bd872387cf1b65e022afb8c0",
+            "logIndex": 7,
+            "topicCount": 4,
+            "dataWord1": "0x000000000000000000000000000000000000000000000000000000006adbe470",
+            "event": "SpendPermissionUsed",
+            "args": {
+              "hash": "0x96418cfc893786137208b7b94942ff1bf15bd55d629c337e10e6c6ac15a781ca",
+              "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+              "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+              "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "periodSpend": {
+                "start": 1792795760,
+                "end": 1792882160,
+                "spend": "100000"
+              }
+            }
+          }
+        ]
+      },
+      "approved": {
+        "from": "515759927",
+        "rows": [
+          {
+            "block": "515800682",
+            "tx": "0x5b69ffb5c3dded174def2ff02488a65fb405b3c7cd87fbd1fce2f35c2cbdbfcf",
+            "logIndex": 3,
+            "topicCount": 2,
+            "dataWord1": "0x00000000000000000000000080d69a5a96274881b13ad93caa0c48081498948a",
+            "event": "SpendPermissionApproved",
+            "args": {
+              "hash": "0x584ef01e6c3995df4416b8b9e9e95f82fe5eef5834ae39973a4c3bd0b680066f",
+              "spendPermission": {
+                "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+                "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+                "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+                "allowance": "200000000",
+                "period": 86400,
+                "start": 1792276847,
+                "end": 281474976710655,
+                "salt": "95761490992300417050402727235407683132566977133903464987578578872671646656095",
+                "extraData": "0x"
+              }
+            }
+          },
+          {
+            "block": "515802453",
+            "tx": "0x0deb1d1c7e9b79922316a7d2a08a22e1014d7c7db0c52cbf65586fb01d56e31a",
+            "logIndex": 2,
+            "topicCount": 2,
+            "dataWord1": "0x00000000000000000000000080d69a5a96274881b13ad93caa0c48081498948a",
+            "event": "SpendPermissionApproved",
+            "args": {
+              "hash": "0x96418cfc893786137208b7b94942ff1bf15bd55d629c337e10e6c6ac15a781ca",
+              "spendPermission": {
+                "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+                "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+                "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+                "allowance": "200000000",
+                "period": 86400,
+                "start": 1792277360,
+                "end": 281474976710655,
+                "salt": "69382634734026421146559834813068649517861736122776777781549805692948119075436",
+                "extraData": "0x"
+              }
+            }
+          },
+          {
+            "block": "516492591",
+            "tx": "0x301f8a25eca51f1d59edea57f779b24e240a25520cb70dcb2e88c17624633dec",
+            "logIndex": 11,
+            "topicCount": 2,
+            "dataWord1": "0x00000000000000000000000066947cc78d184bf78d8a672ccbb3c6c2531d3d89",
+            "event": "SpendPermissionApproved",
+            "args": {
+              "hash": "0x99a12669b2952ca033341f6ec54fa46fefc637d24ead8d2e833f13c3d7c5cec4",
+              "spendPermission": {
+                "account": "0x66947CC78D184bF78D8a672ccBb3c6C2531d3D89",
+                "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+                "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+                "allowance": "50000000",
+                "period": 86400,
+                "start": 1792470643,
+                "end": 281474976710655,
+                "salt": "111487969040752538122029105316274486691468086662795771919864962971395661434764",
+                "extraData": "0x"
+              }
+            }
+          }
+        ]
+      },
+      "revoked": {
+        "from": "515759927",
+        "rows": [
+          {
+            "block": "515801970",
+            "tx": "0x65a049949acb08aed6f55d72aeb9fa153eedcbfcae32176d7f1e86d61e3f0d2b",
+            "logIndex": 16,
+            "topicCount": 2,
+            "dataWord1": "0x00000000000000000000000080d69a5a96274881b13ad93caa0c48081498948a",
+            "event": "SpendPermissionRevoked",
+            "args": {
+              "hash": "0x584ef01e6c3995df4416b8b9e9e95f82fe5eef5834ae39973a4c3bd0b680066f",
+              "spendPermission": {
+                "account": "0x80d69a5A96274881B13aD93caa0C48081498948A",
+                "spender": "0xB396805F4C4eb7A45E237A9468FB647C982fBeb1",
+                "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+                "allowance": "200000000",
+                "period": 86400,
+                "start": 1792276847,
+                "end": 281474976710655,
+                "salt": "95761490992300417050402727235407683132566977133903464987578578872671646656095",
+                "extraData": "0x"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "creditLines": {
+      "Borrowed": {
+        "topic0": "0x629355c554c974447ea37d858c9e39385b02dcfd05e66f0e83248b951e38fc43",
+        "hits": 0,
+        "from": "516759927",
+        "to": "518759926"
+      },
+      "Repaid": {
+        "topic0": "0xa7de81cb918e3d3d2e10d944b5a81f22d525eab1b926370283d4b9e997d445bb",
+        "hits": 0,
+        "from": "516759927",
+        "to": "518759926"
+      },
+      "Defaulted": {
+        "topic0": "0xea69a7290a8c5d33d720c1f1d3c299e3dd66d74e4ee6e570048e59068d9b04df",
+        "hits": 0,
+        "from": "516759927",
+        "to": "518759926"
+      }
+    }
+  }
+}
