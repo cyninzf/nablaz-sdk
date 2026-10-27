@@ -39,7 +39,19 @@ import { toFacilitatorEvmSigner } from "@x402/evm";
 import { ExactEvmScheme as ExactEvmFacilitatorScheme } from "@x402/evm/exact/facilitator";
 import { wrapFetchWithPayment } from "@x402/fetch";
 import { ConsumerAIMandateV4Abi, GranteeVaultV2Abi, NablaAccountV3_1Abi, NablaRecordAbi } from "../../src/generated/abis.ts";
-import { ARBITRUM_ONE, granteeKeyOf, granteeTypedData, payInsideGrant, vaultOf, type GrantPayment } from "../../src/index.ts";
+import { x402Client } from "@x402/core/client";
+import { ExactEvmScheme } from "@x402/evm/exact/client";
+import {
+  AmountOverPerTx,
+  ARBITRUM_ONE,
+  granteeKeyOf,
+  granteeTypedData,
+  granteeVaultSigner,
+  payInsideGrant,
+  vaultOf,
+  type GranteeKey,
+  type GrantPayment,
+} from "../../src/index.ts";
 import { startSeller, type Seller } from "../../tools/seller.ts";
 import { indexOnce } from "../../../reader/test/fork/harness.ts";
 import { FORK_BLOCK, startAnvil, type Anvil } from "./anvil.ts";
@@ -56,6 +68,7 @@ const FACILITATOR: Address = "0x00000000000000000000000000000000000fac01";
 const USDC_WHALE: Address = "0x724dc807b04555b71ed48a6896b6F41593b8C637";
 const READER_DIR = new URL("../../../reader/", import.meta.url).pathname;
 const SELLER_WINDOW = 300; // tools/seller.ts default maxTimeoutSeconds
+const FULL_BALANCE_AT_4_7 = 1_980_000n;
 const KIND = (n: string) => keccak256(stringToHex(n));
 const PAY_ACTION_KEY = keccak256(concat([USDC, toFunctionSelector("transfer(address,uint256)")]));
 // ERC-8021 suffix: codes, codesLength, schemaId 0, then the 16-byte marker (read from the end).
@@ -195,6 +208,8 @@ beforeAll(async () => {
       { path: "/paid", payTo: PAY_TO, price: "$0.01" },
       { path: "/over-per-tx", payTo: PAY_TO, price: { amount: "1000001", asset: USDC, extra: { name: "USD Coin", version: "2" } } },
       { path: "/other-payee", payTo: OTHER_PAYEE, price: "$0.01" },
+      // The vault's whole balance when §4.7f runs: 2 USDC funded, less §4.5 and the §4.6 suffixed settlement.
+      { path: "/full-balance", payTo: PAY_TO, price: { amount: String(FULL_BALANCE_AT_4_7), asset: USDC, extra: { name: "USD Coin", version: "2" } } },
     ],
   });
 }, 120_000);
@@ -399,12 +414,58 @@ describe("S186 B2 Phase 0 on an Arbitrum One fork", () => {
     expect((await balances()).vault).toBe(before.vault - 10_000n);
   });
 
-  it("§4.7a refused at verify: value 1_000_001 (over perTx)", async () => {
-    S.pay.client.setSpendControls(false); // the client's own $1 cap would stop it before the seller
-    const f = wrapFetchWithPayment(fetch, S.pay.client);
+  it("§4.7a refused at verify: value 1_000_001 (over perTx), signed by an external signer without the SDK's guard", async () => {
+    // payInsideGrant refuses this before signing (§4.7e). An external signer that skips that check is still
+    // refused on chain: the official exact scheme over the bare vault signer.
+    const bare = new x402Client(undefined).register(
+      NETWORK,
+      new ExactEvmScheme(
+        granteeVaultSigner({ grantee, account: TEST, vaultImpl: C.GranteeVaultV2.address, granteeKey: S.key, vault: S.vault, grantId: S.grantId, token: USDC, chainId: 42161, expiry: S.expiry, maxTimeoutSeconds: SELLER_WINDOW }),
+      ),
+    );
+    bare.setSpendControls(false); // the client's own $1 cap would stop it before the seller
+    const f = wrapFetchWithPayment(fetch, bare);
     const out = await expectRefusedAtVerify(() => f(`${seller.url}/over-per-tx`));
     report["4.7a"] = { ...out, camCheck: await camCheck(PAY_TO, 1_000_001n) };
     expect(report["4.7a"]).toMatchObject({ camCheck: "OVER_PER_TX" });
+  });
+
+  /** A payInsideGrant whose grantee counts signTypedData calls; spend controls off so only our guard can refuse. */
+  async function countingPay() {
+    let signatures = 0;
+    const counting: GranteeKey = { address: grantee.address, signTypedData: (a) => (signatures++, grantee.signTypedData(a as never)) };
+    const sent: string[] = [];
+    const pay = await payInsideGrant({ publicClient: pub, account: TEST, grantId: S.grantId, token: USDC, grantee: counting, fetch: capturingFetch(sent) });
+    pay.client.setSpendControls(false);
+    return { pay, sent, signatures: () => signatures };
+  }
+
+  /** The 402 reaches the client; the client refuses before signing; nothing is sent, verified or moved. */
+  async function expectRefusedBeforeSigning(path: string, amount: bigint) {
+    const { pay, sent, signatures } = await countingPay();
+    const before = await balances();
+    const n = calls.length;
+    const err = await pay.fetch(`${seller.url}${path}`).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    // @x402/fetch re-throws as "Failed to create payment payload: <message>", without the cause.
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain(new AmountOverPerTx(amount, 1_000_000n).message);
+    expect(signatures()).toBe(0);
+    expect(sent).toEqual([]);
+    expect(calls.slice(n)).toEqual([]);
+    expect(await balances()).toEqual(before);
+    return { refused: (err as Error).message, signatures: signatures(), facilitatorCalls: calls.length - n, balances: before };
+  }
+
+  it("§4.7e refused before signing: the 402 asks 1_000_001, over perTx", async () => {
+    report["4.7e"] = await expectRefusedBeforeSigning("/over-per-tx", 1_000_001n);
+  });
+
+  it("§4.7f refused before signing: the 402 asks the vault's whole balance", async () => {
+    expect(await usdc(S.vault)).toBe(FULL_BALANCE_AT_4_7);
+    report["4.7f"] = await expectRefusedBeforeSigning("/full-balance", FULL_BALANCE_AT_4_7);
   });
 
   it("§4.7b refused at verify: payTo not allowlisted", async () => {

@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
 
-# Read-only, and only for this repository. No other token or secret is used except the RPC URL.
+# Read-only, and only for this repository. No other token or secret is used except the two RPC URLs.
 permissions:
   contents: read
 
@@ -58,15 +58,20 @@ jobs:
     timeout-minutes: 45
     env:
       READER_ARB_RPC_URL: ${{ secrets.READER_ARB_RPC_URL }}
+      READER_BASE_RPC_URL: ${{ secrets.READER_BASE_RPC_URL }}
     steps:
-      - name: require the RPC secret
+      # The fork tests run on Arbitrum One and Base (R-S189-1). A missing secret fails the job; it never skips.
+      - name: require the RPC secrets
         run: |
-          if [ -z "$READER_ARB_RPC_URL" ]; then
+          missing=""
+          [ -z "$READER_ARB_RPC_URL" ] && missing="$missing READER_ARB_RPC_URL"
+          [ -z "$READER_BASE_RPC_URL" ] && missing="$missing READER_BASE_RPC_URL"
+          if [ -n "$missing" ]; then
             if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
               echo "::notice::fork tests skipped: secrets are not available to pull requests from forks"
               echo "SKIP_FORK=1" >> "$GITHUB_ENV"
             else
-              echo "::error::Actions secret READER_ARB_RPC_URL is not set"
+              echo "::error::Actions secret(s) not set:$missing. The fork tests read both chains and do not skip."
               exit 1
             fi
           fi

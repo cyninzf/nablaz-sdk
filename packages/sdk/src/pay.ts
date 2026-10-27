@@ -7,13 +7,30 @@ import { x402Client } from "@x402/core/client";
 import type { PaymentPayloadContext, PaymentRequirements, SchemeNetworkClient } from "@x402/core/types";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { wrapFetchWithPayment } from "@x402/fetch";
+import { ConsumerAIMandateV4Abi } from "./generated/abis.ts";
 import { readVaultImpl, predictVault } from "./vault.ts";
 import { granteeVaultSigner, maxValidBefore, ValidBeforeExceeded, type GranteeKey, type GranteeVaultSignerConfig } from "./vault-signer.ts";
 
 export type EnvelopeSignerConfig = Omit<GranteeVaultSignerConfig, "maxTimeoutSeconds" | "expiry"> & {
   /** The live envelope's expiry, read from chain; called before every payment. Throws if the envelope is gone. */
   readEnvelopeExpiry: () => Promise<bigint>;
+  /** The grant's perTx for the token, read from chain; called before every payment. */
+  readPerTx: () => Promise<bigint>;
 };
+
+/**
+ * The 402 asks for more than the grant's perTx for the token. Thrown before anything is signed: the mandate
+ * refuses the same amount on chain (OVER_PER_TX), so signing it would only hand the seller a refused voucher.
+ */
+export class AmountOverPerTx extends Error {
+  constructor(
+    readonly amount: bigint,
+    readonly perTx: bigint,
+  ) {
+    super(`the 402 asks ${amount}, over the grant's perTx ${perTx}; refused before signing`);
+    this.name = "AmountOverPerTx";
+  }
+}
 
 /**
  * The official exact client scheme, with validBefore = min(envelope expiry, now + the seller's
@@ -38,6 +55,10 @@ export function envelopeExactScheme(cfg: EnvelopeSignerConfig): SchemeNetworkCli
       if ((requirements.extra?.assetTransferMethod ?? "eip3009") !== "eip3009") {
         throw new Error(`asset transfer method ${String(requirements.extra?.assetTransferMethod)} is out of scope`);
       }
+      // Refuse before signing: no signature is produced for an amount the grant cannot pay.
+      const amount = BigInt(requirements.amount);
+      const perTx = await cfg.readPerTx();
+      if (amount > perTx) throw new AmountOverPerTx(amount, perTx);
       const seller = requirements.maxTimeoutSeconds;
       const expiry = await cfg.readEnvelopeExpiry();
       const inner = new ExactEvmScheme(granteeVaultSigner({ ...cfg, expiry, maxTimeoutSeconds: seller, now }));
@@ -77,8 +98,9 @@ export type GrantPayment = {
 
 /**
  * Everything a grantee needs to pay from its vault, read from chain: the grant's grantee key, the vault
- * (from the account's own VAULT_IMPL), and the live envelope's expiry. Refuses if the key is not the
- * grant's grantee or the envelope is not this grant's or has expired.
+ * (from the account's own VAULT_IMPL), the live envelope's expiry and the grant's perTx for the token.
+ * Refuses if the key is not the grant's grantee, the envelope is not this grant's or has expired, or the
+ * grant has no allowance for the token; refuses each payment over perTx before signing (AmountOverPerTx).
  */
 export async function payInsideGrant(opts: {
   publicClient: PublicClient;
@@ -104,8 +126,15 @@ export async function payInsideGrant(opts: {
     if (BigInt(expiry) <= timestamp) throw new Error(`envelope expired at ${expiry}`);
     return BigInt(expiry);
   };
+  const readPerTx = async () => {
+    const grant = await pc.readContract({ address: mandate, abi: ConsumerAIMandateV4Abi, functionName: "grantOf", args: [account, grantId] });
+    const a = grant.allowances.find((x) => isAddressEqual(x.allowance.tokenAddress, token));
+    if (!a) throw new Error(`grant ${grantId} has no allowance for ${token}`);
+    return BigInt(a.allowance.perTx);
+  };
   const expiry = await readEnvelopeExpiry();
-  const scheme = envelopeExactScheme({ grantee: opts.grantee, account, vaultImpl, granteeKey, vault, grantId, token, chainId, readEnvelopeExpiry });
+  await readPerTx();
+  const scheme = envelopeExactScheme({ grantee: opts.grantee, account, vaultImpl, granteeKey, vault, grantId, token, chainId, readEnvelopeExpiry, readPerTx });
   const client = new x402Client().register(`eip155:${chainId}`, scheme);
   return { account, grantId, token, vault, granteeKey, expiry, client, fetch: wrapFetchWithPayment(opts.fetch ?? fetch, client) };
 }

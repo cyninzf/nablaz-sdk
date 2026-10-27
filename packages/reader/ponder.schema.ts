@@ -197,3 +197,97 @@ export const counterparties = onchainTable(
   }),
   (t) => ({ bySubject: index().on(t.chainId, t.subject) }),
 );
+
+// ── B4 part 1: external sources (s3 §6.4c) ───────────────────────────
+// Every row carries the evidence columns above. `reproduce` here is the s3 §6.4b one-liner for the row's
+// subject (src/oneliners.ts); `reproduceGetLogs` is the exact query for this row's log.
+
+/** The permanent factory's own AccountCreated owner (never the registry's): R-S189-4 AMENDED 2 fallback. */
+export const factoryAccounts = onchainTable("factory_accounts", (t) => ({
+  id: t.text().primaryKey(), // chainId-account
+  ...evidence(t),
+  account: t.hex().notNull(),
+  owner: t.hex().notNull(),
+}));
+
+/** A spend permission (SpendPermissionManager) or a redeemed delegation (DelegationManager). */
+export const externalPermissions = onchainTable(
+  "external_permissions",
+  (t) => ({
+    id: t.text().primaryKey(), // chainId-source-permissionId
+    ...evidence(t), // first log naming it
+    source: t.text().notNull(), // "spm" | "delegation_manager"
+    /** SPM: the account. DelegationManager: the delegator of this delegation. */
+    subject: t.hex().notNull(),
+    /** SPM: the spender. DelegationManager: the delegate (ANY_DELEGATE 0x…0a11 for an open delegation). */
+    grantee: t.hex().notNull(),
+    /** SPM: the permission hash. DelegationManager: the delegation hash. */
+    permissionId: t.hex().notNull(),
+    shape: t.text().notNull(), // "a" | "b" | "c" | "d"
+    label: t.text().notNull(),
+    terms: t.json().notNull(),
+    status: t.text().notNull(), // "approved" | "revoked" | "observed-by-use-only"
+    useCount: t.integer().notNull(),
+  }),
+  (t) => ({ bySubject: index().on(t.chainId, t.subject), byGrantee: index().on(t.chainId, t.grantee) }),
+);
+
+/** A payment under an external permission: SpendPermissionUsed, or an ERC-20 Transfer from the delegator in a redemption's tx (R-S189-5). */
+export const externalPayments = onchainTable(
+  "external_payments",
+  (t) => ({
+    id: t.text().primaryKey(), // chainId-tx-logIndex of the log that moved value
+    ...evidence(t),
+    source: t.text().notNull(),
+    payer: t.hex().notNull(),
+    payee: t.hex().notNull(),
+    token: t.hex().notNull(),
+    amount: t.bigint().notNull(),
+    permissionId: t.hex(),
+    /** DelegationManager: the redemption log this Transfer sits beside. Null for SPM. */
+    redemptionTx: t.hex(),
+    redemptionLogIndex: t.integer(),
+  }),
+  (t) => ({ byPayer: index().on(t.chainId, t.payer), byPayee: index().on(t.chainId, t.payee) }),
+);
+
+/** Every RedeemedDelegation. Not a payment (R-S189-5). */
+export const externalRedemptions = onchainTable(
+  "external_redemptions",
+  (t) => ({
+    id: t.text().primaryKey(), // chainId-tx-logIndex
+    ...evidence(t),
+    rootDelegator: t.hex().notNull(),
+    redeemer: t.hex().notNull(),
+    delegate: t.hex().notNull(),
+    delegator: t.hex().notNull(),
+    authority: t.hex().notNull(),
+    hop: t.text().notNull(), // "root" | "child"
+    delegationHash: t.hex().notNull(),
+    enforcers: t.json().notNull(),
+    shape: t.text().notNull(),
+    label: t.text().notNull(),
+    hadTransfer: t.boolean().notNull(),
+  }),
+  (t) => ({ byRoot: index().on(t.chainId, t.rootDelegator), byDelegator: index().on(t.chainId, t.delegator) }),
+);
+
+/** Agent Credit Lines Borrowed / Repaid / Defaulted at a configured lender. */
+export const creditLineEvents = onchainTable(
+  "credit_line_events",
+  (t) => ({
+    id: t.text().primaryKey(), // chainId-tx-logIndex
+    ...evidence(t),
+    lender: t.hex().notNull(),
+    agentId: t.bigint().notNull(),
+    loanId: t.bigint().notNull(),
+    kind: t.text().notNull(), // "borrowed" | "repaid" | "defaulted"
+    /** Borrowed: to. Repaid: payer. Defaulted: owner. */
+    party: t.hex().notNull(),
+    principal: t.bigint().notNull(),
+    fee: t.bigint(),
+    dueAt: t.bigint(),
+    label: t.text().notNull(),
+  }),
+  (t) => ({ byAgent: index().on(t.chainId, t.agentId) }),
+);

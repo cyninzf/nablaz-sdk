@@ -1,14 +1,29 @@
 # nablaz-sdk
 
-An open-source indexer for the NablaZ record. It rebuilds, from public chain data, what NablaZ accounts
-wrote to the record and what their grantee vaults settled, and keeps every fact next to the command that
-reproduces it.
+An open-source reader for agent payment permissions. It rebuilds, from public chain data, what an address
+was allowed to spend, what it spent, and under which terms, and keeps every fact next to the command that
+reproduces it. It reads the NablaZ record and grantee vaults, Coinbase spend permissions, MetaMask
+delegations and Agent Credit Lines.
 
-It holds no keys, needs no NablaZ account or API key, and runs anywhere you have an RPC endpoint.
+It holds no keys, needs no account or API key, and runs anywhere you have an RPC endpoint.
 
 ## What it reads
 
-On each enabled chain (Arbitrum One today; Base is configured but disabled):
+Arbitrum One and Base are both enabled. The NablaZ contracts are live on Arbitrum One only, so on Base
+the reader indexes the third-party sources alone.
+
+Third-party sources, on both chains:
+
+- Coinbase `SpendPermissionManager`: `SpendPermissionApproved`, `SpendPermissionUsed`,
+  `SpendPermissionRevoked`.
+- MetaMask `DelegationManager` (delegation framework v1.3.0): `RedeemedDelegation`, with every caveat
+  decoded. For each redemption the reader reads the transaction receipt and keeps the ERC-20 `Transfer`s
+  sent by the delegator. A redemption alone is not a payment; only such a `Transfer` is.
+- Agent Credit Lines (`Borrowed`, `Repaid`, `Defaulted`) at a configured lender. No lender is known on
+  either chain today, so none is registered. The decoder ships with tests, and an empty read is reported as
+  empty.
+
+NablaZ sources, where deployed:
 
 - `RecordEntry` from `NablaRecord`, every field.
 - `AccountCreated` from `NablaAccountFactoryPermanent` and `AccountRegistryV6`, to discover accounts.
@@ -27,6 +42,11 @@ On each enabled chain (Arbitrum One today; Base is configured but disabled):
 | `implementation_history` | `Upgraded` log or `IMPLEMENTATION_CHANGED` entry, per account |
 | `counterparties` | distinct (subject, counterparty) pair, with first evidence and counts |
 | `accounts`, `grants`, `vaults`, `vault_fundings` | discovery and pairing state the tables above are built from |
+| `factory_accounts` | account created on the permanent factory, with the owner from the factory's own event |
+| `external_permissions` | spend permission or redeemed delegation, with its shape, label and decoded terms |
+| `external_payments` | `SpendPermissionUsed`, or an ERC-20 `Transfer` from the delegator in a redemption's transaction |
+| `external_redemptions` | `RedeemedDelegation`, whether or not it moved value |
+| `credit_line_events` | `Borrowed` / `Repaid` / `Defaulted` at a configured lender |
 
 Rows hold facts and counts. The reader passes no judgement on any subject and produces no verdict.
 
@@ -55,32 +75,89 @@ historical `eth_call` at 50,000 blocks below head answered 6 of 10 times through
 `https://arb1.arbitrum.io/rpc`, and the other 4 returned "historical state … is not available", so a
 public endpoint cannot be relied on for this field. Everything else rebuilds from logs on any RPC.
 
+## Read
+
+`GET /read/:chainId/:address` returns every indexed fact about an address. No key is needed: the endpoint
+is a read over public logs.
+
+```json
+{ "subject": "0x…", "chainId": 8453, "asOfBlock": "53160200",
+  "facts": [ { "source": "metamask:delegation_payment", "label": "(b) exact execution, once", "shape": "b",
+               "terms": { "payer": "0x…", "payee": "0x…", "token": "0x…", "amount": "…" },
+               "cite": { "chainId": 8453, "block": "…", "tx": "0x…", "logIndex": 0 },
+               "reproduce": "cast receipt 0x… --rpc-url \"$BASE_RPC_URL\" --json | jq …" } ],
+  "selfDealing": null, "exposure": null,
+  "notes": [ "no Agent Credit Lines lender registered on this chain" ] }
+```
+
+- **facts**: one per record entry, vault payment, spend permission, delegation, payment, redemption and
+  credit-line event. Each names its source and carries a permission label, the block, transaction and log
+  index, and the one-line command that returns the same log from any RPC.
+- **selfDealing** (NablaZ accounts only): distinct counterparties paid, share of value paid to accounts
+  under the same controller, share paid to counterparties with no record, and the sentence "A payee
+  controlled by the same person under another key cannot be detected from chain data."
+- **exposure** (NablaZ accounts only): per grant and token, the least remaining allowance across windows
+  plus the vault balance, with the limit that outstanding authorizations are not observable onchain.
+- **notes**: every source that returned nothing, and every fact that is not determinable, stated as text.
+
+Every permission label has one of five shapes:
+
+| Shape | Label | Where it comes from |
+|---|---|---|
+| (a) | allowance, per period / total / per call / per execution / streamed | Coinbase spend permissions; MetaMask amount enforcers; NablaZ CAM V4 windows ("within mandate by construction" for a canonical NablaZ account) |
+| (b) | exact execution, once / N times / count unbounded | MetaMask exact-call enforcers; the count from `LimitedCallsEnforcer` or a single-use enforcer |
+| (c) | not determinable | an enforcer in no vendor list, terms that do not decode, a non-canonical NablaZ account |
+| (d) | no limit on amount or call | a delegation whose caveats only restrict the call or the redeemer |
+| (e) | third-party attestation, writer named | Agent Credit Lines; record entries another writer placed |
+
+The MetaMask enforcer table is generated from the vendor's `Deployments.md` at a pinned commit
+(`scripts/gen-enforcers.ts`, `src/generated/enforcers.json`). A test fails when the vendor's main branch
+lists an enforcer the table lacks.
+
+**One-liners are the ground truth.** The reader is a convenience over the logs. Each `reproduce` field is
+a `cast` command you can run yourself with an RPC URL in `$ARB_ONE_RPC_URL` or `$BASE_RPC_URL`.
+
 ## Running it
 
 Requires Node 22.12+ and pnpm.
 
 ```sh
 pnpm install
-export READER_ARB_RPC_URL=...        # your Arbitrum One RPC; archive for the envelope field
+export READER_ARB_RPC_URL=...        # Arbitrum One RPC; archive for the envelope and exposure reads
+export READER_BASE_RPC_URL=...       # Base RPC; public endpoints rate-limit eth_getLogs
 export PONDER_TELEMETRY_DISABLED=true
-pnpm start --schema reader
+cd packages/reader && pnpm start --schema reader
+curl localhost:42069/read/8453/0x…
 ```
 
-Tables land in a local PGlite database under `.ponder/`. The RPC URL is read from the environment only
-and is never written to the repository.
+Tables land in a local PGlite database under `.ponder/`. RPC URLs are read from the environment only and
+are never written to the repository.
+
+The third-party sources start at their deployment blocks, which is years of history. For a read over a
+recent window, start them later, per chain:
+
+```sh
+export READER_EXTERNAL_FROM=42161:518700000,8453:53150000
+```
+
+Facts before that block are then not indexed, and the notes in each read state the range read.
+`READER_CHAINS=8453` limits the instance to one chain; `READER_SOURCES=external` (or `nabla`) to one
+source group.
 
 ## Tests
 
 ```sh
 pnpm typecheck
 pnpm test          # unit
-pnpm test:fork     # needs READER_ARB_RPC_URL (archive) and anvil (Foundry)
+pnpm test:fork     # needs READER_ARB_RPC_URL (archive), READER_BASE_RPC_URL, anvil and cast (Foundry)
 ```
 
 The fork tests run an anvil fork of Arbitrum One, drive the live contracts from TypeScript using the
 ABIs in `abis/`, index the result from scratch, and assert the derived rows. They index twice and require
-identical tables. A separate test indexes the live chain and requires every table to come back empty
-while no accounts exist.
+identical tables. A separate test indexes Arbitrum One up to the block before the first account and
+requires every table to come back empty. On both chains, a third test indexes the third-party sources over
+a fixed window. It runs one rendered one-liner per source through `cast`, requires the same count as the
+reader's rows, and prints the share of sampled redemptions labelled "not determinable".
 
 ## Provenance
 

@@ -9,6 +9,7 @@ import { createServer } from "node:net";
 import { PGlite } from "@electric-sql/pglite";
 
 export const UPSTREAM = process.env.READER_ARB_RPC_URL;
+export const UPSTREAM_BASE = process.env.READER_BASE_RPC_URL;
 
 export const TABLES = [
   "record_entries",
@@ -21,15 +22,29 @@ export const TABLES = [
   "implementation_history",
   "counterparties",
 ] as const;
-export type Tables = Record<(typeof TABLES)[number], Record<string, unknown>[]>;
+/** B4 part 1 tables. */
+export const EXTERNAL_TABLES = [
+  "factory_accounts",
+  "external_permissions",
+  "external_payments",
+  "external_redemptions",
+  "credit_line_events",
+] as const;
+export type Tables = Record<(typeof TABLES)[number] | (typeof EXTERNAL_TABLES)[number], Record<string, unknown>[]>;
 
 export function redact(s: string): string {
-  if (!UPSTREAM) return s;
-  let out = s.split(UPSTREAM).join("<READER_ARB_RPC_URL>");
-  try {
-    const host = new URL(UPSTREAM).host;
-    if (host) out = out.split(host).join("<rpc-host>");
-  } catch {}
+  let out = s;
+  for (const [url, name] of [
+    [UPSTREAM, "<READER_ARB_RPC_URL>"],
+    [UPSTREAM_BASE, "<READER_BASE_RPC_URL>"],
+  ] as const) {
+    if (!url) continue;
+    out = out.split(url).join(name);
+    try {
+      const host = new URL(url).host;
+      if (host) out = out.split(host).join("<rpc-host>");
+    } catch {}
+  }
   return out;
 }
 
@@ -89,20 +104,43 @@ export async function startAnvil(forkBlock: number): Promise<Anvil> {
 
 export type IndexRun = { tables: Tables; output: string };
 
+export type IndexOpts = {
+  /** Arbitrum RPC (an anvil fork or the upstream). */
+  rpcUrl?: string;
+  /** Base RPC. */
+  baseRpcUrl?: string;
+  startBlock?: number;
+  endBlock: number;
+  cwd?: string;
+  /** READER_CHAINS. Default Arbitrum only. */
+  chains?: string;
+  /** READER_SOURCES. Default the NablaZ sources only, so the Phase 0 replays keep their scope. */
+  sources?: string;
+  /** Keep the server running after /ready and return its URL; the caller stops it. */
+  serve?: boolean;
+};
+
+export type Served = IndexRun & { url: string; stop: () => Promise<void>; dir: string };
+
 /**
  * Index from scratch into a fresh PGlite directory, wait for /ready, stop, and dump every table.
  * `cwd` is the reader package directory (default: the current directory).
  */
-export async function indexOnce(opts: { rpcUrl: string; startBlock?: number; endBlock: number; cwd?: string }): Promise<IndexRun> {
+export async function indexOnce(opts: IndexOpts & { serve?: false }): Promise<IndexRun>;
+export async function indexOnce(opts: IndexOpts & { serve: true }): Promise<Served>;
+export async function indexOnce(opts: IndexOpts): Promise<IndexRun | Served> {
   const dir = mkdtempSync(join(tmpdir(), "reader-pglite-"));
   const port = await freePort();
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    READER_ARB_RPC_URL: opts.rpcUrl,
     READER_PGLITE_DIR: dir,
     READER_END_BLOCK: String(opts.endBlock),
+    READER_CHAINS: opts.chains ?? "42161",
+    READER_SOURCES: opts.sources ?? "nabla",
     PONDER_TELEMETRY_DISABLED: "true",
   };
+  if (opts.rpcUrl) env.READER_ARB_RPC_URL = opts.rpcUrl;
+  if (opts.baseRpcUrl) env.READER_BASE_RPC_URL = opts.baseRpcUrl;
   if (opts.startBlock !== undefined) env.READER_START_BLOCK = String(opts.startBlock);
   else delete env.READER_START_BLOCK;
   const c = run("node_modules/.bin/ponder", ["start", "--schema", "reader", "--port", String(port)], env, opts.cwd);
@@ -116,19 +154,39 @@ export async function indexOnce(opts: { rpcUrl: string; startBlock?: number; end
       } catch {}
       await sleep(1000);
     }
-  } finally {
+  } catch (e) {
     await stop(c);
+    throw e;
   }
+  if (opts.serve) {
+    const url = `http://127.0.0.1:${port}`;
+    return {
+      url,
+      dir,
+      output: c.output(),
+      tables: {} as Tables,
+      stop: async () => {
+        await stop(c);
+      },
+    };
+  }
+  await stop(c);
   const output = c.output();
   if (/\bERROR\b/.test(output)) throw new Error(`indexer logged an error:\n${output}`);
   return { tables: await dump(dir), output };
+}
+
+/** Stop a served indexer and dump its tables. */
+export async function stopAndDump(s: Served): Promise<IndexRun> {
+  await s.stop();
+  return { tables: await dump(s.dir), output: s.output };
 }
 
 async function dump(dir: string): Promise<Tables> {
   const db = new PGlite(dir);
   try {
     const out = {} as Tables;
-    for (const t of TABLES) {
+    for (const t of [...TABLES, ...EXTERNAL_TABLES]) {
       const r = await db.query<Record<string, unknown>>(`SELECT * FROM reader.${t} ORDER BY id`);
       out[t] = r.rows;
     }

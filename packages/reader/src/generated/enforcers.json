@@ -1,0 +1,316 @@
+{
+  "source": "https://raw.githubusercontent.com/MetaMask/delegation-framework/b4b8c41fc912455a1af2300bfcd1276676b92a2e/documents/Deployments.md",
+  "section": "v1.3.0",
+  "commit": "b4b8c41fc912455a1af2300bfcd1276676b92a2e",
+  "rows": [
+    {
+      "name": "AllowedCalldataEnforcer",
+      "address": "0xc2b0d624c1c4319760C96503BA27C347F3260f55",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "call-term"
+    },
+    {
+      "name": "AllowedMethodsEnforcer",
+      "address": "0x2c21fD0Cb9DC8445CB3fb0DC5E7Bb0Aca01842B5",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "call-term"
+    },
+    {
+      "name": "AllowedTargetsEnforcer",
+      "address": "0x7F20f61b1f09b08D970938F6fa563634d65c4EeB",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "call-term"
+    },
+    {
+      "name": "BlockNumberEnforcer",
+      "address": "0x5d9818dF0AE3f66e9c3D0c5029DAF99d1823ca6c",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "DeployedEnforcer",
+      "address": "0x24ff2AA430D53a8CD6788018E902E098083dcCd2",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "ERC20BalanceChangeEnforcer",
+      "address": "0xcdF6aB796408598Cea671d79506d7D48E97a5437",
+      "layout": "b4b8c41f",
+      "mode": "decrease",
+      "class": "amount",
+      "amountBasis": "per execution"
+    },
+    {
+      "name": "ERC20BalanceChangeEnforcer",
+      "address": "0xcdF6aB796408598Cea671d79506d7D48E97a5437",
+      "layout": "b4b8c41f",
+      "mode": "increase",
+      "class": "scope-only"
+    },
+    {
+      "name": "ERC20TransferAmountEnforcer",
+      "address": "0xf100b0819427117EcF76Ed94B358B1A5b5C6D2Fc",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "amount",
+      "amountBasis": "total"
+    },
+    {
+      "name": "ERC20PeriodTransferEnforcer",
+      "address": "0x474e3Ae7E169e940607cC624Da8A15Eb120139aB",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "amount",
+      "amountBasis": "per period"
+    },
+    {
+      "name": "ERC20StreamingEnforcer",
+      "address": "0x56c97aE02f233B29fa03502Ecc0457266d9be00e",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "amount",
+      "amountBasis": "streamed"
+    },
+    {
+      "name": "ERC721BalanceChangeEnforcer",
+      "address": "0x8aFdf96eDBbe7e1eD3f5Cd89C7E084841e12A09e",
+      "layout": "b4b8c41f",
+      "mode": "decrease",
+      "class": "amount",
+      "amountBasis": "per execution"
+    },
+    {
+      "name": "ERC721BalanceChangeEnforcer",
+      "address": "0x8aFdf96eDBbe7e1eD3f5Cd89C7E084841e12A09e",
+      "layout": "b4b8c41f",
+      "mode": "increase",
+      "class": "scope-only"
+    },
+    {
+      "name": "ERC721TransferEnforcer",
+      "address": "0x3790e6B7233f779b09DA74C72b6e94813925b9aF",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "exact-call"
+    },
+    {
+      "name": "ERC1155BalanceChangeEnforcer",
+      "address": "0x63c322732695cAFbbD488Fc6937A0A7B66fC001A",
+      "layout": "b4b8c41f",
+      "mode": "decrease",
+      "class": "amount",
+      "amountBasis": "per execution"
+    },
+    {
+      "name": "ERC1155BalanceChangeEnforcer",
+      "address": "0x63c322732695cAFbbD488Fc6937A0A7B66fC001A",
+      "layout": "b4b8c41f",
+      "mode": "increase",
+      "class": "scope-only"
+    },
+    {
+      "name": "ExactCalldataBatchEnforcer",
+      "address": "0x982FD5C86BBF425d7d1451f974192d4525113DfD",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "exact-call"
+    },
+    {
+      "name": "ExactCalldataEnforcer",
+      "address": "0x99F2e9bF15ce5eC84685604836F71aB835DBBdED",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "exact-call"
+    },
+    {
+      "name": "ExactExecutionBatchEnforcer",
+      "address": "0x1e141e455d08721Dd5BCDA1BaA6Ea5633Afd5017",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "exact-call"
+    },
+    {
+      "name": "ExactExecutionEnforcer",
+      "address": "0x146713078D39eCC1F5338309c28405ccf85Abfbb",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "exact-call"
+    },
+    {
+      "name": "IdEnforcer",
+      "address": "0xC8B5D93463c893401094cc70e66A206fb5987997",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "LogicalOrWrapperEnforcer",
+      "address": "0xE1302607a3251AF54c3a6e69318d6aa07F5eB46c",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "wrapper"
+    },
+    {
+      "name": "LimitedCallsEnforcer",
+      "address": "0x04658B29F6b82ed55274221a06Fc97D318E25416",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "call-term"
+    },
+    {
+      "name": "MultiTokenPeriodEnforcer",
+      "address": "0xFB2f1a9BD76d3701B730E5d69C3219D42D80eBb7",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "amount",
+      "amountBasis": "per period, per token"
+    },
+    {
+      "name": "NativeBalanceChangeEnforcer",
+      "address": "0xbD7B277507723490Cd50b12EaaFe87C616be6880",
+      "layout": "b4b8c41f",
+      "mode": "decrease",
+      "class": "amount",
+      "amountBasis": "per execution"
+    },
+    {
+      "name": "NativeBalanceChangeEnforcer",
+      "address": "0xbD7B277507723490Cd50b12EaaFe87C616be6880",
+      "layout": "b4b8c41f",
+      "mode": "increase",
+      "class": "scope-only"
+    },
+    {
+      "name": "ArgsEqualityCheckEnforcer",
+      "address": "0x44B8C6ae3C304213c3e298495e12497Ed3E56E41",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "call-term"
+    },
+    {
+      "name": "NativeTokenPaymentEnforcer",
+      "address": "0x4803a326ddED6dDBc60e659e5ed12d85c7582811",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "NativeTokenTransferAmountEnforcer",
+      "address": "0xF71af580b9c3078fbc2BBF16FbB8EEd82b330320",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "amount",
+      "amountBasis": "total"
+    },
+    {
+      "name": "NativeTokenStreamingEnforcer",
+      "address": "0xD10b97905a320b13a0608f7E9cC506b56747df19",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "amount",
+      "amountBasis": "streamed"
+    },
+    {
+      "name": "NativeTokenPeriodTransferEnforcer",
+      "address": "0x9BC0FAf4Aca5AE429F4c06aEEaC517520CB16BD9",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "amount",
+      "amountBasis": "per period"
+    },
+    {
+      "name": "NonceEnforcer",
+      "address": "0xDE4f2FAC4B3D87A1d9953Ca5FC09FCa7F366254f",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "OwnershipTransferEnforcer",
+      "address": "0x7EEf9734E7092032B5C56310Eb9BbD1f4A524681",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "exact-call"
+    },
+    {
+      "name": "RedeemerEnforcer",
+      "address": "0xE144b0b2618071B4E56f746313528a669c7E65c5",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "SpecificActionERC20TransferBatchEnforcer",
+      "address": "0x6649b61c873F6F9686A1E1ae9ee98aC380c7bA13",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "exact-call",
+      "singleUse": true
+    },
+    {
+      "name": "TimestampEnforcer",
+      "address": "0x1046bb45C8d673d4ea75321280DB34899413c069",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "ValueLteEnforcer",
+      "address": "0x92Bf12322527cAA612fd31a0e810472BBB106A8F",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "amount",
+      "amountBasis": "per call"
+    },
+    {
+      "name": "ERC20MultiOperationIncreaseBalanceEnforcer",
+      "address": "0xeaA1bE91F0ea417820a765df9C5BE542286BFfDC",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "ERC721MultiOperationIncreaseBalanceEnforcer",
+      "address": "0x44877cDAFC0d529ab144bb6B0e202eE377C90229",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "ERC1155MultiOperationIncreaseBalanceEnforcer",
+      "address": "0x9eB86bbdaA71D4D8d5Fb1B8A9457F04D3344797b",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "NativeTokenMultiOperationIncreaseBalanceEnforcer",
+      "address": "0xaD551E9b971C1b0c02c577bFfCFAA20b81777276",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "scope-only"
+    },
+    {
+      "name": "ApprovalRevocationEnforcer",
+      "address": "0xe264F1f09A19505a1ca1a86D5b01E8bFdb64324A",
+      "layout": "b4b8c41f",
+      "mode": null,
+      "class": "exact-call"
+    },
+    {
+      "name": "SpecificActionERC20TransferBatchEnforcer",
+      "address": "0x00e0251aaA263dfE3B3541B758A82D1CBA1c3B6D",
+      "layout": "v1.3.0",
+      "superseded": "superseded by vendor at b4b8c41f",
+      "mode": null,
+      "class": "exact-call",
+      "singleUse": true
+    }
+  ]
+}
