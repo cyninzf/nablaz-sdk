@@ -20,7 +20,7 @@ import {
 import { and, asc, eq, inArray, or } from "ponder";
 import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, type PublicClient } from "viem";
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
-import { CURRENT_ACCOUNT_IMPL_LINEAGE, NABLA_ACCOUNT_BOOTSTRAP, enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
+import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
 import {
   creditLineFacts,
@@ -126,7 +126,7 @@ app.get("/read/:chainId/:address", async (c) => {
     const mandate = deps ? (deps[0] as Address) : null;
     const camV4CodeHash = (await codeHash(client, chain.nabla.ConsumerAIMandateV4, asOfBlock))!;
     const mandateCodeHash = mandate ? await codeHash(client, mandate, asOfBlock) : null;
-    nabla = nablaLabel({ implementations, lineage: CURRENT_ACCOUNT_IMPL_LINEAGE, bootstrap: NABLA_ACCOUNT_BOOTSTRAP, mandateCodeHash, camV4CodeHash });
+    nabla = nablaLabel({ implementations, mandateCodeHash, camV4CodeHash });
     if (nabla.shape === "c") notes.push(`NablaZ label for ${subject}: ${nabla.label} (${nabla.reason})`);
 
     // Payments from the account: vault settlements (one per authorization, R-D2B-6) and its own PAY entries.
@@ -145,7 +145,7 @@ app.get("/read/:chainId/:address", async (c) => {
     const payeeControllers = new Map<string, ControllerInput>();
     for (const pa of payeeAccounts) {
       const impls = await implementationsOf(chainId, lc(pa.account));
-      const ok = canonicalLineage({ implementations: impls, lineage: CURRENT_ACCOUNT_IMPL_LINEAGE, bootstrap: NABLA_ACCOUNT_BOOTSTRAP }).ok;
+      const ok = canonicalLineage({ implementations: impls }).ok;
       payeeControllers.set(lc(pa.account), await controllerInput(chainId, lc(pa.account), ok));
     }
     const withRecord = payees.length

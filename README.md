@@ -117,32 +117,68 @@ lists an enforcer the table lacks.
 **One-liners are the ground truth.** The reader is a convenience over the logs. Each `reproduce` field is
 a `cast` command you can run yourself with an RPC URL in `$ARB_ONE_RPC_URL` or `$BASE_RPC_URL`.
 
-## Running it
+## Running it locally
 
-Requires Node 22.12+ and pnpm.
+Everything below runs on your machine: the reader, the MCP server and the skill. Requires Node 22.12+ and
+pnpm. From a clean checkout:
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 export READER_ARB_RPC_URL=...        # Arbitrum One RPC; archive for the envelope and exposure reads
 export READER_BASE_RPC_URL=...       # Base RPC; public endpoints rate-limit eth_getLogs
 export PONDER_TELEMETRY_DISABLED=true
-cd packages/reader && pnpm start --schema reader
-curl localhost:42069/read/8453/0x…
+export READER_EXTERNAL_FROM=42161:518780000,8453:53160000   # optional; see below
+pnpm reader                          # = cd packages/reader && pnpm start --schema reader
 ```
 
-Tables land in a local PGlite database under `.ponder/`. RPC URLs are read from the environment only and
-are never written to the repository.
-
-The third-party sources start at their deployment blocks, which is years of history. For a read over a
-recent window, start them later, per chain:
+The reader serves on `localhost:42069`. Once `/ready` answers 200 it has caught up, and reads are taken at
+the indexed block:
 
 ```sh
-export READER_EXTERNAL_FROM=42161:518700000,8453:53150000
+curl localhost:42069/ready
+curl localhost:42069/read/42161/0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c
 ```
 
-Facts before that block are then not indexed, and the notes in each read state the range read.
-`READER_CHAINS=8453` limits the instance to one chain; `READER_SOURCES=external` (or `nabla`) to one
-source group.
+Tables land in a local PGlite database under `packages/reader/.ponder/`. RPC URLs are read from the
+environment only and are never written to the repository. With the `READER_EXTERNAL_FROM` line above, a
+first run took about ten minutes to catch up on both chains (Oct 27 2026).
+
+The third-party sources start at their deployment blocks, which is years of history.
+`READER_EXTERNAL_FROM` starts them later, per chain. Facts before that block are then not indexed, and
+the notes in each read state the range read. `READER_CHAINS=8453` limits the instance to one chain;
+`READER_SOURCES=external` (or `nabla`) to one source group.
+
+### MCP server
+
+`packages/mcp` is a stdio MCP server with one tool, `read_subject` (`chainId`, `address`). It calls
+`GET /read/:chainId/:address` on the reader and returns the JSON unchanged, after a line naming the chain
+and the as-of block. It reads only: there is no write or signing tool, and it holds no key. The reader URL
+comes from `--reader-url` or `NABLAZ_READER_URL`, and defaults to `http://localhost:42069`.
+
+```sh
+pnpm --silent mcp                    # = cd packages/mcp && pnpm start
+```
+
+stdout carries the protocol, so launch it without anything that prints to stdout first (`pnpm` without
+`--silent` prints a banner). For an MCP client that launches stdio servers from a JSON config:
+
+```json
+{
+  "mcpServers": {
+    "nablaz-read": {
+      "command": "node",
+      "args": ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", "/path/to/nablaz-sdk/packages/mcp/src/main.ts"],
+      "env": { "NABLAZ_READER_URL": "http://localhost:42069" }
+    }
+  }
+}
+```
+
+### Skills
+
+`skills/read-record/SKILL.md` explains how to call the tool or `GET /read`, how to read each source and
+label shape, and what the reader never says. `skills/pay-inside-grant/SKILL.md` covers paying from a
+grantee vault.
 
 ## Tests
 
@@ -150,6 +186,7 @@ source group.
 pnpm typecheck
 pnpm test          # unit
 pnpm test:fork     # needs READER_ARB_RPC_URL (archive), READER_BASE_RPC_URL, anvil and cast (Foundry)
+NABLAZ_PROTOCOL_DIR=/path/to/nablaz-protocol pnpm test   # also checks the lineage copy against nablaz-protocol
 ```
 
 The fork tests run an anvil fork of Arbitrum One, drive the live contracts from TypeScript using the
@@ -157,12 +194,24 @@ ABIs in `abis/`, index the result from scratch, and assert the derived rows. The
 identical tables. A separate test indexes Arbitrum One up to the block before the first account and
 requires every table to come back empty. On both chains, a third test indexes the third-party sources over
 a fixed window. It runs one rendered one-liner per source through `cast`, requires the same count as the
-reader's rows, and prints the share of sampled redemptions labelled "not determinable".
+reader's rows, and prints the share of sampled redemptions labelled "not determinable". The account-grantee
+test creates a NablaAccount on the live factory, makes it the grantee of a grant on the TEST account, and
+settles one x402 payment whose grantee signature is the PersonalSign shape. The MCP test runs the stdio
+server against a served reader and compares its output with `GET /read`.
+
+## x402
+
+The dependency floor is `@x402/*` ≥ 2.23.0, the fix line of the Oct 22 V12 disclosure (no default
+spending limit in the client); this repo pins the version in `packages/sdk/package.json` (2.28.0), and the
+payment limit is enforced by the grant envelope in the account, not by the client.
 
 ## Provenance
 
 Contract addresses (`src/generated/addresses.ts`) and ABIs (`abis/*.json`) are generated from a pinned
-nablaz-protocol commit; each generated file records the commit in its header. Only addresses and ABIs
+nablaz-protocol commit; each generated file records the commit in its header. The reader's
+`currentAccountImpl` lineage, bootstrap and ProtocolConfig (`packages/reader/src/generated/account-lineage.json`)
+are copied from `script/expected/permanent-arbitrum.txt` at the commit and blob the file names
+(`packages/reader/scripts/gen-lineage.ts`). Only addresses and ABIs
 come from there: both are public on chain.
 
 ## License

@@ -10,6 +10,8 @@
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "test:fork": "pnpm -r --workspace-concurrency=1 test:fork"
+    "test:fork": "pnpm -r --workspace-concurrency=1 test:fork",
+    "reader": "pnpm --filter @nablaz/reader start --schema reader",
+    "mcp": "pnpm --silent --filter @nablaz/mcp start"
   }
 }

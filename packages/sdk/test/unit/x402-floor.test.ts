@@ -26,6 +26,14 @@ describe("x402 floor (V12)", () => {
   for (const [name, version] of x402) {
     it(`${name}@${version} is ≥ ${FLOOR.join(".")}`, () => expect(atLeast(parsePin(version), FLOOR)).toBe(true));
   }
+  it("the README's x402 line names the floor and the pinned version", () => {
+    const readme = readFileSync(join(import.meta.dirname, "../../../../README.md"), "utf8");
+    const line = readme.slice(readme.indexOf("## x402"), readme.indexOf("## Provenance"));
+    const pinned = [...new Set(x402.map(([, v]) => v))];
+    expect(pinned).toHaveLength(1);
+    expect(line).toContain(`≥ ${FLOOR.join(".")}`);
+    expect(line).toContain(`(${pinned[0]})`);
+  });
   it("the comparison refuses what it should", () => {
     expect(atLeast(parsePin("2.22.9"), FLOOR)).toBe(false);
     expect(atLeast(parsePin("2.23.0"), FLOOR)).toBe(true);

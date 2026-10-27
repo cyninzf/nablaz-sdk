@@ -9,7 +9,7 @@ import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { wrapFetchWithPayment } from "@x402/fetch";
 import { ConsumerAIMandateV4Abi } from "./generated/abis.ts";
 import { readVaultImpl, predictVault } from "./vault.ts";
-import { granteeVaultSigner, maxValidBefore, ValidBeforeExceeded, type GranteeKey, type GranteeVaultSignerConfig } from "./vault-signer.ts";
+import { granteeVaultSigner, maxValidBefore, ValidBeforeExceeded, type Grantee, type GranteeVaultSignerConfig } from "./vault-signer.ts";
 
 export type EnvelopeSignerConfig = Omit<GranteeVaultSignerConfig, "maxTimeoutSeconds" | "expiry"> & {
   /** The live envelope's expiry, read from chain; called before every payment. Throws if the envelope is gone. */
@@ -84,6 +84,24 @@ const camAbi = parseAbi([
   "function envelopeOf(address account, bytes32 granteeKey, address token) view returns (bytes32 grantId, uint64 expiry)",
 ]);
 
+const controllerAbi = parseAbi(["function controller() view returns (address)"]);
+
+/**
+ * The grantee's declared kind against the chain (the kind itself is never inferred, s3 §11.15 #2 and #10):
+ * an account grantee must have code and the given controller; an EOA grantee must have no code other than an
+ * EIP-7702 delegation designator (0xef0100 ‖ address).
+ */
+async function checkGranteeKind(pc: PublicClient, g: Grantee) {
+  const code = (await pc.getCode({ address: g.address })) ?? "0x";
+  if (g.kind === "account") {
+    if (code === "0x") throw new Error(`grantee ${g.address} is declared an account but has no code`);
+    const controller = await pc.readContract({ address: g.address, abi: controllerAbi, functionName: "controller" });
+    if (!isAddressEqual(controller, g.controller.address)) throw new Error(`grantee account ${g.address}'s controller is ${controller}, not ${g.controller.address}`);
+  } else if (code !== "0x" && !(code.length === 48 && code.toLowerCase().startsWith("0xef0100"))) {
+    throw new Error(`grantee ${g.address} has contract code; a NablaAccount grantee is passed with kind: "account"`);
+  }
+}
+
 export type GrantPayment = {
   account: Address;
   grantId: Hex;
@@ -107,7 +125,7 @@ export async function payInsideGrant(opts: {
   account: Address;
   grantId: Hex;
   token: Address;
-  grantee: GranteeKey;
+  grantee: Grantee;
   fetch?: typeof fetch;
 }): Promise<GrantPayment> {
   const { publicClient: pc, grantId } = opts;
@@ -117,6 +135,7 @@ export async function payInsideGrant(opts: {
   const [mandate] = await pc.readContract({ address: account, abi: accountAbi, functionName: "dependencies" });
   const [wallet, granteeKey] = await pc.readContract({ address: mandate, abi: camAbi, functionName: "granteeOf", args: [account, grantId] });
   if (!isAddressEqual(wallet, opts.grantee.address)) throw new Error(`grant ${grantId}'s grantee is ${wallet}, not ${opts.grantee.address}`);
+  await checkGranteeKind(pc, opts.grantee);
   const vaultImpl = await readVaultImpl(pc, account);
   const vault = predictVault(vaultImpl, account, granteeKey);
   const readEnvelopeExpiry = async () => {

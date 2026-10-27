@@ -8,17 +8,39 @@
 //   - the ERC-1271 bytes are abi.encode(Authorization{grantId, token, to, value, validAfter, validBefore,
 //     nonce, granteeSignature}) (L96-105), decoded at L151.
 //
+// The grantee is an EOA or a NablaAccount (s3 §11.15 #10 at nablaz-protocol d6aaba99). The caller says which
+// (`Grantee.kind`); the adapter does not guess from code at the address, because an EOA with an EIP-7702
+// delegation has code too (s3 §11.15 #2).
+//   - EOA: the key signs the TypedDataSign typed data above; the vault's SignatureChecker recovers it.
+//   - NablaAccount A: the vault calls A.isValidSignature(granteeDigest, sig). A's controller signs
+//     PersonalSign(bytes prefixed) under A's domain {NablaAccount, 3, chainId, A}, with prefixed = the 66-byte
+//     EIP-712 preimage of granteeDigest, so keccak256(prefixed) = granteeDigest (AccountSignatures.sol
+//     L47-51). Wrapping the digest in A's own TypedDataSign instead would need two EIP-712 types both named
+//     TypedDataSign; no typed-data signer can express that, and the adapter never builds it.
+//
 // R-S186-1 (the restrictive reading of R-B0-1): validBefore = min(envelope expiry, now + the seller's
 // maxTimeoutSeconds). The adapter refuses any larger value, so a payload it signs never outlives the envelope
-// and never outlives the seller's window. The grantee may be any external signer (a viem LocalAccount, a KMS
-// or hardware wallet behind `toAccount`): only `address` and `signTypedData` are used.
+// and never outlives the seller's window. The grantee's key (or A's controller) may be any external signer (a
+// viem LocalAccount, a KMS or hardware wallet behind `toAccount`): only `address` and `signTypedData` are used.
 //
 // The vault is never taken on trust: at construction the adapter requires vault = predictVault(vaultImpl,
 // account, granteeKey) and refuses a vaultImpl that is never a payment target (R-S184-5). vaultImpl must be
 // the account's own VAULT_IMPL; `granteeVaultSignerFromChain` reads it. granteeKey is the grant's own key
 // (CAM V4 granteeOf / granteeKeyOf): an agentId grant is not keyed by the grantee address.
 
-import { encodeAbiParameters, getAddress, isAddressEqual, zeroHash, type Address, type Hex, type PublicClient, type TypedDataDomain } from "viem";
+import {
+  concat,
+  encodeAbiParameters,
+  domainSeparator,
+  getAddress,
+  hashStruct,
+  isAddressEqual,
+  zeroHash,
+  type Address,
+  type Hex,
+  type PublicClient,
+  type TypedDataDomain,
+} from "viem";
 import type { ClientEvmSigner } from "@x402/evm";
 import { assertPaymentTarget, predictVault, readVaultImpl } from "./vault.ts";
 
@@ -33,6 +55,13 @@ export const TRANSFER_WITH_AUTHORIZATION_TYPES = [
   { name: "validBefore", type: "uint256" },
   { name: "nonce", type: "bytes32" },
 ] as const;
+
+/** NablaAccount's EIP-712 domain name and version (NablaAccountV3_1 `EIP712("NablaAccount", "3")`). */
+export const NABLA_ACCOUNT_NAME = "NablaAccount";
+export const NABLA_ACCOUNT_VERSION = "3";
+
+/** ERC-7739 PersonalSign, as AccountSignatures checks it. */
+export const PERSONAL_SIGN_TYPES = [{ name: "prefixed", type: "bytes" }] as const;
 
 export const TYPED_DATA_SIGN_TYPES = [
   { name: "contents", type: "TransferWithAuthorization" },
@@ -68,19 +97,34 @@ export type TransferWithAuthorization = {
   nonce: Hex;
 };
 
-/** What the adapter needs from the grantee's key. */
-export type GranteeKey = {
+/** What the adapter needs from a key: its address and an EIP-712 signer. */
+export type TypedDataSigner = {
   address: Address;
   signTypedData: (args: {
     domain: TypedDataDomain;
     types: Record<string, readonly { name: string; type: string }[]>;
-    primaryType: "TypedDataSign";
+    primaryType: "TypedDataSign" | "PersonalSign";
     message: Record<string, unknown>;
   }) => Promise<Hex>;
 };
 
+/** The grant's grantee is an EOA, and this is its key. Signs the TypedDataSign shape. */
+export type GranteeKey = TypedDataSigner & { kind?: "eoa" };
+
+/** The grant's grantee is a NablaAccount; its controller signs the PersonalSign shape (s3 §11.15 #10). */
+export type AccountGrantee = {
+  kind: "account";
+  /** The grantee NablaAccount: the grant's grantee wallet. */
+  address: Address;
+  /** The account's controller key. */
+  controller: TypedDataSigner;
+};
+
+/** The grant's grantee. `kind` is explicit: "account" for a NablaAccount, else an EOA. */
+export type Grantee = GranteeKey | AccountGrantee;
+
 export type GranteeVaultSignerConfig = {
-  grantee: GranteeKey;
+  grantee: Grantee;
   /** The NablaZ account the grant is on. */
   account: Address;
   /** The account's own VAULT_IMPL (never the address table). */
@@ -146,6 +190,29 @@ export function granteeTypedData(tokenDomain: TypedDataDomain, vault: Address, c
   };
 }
 
+/**
+ * What a NablaAccount grantee's controller signs: PersonalSign under the account's domain, over the EIP-712
+ * preimage of the vault's grantee digest (0x1901 ‖ token domain separator ‖ TypedDataSign struct hash).
+ * The account's PersonalSign check hashes the same thing from the digest alone (AccountSignatures L47-51).
+ */
+export function accountGranteeTypedData(grantee: Address, chainId: number, vaultTypedData: ReturnType<typeof granteeTypedData>) {
+  const { domain, types, message } = vaultTypedData;
+  const prefixed = concat(["0x1901", domainSeparator({ domain }), hashStruct({ data: message, primaryType: "TypedDataSign", types })]);
+  return {
+    domain: { name: NABLA_ACCOUNT_NAME, version: NABLA_ACCOUNT_VERSION, chainId: BigInt(chainId), verifyingContract: getAddress(grantee) },
+    types: { PersonalSign: PERSONAL_SIGN_TYPES },
+    primaryType: "PersonalSign" as const,
+    message: { prefixed },
+  };
+}
+
+/** The grantee signature for one authorization, in the shape the grantee's kind requires. */
+export async function signAsGrantee(grantee: Grantee, vaultTypedData: ReturnType<typeof granteeTypedData>, chainId: number): Promise<Hex> {
+  if (grantee.kind === "account") return grantee.controller.signTypedData(accountGranteeTypedData(grantee.address, chainId, vaultTypedData));
+  if (grantee.kind !== undefined && grantee.kind !== "eoa") throw new Error(`grantee kind ${String(grantee.kind)} is neither "eoa" nor "account"`);
+  return grantee.signTypedData(vaultTypedData);
+}
+
 /** The vault's ERC-1271 signature bytes for one authorization. */
 export function encodeVaultSignature(grantId: Hex, token: Address, m: TransferWithAuthorization, granteeSignature: Hex): Hex {
   return encodeAbiParameters(AUTHORIZATION, [
@@ -195,7 +262,7 @@ export function granteeVaultSigner(cfg: GranteeVaultSignerConfig): ClientEvmSign
       const max = maxValidBefore(cfg.expiry, cfg.maxTimeoutSeconds, now());
       if (m.validBefore > max) throw new ValidBeforeExceeded(m.validBefore, max);
       if (!/^0x[0-9a-fA-F]{64}$/.test(m.nonce)) throw new Error("nonce is not 32 bytes");
-      const granteeSignature = await cfg.grantee.signTypedData(granteeTypedData(d, vault, cfg.chainId, m));
+      const granteeSignature = await signAsGrantee(cfg.grantee, granteeTypedData(d, vault, cfg.chainId, m), cfg.chainId);
       return encodeVaultSignature(cfg.grantId, token, m, granteeSignature);
     },
   };
