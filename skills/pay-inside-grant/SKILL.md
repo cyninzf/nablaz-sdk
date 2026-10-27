@@ -63,6 +63,29 @@ grantId, token, chainId, expiry, maxTimeoutSeconds })`, which reads `VAULT_IMPL`
 `granteeKey` from `granteeOf`, not from the grantee address: an agentId grant is keyed by its agentId
 (`granteeKeyOf`).
 
+## When the grantee is a NablaAccount
+
+When the grant's grantee is itself a NablaAccount, pass it as an account grantee. Its controller then
+signs:
+
+```ts
+const p = await payInsideGrant({
+  publicClient,
+  account: "0x…" as Address, // the paying NablaZ account
+  grantId: "0x…" as Hex,
+  token: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+  // controller: the grantee account's controller key (a viem account, or any signer behind toAccount)
+  grantee: { kind: "account", address: "0x…" as Address /* the grantee account */, controller },
+});
+```
+
+The controller signs `PersonalSign(bytes prefixed)` under the grantee account's domain
+`{ name: "NablaAccount", version: "3", chainId, verifyingContract: <grantee account> }`, where `prefixed`
+is the EIP-712 preimage of the vault's grantee digest (s3 §11.15 #10;
+`packages/sdk/src/vault-signer.ts`, `accountGranteeTypedData`). An EOA grantee (`kind` omitted or
+`"eoa"`) signs the `TypedDataSign` shape as before. The SDK does not infer the kind from code at the
+address, because an EOA with an EIP-7702 delegation has code too.
+
 ## Refusals
 
 Errors thrown by `payInsideGrant` (setup) reach the caller as thrown. Errors thrown while `p.fetch` builds
@@ -80,6 +103,8 @@ the class.
 | The vault does not derive from (VAULT_IMPL, account, granteeKey) | signer construction | `VaultMismatch` (`got`, `expected`) |
 | The account's vault implementation is v1 | setup / signer construction | `NeverPaymentTarget` (`impl`) |
 | Permit2 or another transfer method requested | each payment | `Error`: `asset transfer method <m> is out of scope` |
+| An EOA grantee whose address has contract code (other than an EIP-7702 delegation) | setup | `Error`: `grantee <address> has contract code; a NablaAccount grantee is passed with kind: "account"` |
+| An account grantee with no code, or whose `controller()` is not the given key | setup | `Error`: `grantee <address> is declared an account but has no code` / `grantee account <address>'s controller is <c>, not <key>` |
 
 `payInsideGrant` derives the vault itself, so `VaultMismatch` arises only on the external-signer path.
 

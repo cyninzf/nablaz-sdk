@@ -5,6 +5,7 @@
 import type { Address, Hex } from "viem";
 import { ENFORCER_TABLE, amountBasisOf, decodeCaveat, isSingleUse, type Caveat, type DecodedCaveat } from "./delegation.ts";
 import type { AmountBasis, EnforcerTable } from "./enforcer-table.ts";
+import lineageJson from "./generated/account-lineage.json" with { type: "json" };
 
 const BASIS_ORDER: AmountBasis[] = ["total", "per period", "per period, per token", "streamed", "per call", "per execution"];
 
@@ -151,6 +152,13 @@ export function attestationLabel(writer: Address): string {
 
 // ── NablaZ account ─────────────────────────────────────────────────
 
+/** The currentAccountImpl lineage, oldest first (src/generated/account-lineage.json, R-S189-4 AMENDED 2). */
+export const CURRENT_ACCOUNT_IMPL_LINEAGE: readonly Address[] = lineageJson.lineage.map((l) => l.address as Address);
+/** NablaAccountBootstrap, from the same file. */
+export const NABLA_ACCOUNT_BOOTSTRAP = lineageJson.bootstrap.address as Address;
+/** ProtocolConfig, from the same file. */
+export const PROTOCOL_CONFIG = lineageJson.protocolConfig.address as Address;
+
 /**
  * The sub-label "within mandate by construction" only when the implementation is in the currentAccountImpl
  * lineage per its Upgraded events and dependencies().mandate's code hash equals CAM V4's.
@@ -158,10 +166,10 @@ export function attestationLabel(writer: Address): string {
 export type NablaCanonicalInput = {
   /** Every implementation the account has had, per Upgraded events, oldest first. */
   implementations: readonly Address[];
-  /** Implementations ProtocolConfig has published as currentAccountImpl. */
-  lineage: readonly Address[];
-  /** The factory's bootstrap implementation: allowed only as the first Upgraded of an account. */
-  bootstrap: Address;
+  /** Implementations ProtocolConfig has published as currentAccountImpl. Default: CURRENT_ACCOUNT_IMPL_LINEAGE. */
+  lineage?: readonly Address[];
+  /** The factory's bootstrap implementation: allowed only as the first Upgraded of an account. Default: NABLA_ACCOUNT_BOOTSTRAP. */
+  bootstrap?: Address;
   /** extcodehash of dependencies().mandate, or null if it could not be read. */
   mandateCodeHash: Hex | null;
   camV4CodeHash: Hex;
@@ -170,13 +178,14 @@ export type NablaCanonicalInput = {
 export type NablaLabel = { shape: "a" | "c"; label: string; canonicalImpl: boolean; reason?: string };
 
 export function canonicalLineage(x: Pick<NablaCanonicalInput, "implementations" | "lineage" | "bootstrap">): { ok: boolean; reason?: string } {
-  const lineage = new Set(x.lineage.map((a) => a.toLowerCase()));
+  const lineage = new Set((x.lineage ?? CURRENT_ACCOUNT_IMPL_LINEAGE).map((a) => a.toLowerCase()));
+  const bootstrap = (x.bootstrap ?? NABLA_ACCOUNT_BOOTSTRAP).toLowerCase();
   if (x.implementations.length === 0) return { ok: false, reason: "no Upgraded event seen for the account" };
   for (const [i, impl] of x.implementations.entries()) {
-    if (i === 0 && impl.toLowerCase() === x.bootstrap.toLowerCase()) continue;
+    if (i === 0 && impl.toLowerCase() === bootstrap) continue;
     if (!lineage.has(impl.toLowerCase())) return { ok: false, reason: `implementation ${impl} is not in the currentAccountImpl lineage` };
   }
-  if (x.implementations.length === 1 && x.implementations[0]!.toLowerCase() === x.bootstrap.toLowerCase())
+  if (x.implementations.length === 1 && x.implementations[0]!.toLowerCase() === bootstrap)
     return { ok: false, reason: "the account never left its bootstrap implementation" };
   return { ok: true };
 }

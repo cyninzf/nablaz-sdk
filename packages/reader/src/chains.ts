@@ -184,12 +184,7 @@ export function nablaOf(chainId: number): NablaContracts {
 
 // ── NablaZ canonical checks (nablaLabel, R-S189-4 AMENDED 2) ─────────
 
-/**
- * Implementations ProtocolConfig has published as currentAccountImpl, oldest first: NablaAccountV3 at P1,
- * then NablaAccountV3_1 (Safe nonce 147, tx 0x4e6fc2c23182ea9ec1b56039524eafaee19346be8c1146c616d23989c65a1033,
- * block 517848229; s3 §10 row VF). A fork test asserts the tip equals ProtocolConfig.currentAccountImpl().
- */
-export const CURRENT_ACCOUNT_IMPL_LINEAGE: readonly Address[] = [arb.NablaAccountV3.address, arb.NablaAccountV3_1.address];
-/** ProtocolConfig and NablaAccountBootstrap, from nablaz-protocol script/expected/permanent-arbitrum.txt. */
-export const PROTOCOL_CONFIG: Address = "0x59C3023543956e133dce6E1D22D4974bCF1097AE";
-export const NABLA_ACCOUNT_BOOTSTRAP: Address = "0xCa3330683eD6659B44EBA03B8d057e65e6Ff2eD5";
+// The currentAccountImpl lineage, the bootstrap and ProtocolConfig live in src/generated/account-lineage.json,
+// copied from nablaz-protocol script/expected/permanent-arbitrum.txt (scripts/gen-lineage.ts), with each
+// lineage entry's provenance. A fork test asserts the tip equals ProtocolConfig.currentAccountImpl().
+export { CURRENT_ACCOUNT_IMPL_LINEAGE, NABLA_ACCOUNT_BOOTSTRAP, PROTOCOL_CONFIG } from "./labels.ts";

@@ -10,6 +10,17 @@
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "test:fork": "pnpm -r --workspace-concurrency=1 test:fork"
+    "test:fork": "pnpm -r --workspace-concurrency=1 test:fork",
+    "reader": "pnpm --filter @nablaz/reader start --schema reader",
+    "mcp": "pnpm --silent --filter @nablaz/mcp start"
+  },
+  "pnpm": {
+    "overrides": {
+      "@modelcontextprotocol/sdk>@hono/node-server": "2.1.4",
+      "body-parser": "2.3.0",
+      "qs": "6.16.0",
+      "on-finished": "2.4.1",
+      "ip-address": "10.7.4"
+    }
   }
 }

@@ -1,0 +1,30 @@
+{
+  "chainId": 42161,
+  "source": {
+    "repo": "nablaz-protocol",
+    "path": "script/expected/permanent-arbitrum.txt",
+    "commit": "d6aaba99a4f3e4b98fe10fdfddea42ee76f8745d",
+    "blob": "1e33615bc6ead25d22bdd72b88f8a942f7546270"
+  },
+  "note": "Implementations ProtocolConfig has published as currentAccountImpl, oldest first. An account is in the lineage when its Upgraded events name only these, after at most one first Upgraded to the bootstrap.",
+  "lineage": [
+    {
+      "name": "NablaAccountV3",
+      "address": "0x2DE2f1da0B9d47Ec417Ad10f909f8740E0b027fA",
+      "provenance": "ProtocolConfig.initialize sets currentAccountImpl = NablaAccountV3 (P1 sequence, Ledger step 7; s3 §8.1)"
+    },
+    {
+      "name": "NablaAccountV3_1",
+      "address": "0x3786B747AEf4E31A7A45cc7EBBBc8C462927AcDc",
+      "provenance": "Safe nonce 147 setCurrentAccountImpl(NablaAccountV3_1), tx 0x4e6fc2c23182ea9ec1b56039524eafaee19346be8c1146c616d23989c65a1033, block 517848229 (s3 §10 row VF)"
+    }
+  ],
+  "bootstrap": {
+    "name": "NablaAccountBootstrap",
+    "address": "0xCa3330683eD6659B44EBA03B8d057e65e6Ff2eD5"
+  },
+  "protocolConfig": {
+    "name": "ProtocolConfig",
+    "address": "0x59C3023543956e133dce6E1D22D4974bCF1097AE"
+  }
+}
