@@ -2,7 +2,7 @@
 // queries and state reads are in src/api/index.ts. Rulings: R-D2B-1 (cite + reproduce on every fact),
 // R-D2B-4 (authorization chain per payment), R-D2B-6 (batch-aware counts), R-S189-3 AMENDED 2/3 (labels),
 // R-S189-4 AMENDED 2 (controller, self-dealing), R-S189-5 (a redemption is not a payment), R-S189-6
-// (empty is reported as empty), s3 §6.4a reader note (exposure).
+// (nothing indexed is reported as such; R-S190-5/6 wording), s3 §6.4a reader note (exposure).
 
 import { getAddress, type Address, type Hex } from "viem";
 import { LABEL, attestationLabel, type NablaLabel } from "./labels.ts";
@@ -16,6 +16,21 @@ export const OUTSTANDING_AUTHORIZATIONS =
   "Outstanding authorizations can exist. Each one is bounded by the vault balance and expires at its own validBefore. Unsettled authorizations are not observable onchain.";
 
 export const NOT_DETERMINABLE = "not determinable";
+
+/** R-S190-5: a redemption with no same-transaction Transfer, stated as the fact. */
+export const NO_TRANSFER = "no ERC-20 Transfer from the delegator in this tx; not a payment (R-S189-5)";
+
+/** A source's indexed range: from its start block to the block the read is taken at. */
+export type IndexedRange = { from: number | null; to: bigint };
+
+/**
+ * R-S190-5 / R-S190-6: "nothing indexed (blocks X..Y)" for a source that returned nothing; while the indexer
+ * is still below the source's start block, "indexed up to X; source starts at Y". Never a backwards range.
+ */
+export function rangeNote(text: string, r: IndexedRange): string {
+  if (r.from !== null && BigInt(r.from) > r.to) return `${text}: indexed up to ${r.to}; source starts at ${r.from}`;
+  return `${text}: nothing indexed (blocks ${r.from ?? "?"}..${r.to})`;
+}
 
 type Row = Record<string, any>;
 
@@ -247,7 +262,7 @@ export function redemptionFacts(rows: Row[]): Fact[] {
       ...plain(r, ["rootDelegator", "redeemer", "delegate", "delegator", "authority", "hop", "delegationHash", "hadTransfer"]),
       enforcers: r.enforcers,
       ...(r.shape === "c" ? { reason: unknownEnforcerReason(r.enforcers) } : {}),
-      payment: r.hadTransfer ? "see the delegation_payment facts in this tx" : "none: no ERC-20 Transfer from the delegator in this tx (R-S189-5)",
+      payment: r.hadTransfer ? "see the delegation_payment facts in this tx" : NO_TRANSFER,
     },
     cite: cite(r),
     reproduce: r.reproduce,
@@ -265,7 +280,7 @@ export function creditLineFacts(rows: Row[]): Fact[] {
   }));
 }
 
-/** R-S189-6: one note per source that returned nothing, never omitted. */
+/** R-S189-6 / R-S190-5: one note per source that returned nothing, never omitted. */
 export function emptySourceNotes(x: {
   chainId: number;
   hasNabla: boolean;
@@ -273,11 +288,11 @@ export function emptySourceNotes(x: {
   indexed: Set<"nabla" | "external">;
   lenders: number;
   counts: Record<string, number>;
-  ranges: Record<string, string>;
+  ranges: Record<string, IndexedRange>;
 }): string[] {
   const notes: string[] = [];
   const say = (key: string, text: string) => {
-    if ((x.counts[key] ?? 0) === 0) notes.push(`${text}: empty (${x.ranges[key] ?? "indexed range"})`);
+    if ((x.counts[key] ?? 0) === 0) notes.push(rangeNote(text, x.ranges[key] ?? { from: null, to: 0n }));
   };
   if (!x.hasNabla) notes.push(`no NablaZ source on chain ${x.chainId} (R-S189-1)`);
   else if (!x.indexed.has("nabla")) notes.push("NablaZ sources: not indexed by this instance (READER_SOURCES), so no NablaZ fact is reported");
@@ -286,13 +301,17 @@ export function emptySourceNotes(x: {
     say("vault_payment", "vault payments from this address");
   }
   if (!x.indexed.has("external")) {
-    notes.push("third-party sources: not indexed by this instance (READER_SOURCES), so no SpendPermissionManager, DelegationManager or Agent Credit Lines fact is reported");
+    notes.push(
+      "third-party sources: not indexed by this instance (READER_SOURCES), so no SpendPermissionManager, DelegationManager, Agent Credit Lines or ERC-8004 fact is reported",
+    );
     return notes;
   }
   say("spm", "SpendPermissionManager permissions and spends for this address");
   say("dm", "DelegationManager redemptions naming this address");
   if (x.lenders === 0) notes.push("no Agent Credit Lines lender registered on this chain");
   else say("credit", "Agent Credit Lines events naming this address");
+  say("agent_wallet", "ERC-8004 agentIds whose agentWallet this address has been");
+  if ((x.counts.agent_wallet ?? 0) > 0) say("feedback", "ERC-8004 feedback about those agentIds");
   return notes;
 }
 
@@ -305,4 +324,128 @@ export function notDeterminableNotes(facts: Fact[]): string[] {
     out.push(`${f.source} at block ${f.cite.block} tx ${f.cite.tx} log ${f.cite.logIndex}: ${LABEL.c}${reason ? ` (${reason})` : ""}`);
   }
   return out;
+}
+
+// ── Feedback grounding (R-D2B-2; AFG definition) ────────────────────
+
+export const GROUNDING_SOURCE = "erc8004:feedback_grounding";
+/** The off-chain fields are not fetched in this part. */
+export const FEEDBACK_URI_NOT_READ = "feedbackURI not read: proofOfPayment and the feedback file are off chain and are not fetched";
+
+/** Payment facts a feedback can be grounded by: settled payments this reader already produces. */
+export const PAYMENT_SOURCES = ["nablaz:vault_payment", "coinbase:spend_permission_payment", "metamask:delegation_payment"] as const;
+
+/** A settled payment fact with its payer: the vault payment's account, or the external payment's payer. */
+export type GroundingPayment = { fact: Fact; payer: Address; payee: Address; block: bigint; logIndex: number };
+
+export type GroundingInput = {
+  subject: Address;
+  /** A feedbacks row. */
+  feedback: Row;
+  /** getAgentWallet(agentId) at the block before the feedback and at the feedback block (zero address → null). */
+  wallet: { before: Address | null; at: Address | null } | { error: string };
+  /** Candidate payments; only rater → wallet ones count. */
+  payments: GroundingPayment[];
+  /** Earliest block from which every payment source this instance reads is indexed; null if none is. */
+  paymentsFrom: number | null;
+  /** The rater's and the subject's controller, when each is a NablaZ account on this chain; else null. */
+  raterController: Controller | null;
+  subjectController: Controller | null;
+};
+
+const before = (p: { block: bigint; logIndex: number }, block: bigint, logIndex: number) => p.block < block || (p.block === block && p.logIndex < logIndex);
+
+/**
+ * One grounding fact per feedback about the subject: grounded when a payment from the rater to the agentWallet
+ * settled before the feedback (by block, then by log index within the block). The fact is the rater's
+ * attestation (e), writer named. Never the feedback's value, decimals, tags or URIs. Null when the
+ * agentWallet at the feedback block is not the subject.
+ */
+export function groundingFact(x: GroundingInput): Fact | null {
+  const f = x.feedback;
+  const block = BigInt(f.blockNumber);
+  const client = getAddress(f.client);
+  let wallet: Address | null = null;
+  let status: "grounded" | "not grounded" | "not determinable";
+  let reason: string | undefined;
+  let payment: GroundingPayment | undefined;
+  if ("error" in x.wallet) {
+    status = "not determinable";
+    reason = `getAgentWallet at blocks ${block - 1n} and ${block} could not be read (${x.wallet.error})`;
+  } else if (!same(x.wallet.before, x.wallet.at) && !(x.wallet.before === null && x.wallet.at === null)) {
+    status = "not determinable";
+    reason = "agentWallet changed within the feedback block";
+    wallet = x.wallet.at;
+  } else if (x.wallet.at === null) {
+    status = "not determinable";
+    reason = "the agentId has no agentWallet at the feedback block";
+  } else {
+    wallet = x.wallet.at;
+    if (!same(wallet, x.subject)) return null;
+    const mine = x.payments.filter((p) => same(p.payer, client) && same(p.payee, wallet));
+    const sameBlockUnordered = mine.some((p) => p.block === block && !Number.isInteger(p.logIndex));
+    const prior = mine.filter((p) => before(p, block, f.logIndex)).sort((a, b) => (a.block === b.block ? a.logIndex - b.logIndex : a.block < b.block ? -1 : 1));
+    payment = prior.at(-1);
+    if (payment) status = "grounded";
+    else if (sameBlockUnordered) {
+      status = "not determinable";
+      reason = "same block";
+    } else if (x.paymentsFrom === null) {
+      status = "not determinable";
+      reason = "no payment source is indexed by this instance";
+    } else if (BigInt(x.paymentsFrom) > block) {
+      status = "not determinable";
+      reason = `payment sources are indexed from block ${x.paymentsFrom}, after the feedback`;
+    } else {
+      status = "not grounded";
+      reason = `nothing indexed from the rater to this wallet before the feedback (blocks ${x.paymentsFrom}..${block})`;
+    }
+  }
+  const sameController = (() => {
+    if (!x.raterController || !x.subjectController) return `${NOT_DETERMINABLE}: the rater and the subject are not both NablaZ accounts on this chain`;
+    if (x.raterController.controller === null || x.subjectController.controller === null) return `${NOT_DETERMINABLE}: a controller is not determinable`;
+    return same(x.raterController.controller, x.subjectController.controller);
+  })();
+  return {
+    source: GROUNDING_SOURCE,
+    label: attestationLabel(client),
+    shape: "e",
+    terms: {
+      agentId: str(f.agentId),
+      rater: client,
+      feedbackIndex: str(f.feedbackIndex),
+      agentWalletAtFeedback: wallet,
+      grounding: status,
+      ...(reason ? { reason } : {}),
+      ...(payment ? { payment: { ...payment.fact, payer: getAddress(payment.payer) } } : {}),
+      raterIsSubject: same(client, x.subject),
+      sameController,
+      feedbackURI: "not read",
+    },
+    cite: cite(f),
+    reproduce: f.reproduce,
+  };
+}
+
+// ── (c) share (R-S190-3) ─────────────────────────────────────────────
+
+export type CShare = Record<string, { count: { c: number; total: number }; value: { c: string; total: string } }>;
+
+/** Per token, over the payment facts given: count and value labelled (c), over all. Never summed across tokens. */
+export function cShare(facts: Fact[]): CShare {
+  const out: Record<string, { count: { c: number; total: number }; value: { c: bigint; total: bigint } }> = {};
+  for (const f of facts) {
+    if (!(PAYMENT_SOURCES as readonly string[]).includes(f.source)) continue;
+    const t = f.terms as Row;
+    const token = getAddress(String(t.token));
+    const v = BigInt(String(t.value ?? t.amount ?? 0));
+    const e = (out[token] ??= { count: { c: 0, total: 0 }, value: { c: 0n, total: 0n } });
+    e.count.total++;
+    e.value.total += v;
+    if (f.shape === "c") {
+      e.count.c++;
+      e.value.c += v;
+    }
+  }
+  return Object.fromEntries(Object.entries(out).map(([k, e]) => [k, { count: e.count, value: { c: e.value.c.toString(), total: e.value.total.toString() } }]));
 }

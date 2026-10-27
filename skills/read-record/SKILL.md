@@ -56,6 +56,7 @@ The response (`packages/reader/src/api/index.ts`):
 | `facts` | one per indexed row about the address, ordered by block and log index |
 | `selfDealing` | NablaZ accounts only, otherwise `null` |
 | `exposure` | NablaZ accounts only, otherwise `null` |
+| `cShare` | per token: how many of this read's payment facts, and how much of their value, are labelled (c), over all of them; never summed across tokens (R-S190-3) |
 | `notes` | every source with nothing indexed, and every fact that is not determinable, written as text |
 
 ## Reading a fact
@@ -73,6 +74,7 @@ Each fact has `source`, `label`, `shape`, `terms`, `cite` (`chainId`, `block`, `
 | `metamask:delegation_payment` | an ERC-20 `Transfer` from the delegator in a redemption's transaction | its delegation's label, or (c) if that delegation row is not indexed |
 | `metamask:redemption` | a `RedeemedDelegation`, whether or not it moved value | its shape from the caveats |
 | `agent_credit_lines` | `Borrowed`, `Repaid` or `Defaulted` at a registered lender | (e), naming the lender |
+| `erc8004:feedback_grounding` | an ERC-8004 `NewFeedback` about an agentId whose agentWallet is the subject, with its grounding | (e), naming the rater |
 
 To cite a fact, give `cite` and `reproduce`. `reproduce` is a `cast` command. It reads the RPC URL from
 `$ARB_ONE_RPC_URL` or `$BASE_RPC_URL` (README, "Citation rule"). A vault payment's citation has two parts:
@@ -122,15 +124,37 @@ which applies. A `coinbase:spend_permission_payment` is a payment by its own eve
 address and its source only. Never call the payer an agent: a fact shows which address signed, redeemed
 or paid, never what kind of party is behind it.
 
-**An empty read is not absence (R-S189-6).** A note such as
-`DelegationManager redemptions naming this address: empty (blocks 518780000..518782876)` means nothing
-indexed for that source in that block range. It does not mean nothing happened on chain. Facts before
-the range's first block are not indexed: an instance can start the third-party sources late
-(`READER_EXTERNAL_FROM`, README). When the first block is above `asOfBlock`, the indexer has not
-reached that source yet. A note that a source is `not indexed by this instance` means this instance
-does not read that source at all. `no Agent Credit Lines lender registered on this chain` means no lender
-is configured (`packages/reader/src/read.ts`, `emptySourceNotes`). Say "nothing indexed" and give the
-range.
+**Nothing indexed is not absence (R-S189-6, R-S190-5, R-S190-6).** A note such as
+`DelegationManager redemptions naming this address: nothing indexed (blocks 518780000..518782876)` means
+nothing indexed for that source in that block range. It does not mean nothing happened on chain. Facts
+before the range's first block are not indexed: an instance can start the third-party sources late
+(`READER_EXTERNAL_FROM`, README). While the indexer is still below a source's start block, the note reads
+`indexed up to <asOfBlock>; source starts at <block>`. A note that a source is `not indexed by this
+instance` means this instance does not read that source at all. `no Agent Credit Lines lender registered on
+this chain` means no lender is configured (`packages/reader/src/read.ts`, `rangeNote`, `emptySourceNotes`).
+Say "nothing indexed" and give the range. A redemption with no same-transaction Transfer says so:
+`terms.payment` reads `no ERC-20 Transfer from the delegator in this tx; not a payment (R-S189-5)`.
+
+**Feedback grounding (R-D2B-2).** When the subject has been the agentWallet of an ERC-8004 agentId, every
+`NewFeedback` about that agentId becomes an `erc8004:feedback_grounding` fact, cited at the feedback log
+(`packages/reader/src/read.ts`, `groundingFact`). The ERC-8004 "Reputation Registry" emits the feedback; the
+Identity Registry holds the agentWallet. `terms.grounding` is one of:
+
+- `grounded`: a payment from the rater to the agentWallet settled before the feedback, by block and then by
+  log index within the block. `terms.payment` is that payment fact, the most recent one, with its own source,
+  label and citation: a vault payment (with its grant), a spend permission spend, or a delegation payment.
+  No other transfer counts: a plain ERC-20 transfer is not a payment fact this reader produces.
+- `not grounded`: nothing indexed from the rater to the agentWallet before the feedback, in the range
+  `terms.reason` gives.
+- `not determinable`: `terms.reason` says why. The agentWallet is read with `getAgentWallet` at the feedback
+  block and the block before; a change within the block, an agentId with no agentWallet at the feedback
+  block, a failed read, or payment sources indexed only after the feedback each make it not determinable.
+
+`terms.raterIsSubject` says whether the rater is the subject. `terms.sameController` compares the rater's
+and the subject's controllers when both are NablaZ accounts on the chain, and is not determinable
+otherwise (R-S189-4). The fact never carries the feedback's value, decimals, tags, endpoint or URIs.
+`terms.feedbackURI` is `not read`: the feedback file and its proofOfPayment are off chain and are not
+fetched.
 
 **State reads are labelled.** The envelope expiry in a vault payment is a state read at the settlement
 block and the block before it, not a log. If the two reads differ, the field is stored as not

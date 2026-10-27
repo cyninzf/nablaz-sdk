@@ -6,24 +6,32 @@ import { Hono } from "hono";
 import { db, publicClients } from "ponder:api";
 import {
   accounts,
+  agentWallets,
   creditLineEvents,
   externalPayments,
   externalPermissions,
   externalRedemptions,
   factoryAccounts,
+  feedbacks,
   grants,
   implementationHistory,
   recordEntries,
   vaultPayments,
   vaults,
 } from "ponder:schema";
-import { and, asc, eq, inArray, or } from "ponder";
+import { and, asc, eq, inArray, isNotNull, or } from "ponder";
 import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, type PublicClient } from "viem";
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
+import { IdentityRegistryAbi } from "../external-abis";
 import {
+  FEEDBACK_URI_NOT_READ,
+  GROUNDING_SOURCE,
+  cShare,
+  controllerAt,
   creditLineFacts,
+  groundingFact,
   emptySourceNotes,
   exposure,
   notDeterminableNotes,
@@ -36,6 +44,7 @@ import {
   type ControllerInput,
   type ExposureGrant,
   type Fact,
+  type GroundingPayment,
   type Payment,
 } from "../read";
 
@@ -73,6 +82,24 @@ async function implementationsOf(chainId: number, account: Hex): Promise<Address
     .where(and(eq(implementationHistory.chainId, chainId), eq(implementationHistory.account, account), eq(implementationHistory.source, "Upgraded")))
     .orderBy(asc(implementationHistory.blockNumber), asc(implementationHistory.logIndex));
   return ups.map((u) => u.implementation as Address);
+}
+
+/** The NablaZ label of an account at the read block (lineage from Upgraded events, mandate code hash). */
+async function nablaLabelOf(client: PublicClient, chain: EnabledChain & { nabla: { ConsumerAIMandateV4: Address } }, account: Hex, asOfBlock: bigint): Promise<NablaLabel> {
+  const implementations = await implementationsOf(chain.chainId, account);
+  const deps = await client
+    .readContract({ address: account, abi: NablaAccountV3_1Abi, functionName: "dependencies", blockNumber: asOfBlock })
+    .catch(() => null);
+  const mandate = deps ? (deps[0] as Address) : null;
+  const camV4CodeHash = (await codeHash(client, chain.nabla.ConsumerAIMandateV4, asOfBlock))!;
+  const mandateCodeHash = mandate ? await codeHash(client, mandate, asOfBlock) : null;
+  return nablaLabel({ implementations, mandateCodeHash, camV4CodeHash });
+}
+
+/** getAgentWallet(agentId) at a block; the zero address reads as null. */
+async function walletAt(client: PublicClient, registry: Address, agentId: bigint, blockNumber: bigint): Promise<Address | null> {
+  const w = await client.readContract({ address: registry, abi: IdentityRegistryAbi, functionName: "getAgentWallet", args: [agentId], blockNumber });
+  return w === "0x0000000000000000000000000000000000000000" ? null : getAddress(w);
 }
 
 app.get("/read/:chainId/:address", async (c) => {
@@ -201,6 +228,78 @@ app.get("/read/:chainId/:address", async (c) => {
     notes.push(`self-dealing and exposure: ${subject} is not a NablaZ account on chain ${chainId}`);
   }
 
+  // ERC-8004 feedback grounding (R-D2B-2): when the subject has been the agentWallet of an indexed agentId.
+  const external = sourcesOn().has("external");
+  const walletRows = external
+    ? await db
+        .selectDistinct({ agentId: agentWallets.agentId })
+        .from(agentWallets)
+        .where(and(eq(agentWallets.chainId, chainId), isNotNull(agentWallets.wallet), eq(agentWallets.wallet, a)))
+    : [];
+  const agentIds = walletRows.map((w) => w.agentId);
+  const fbs = agentIds.length
+    ? await db.select().from(feedbacks).where(and(eq(feedbacks.chainId, chainId), inArray(feedbacks.agentId, agentIds)))
+    : [];
+  const groundingFacts: Fact[] = [];
+  if (fbs.length) {
+    // Candidate payments into the subject: vault settlements (labelled by the paying account) and external payments.
+    const candidates: GroundingPayment[] = [];
+    if (hasNabla(chain) && sourcesOn().has("nabla")) {
+      const vin = await db.select().from(vaultPayments).where(and(eq(vaultPayments.chainId, chainId), eq(vaultPayments.payee, a)));
+      const labels = new Map<string, NablaLabel>();
+      for (const v of vin) {
+        const acc = lc(v.account);
+        if (!labels.has(acc)) labels.set(acc, await nablaLabelOf(client, chain as never, acc, asOfBlock));
+        const [fact] = vaultPaymentFacts([v], labels.get(acc)!);
+        candidates.push({ fact: fact!, payer: getAddress(v.account), payee: getAddress(v.payee!), block: v.blockNumber, logIndex: v.logIndex });
+      }
+    }
+    const pin = pays.filter((p) => lc(p.payee) === a);
+    paymentFacts(pin, permById).forEach((fact, i) =>
+      candidates.push({ fact, payer: getAddress(pin[i]!.payer), payee: getAddress(pin[i]!.payee), block: pin[i]!.blockNumber, logIndex: pin[i]!.logIndex }),
+    );
+    // Every payment source this instance reads is indexed from the latest of their start blocks.
+    const starts = [externalStart(chain, "SpendPermissionManager"), externalStart(chain, "DelegationManager")];
+    if (hasNabla(chain) && sourcesOn().has("nabla")) starts.push(nablaStart(chain)!);
+    const paymentsFrom = Math.max(...starts);
+    const controllerOf = async (who: Hex, block: bigint) => {
+      if (!hasNabla(chain)) return null;
+      const [isAccount] = await db.select().from(accounts).where(eq(accounts.id, `${chainId}-${who}`));
+      if (!isAccount) return null;
+      const ok = canonicalLineage({ implementations: await implementationsOf(chainId, who) }).ok;
+      return controllerAt(getAddress(who), block, await controllerInput(chainId, who, ok));
+    };
+    const wallets = new Map<string, Promise<Address | null>>();
+    const readWallet = (agentId: bigint, block: bigint) => {
+      const k = `${agentId}-${block}`;
+      if (!wallets.has(k)) wallets.set(k, walletAt(client, chain.external.IdentityRegistry, agentId, block));
+      return wallets.get(k)!;
+    };
+    for (const f of fbs) {
+      let wallet: { before: Address | null; at: Address | null } | { error: string };
+      try {
+        wallet = { before: await readWallet(f.agentId, f.blockNumber - 1n), at: await readWallet(f.agentId, f.blockNumber) };
+      } catch (e) {
+        wallet = { error: String((e as Error).message ?? e).split("\n")[0]! };
+      }
+      const g = groundingFact({
+        subject,
+        feedback: f,
+        wallet,
+        payments: candidates,
+        paymentsFrom,
+        raterController: await controllerOf(lc(f.client), f.blockNumber),
+        subjectController: await controllerOf(a, f.blockNumber),
+      });
+      if (g) groundingFacts.push(g);
+    }
+    notes.push(FEEDBACK_URI_NOT_READ);
+    for (const g of groundingFacts) {
+      const t = g.terms as { grounding: string; reason?: string; agentId: string };
+      if (t.grounding !== "grounded") notes.push(`${GROUNDING_SOURCE} at block ${g.cite.block} tx ${g.cite.tx} log ${g.cite.logIndex}: ${t.grounding}${t.reason ? ` (${t.reason})` : ""}`);
+    }
+  }
+
   const facts: Fact[] = [
     ...recordFacts(records, nabla),
     ...vaultPaymentFacts(vpay, nabla),
@@ -208,9 +307,10 @@ app.get("/read/:chainId/:address", async (c) => {
     ...paymentFacts(pays, permById),
     ...redemptionFacts(reds),
     ...creditLineFacts(credit),
+    ...groundingFacts,
   ].sort((x, y) => (BigInt(x.cite.block) === BigInt(y.cite.block) ? x.cite.logIndex - y.cite.logIndex : BigInt(x.cite.block) < BigInt(y.cite.block) ? -1 : 1));
 
-  const range = (from: number | null) => `blocks ${from}..${asOfBlock}`;
+  const range = (from: number | null) => ({ from, to: asOfBlock });
   notes.push(
     ...emptySourceNotes({
       chainId,
@@ -223,6 +323,8 @@ app.get("/read/:chainId/:address", async (c) => {
         spm: perms.filter((p) => p.source === "spm").length + pays.filter((p) => p.source === "spm").length,
         dm: reds.length,
         credit: credit.length,
+        agent_wallet: agentIds.length,
+        feedback: fbs.length,
       },
       ranges: {
         record: range(nablaStart(chain)),
@@ -230,12 +332,16 @@ app.get("/read/:chainId/:address", async (c) => {
         spm: range(externalStart(chain, "SpendPermissionManager")),
         dm: range(externalStart(chain, "DelegationManager")),
         credit: range(externalStart(chain, "creditLineLenders")),
+        agent_wallet: range(externalStart(chain, "IdentityRegistry")),
+        feedback: range(externalStart(chain, "ReputationRegistry")),
       },
     }),
     ...notDeterminableNotes(facts),
   );
 
-  return c.body(json({ subject, chainId, asOfBlock, facts, selfDealing: selfDealingOut, exposure: exposureOut, notes }), 200, {
+  // R-S190-3: per token, the payment facts in this read labelled (c), over all payment facts.
+  const cShareOut = { chainId, asOfBlock: asOfBlock.toString(), byToken: cShare(facts) };
+  return c.body(json({ subject, chainId, asOfBlock, facts, selfDealing: selfDealingOut, exposure: exposureOut, cShare: cShareOut, notes }), 200, {
     "content-type": "application/json",
   });
 });

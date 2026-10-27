@@ -10,14 +10,14 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DEFAULT_READER_URL, READ_TOOL, READ_TOOL_DESCRIPTION, readServer } from "../../src/server.ts";
+import { bannedHits } from "../../../reader/src/wording.ts";
 
 const TEST = "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c";
 // Not the reader's formatting on purpose: the body must come back byte for byte, not re-serialized.
-const BODY = `{"subject":"${TEST}",  "chainId":42161,"asOfBlock":"518782876","facts":[],"selfDealing":null,"exposure":null,"notes":["x: empty (blocks 1..2)"]}`;
+const BODY = `{"subject":"${TEST}",  "chainId":42161,"asOfBlock":"518782876","facts":[],"selfDealing":null,"exposure":null,"notes":["x: nothing indexed (blocks 1..2)"]}`;
 const NOT_READ = `{"error":"chain 1 is not read here"}`;
 const MAIN = fileURLToPath(new URL("../../src/main.ts", import.meta.url));
 const NODE_ARGS = ["--experimental-strip-types", "--disable-warning=ExperimentalWarning"];
-const BANNED = /score|verdict|rank|trust|reputation|credit bureau/i;
 
 let stub: Server;
 let base: string;
@@ -69,7 +69,7 @@ describe("read_subject", () => {
     expect(seen).toEqual(["/read/42161/..%2F..%2Fstatus"]);
   });
 
-  it("a reader that does not answer is an error, not an empty read", async () => {
+  it("a reader that does not answer is an error, not a read with nothing indexed", async () => {
     const client = await connected("http://127.0.0.1:1");
     const r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
     expect(r.isError).toBe(true);
@@ -130,12 +130,12 @@ describe("stdio entry point", () => {
 describe("wording", () => {
   const skill = readFileSync(new URL("../../../../skills/read-record/SKILL.md", import.meta.url), "utf8");
   it("the tool description is at most two sentences and uses none of the banned words", () => {
-    expect(READ_TOOL_DESCRIPTION).not.toMatch(BANNED);
+    expect(bannedHits(READ_TOOL_DESCRIPTION)).toEqual([]);
     expect(READ_TOOL_DESCRIPTION.split(/\.\s/).length).toBeLessThanOrEqual(2);
   });
   it("the skill uses none of the banned words outside its own list of them", () => {
     const outside = skill.replace(/<!-- banned:start -->[\s\S]*?<!-- banned:end -->/g, "");
-    expect(outside).not.toMatch(BANNED);
+    expect(bannedHits(outside)).toEqual([]);
   });
   it("the skill says nothing indexed, never none, and never labels a payer an agent", () => {
     expect(skill).toContain("nothing indexed");

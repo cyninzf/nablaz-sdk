@@ -10,8 +10,8 @@ const ids = Object.keys(ONELINERS) as OnelinerId[];
 
 describe("s3 §6.4b one-liners", () => {
   it("fixture is pinned to the s3 commit", () => {
-    expect(text).toContain("4ace372840989469430996afd7f4668cab046e8e");
-    expect(lines).toHaveLength(15);
+    expect(text).toContain("51c1379622ec837375e5d8ddf42b29032990b997");
+    expect(lines).toHaveLength(18);
   });
 
   it("one renderer per line, in section order, each reproducing the line exactly", () => {

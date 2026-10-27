@@ -23,7 +23,7 @@
 // and never outlives the seller's window. The grantee's key (or A's controller) may be any external signer (a
 // viem LocalAccount, a KMS or hardware wallet behind `toAccount`): only `address` and `signTypedData` are used.
 //
-// The vault is never taken on trust: at construction the adapter requires vault = predictVault(vaultImpl,
+// The vault is never assumed: at construction the adapter requires vault = predictVault(vaultImpl,
 // account, granteeKey) and refuses a vaultImpl that is never a payment target (R-S184-5). vaultImpl must be
 // the account's own VAULT_IMPL; `granteeVaultSignerFromChain` reads it. granteeKey is the grant's own key
 // (CAM V4 granteeOf / granteeKeyOf): an agentId grant is not keyed by the grantee address.

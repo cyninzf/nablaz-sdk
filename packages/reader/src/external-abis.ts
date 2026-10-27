@@ -22,3 +22,15 @@ export const AgentCreditLineAbi = parseAbi([
 ]);
 
 export const CREDIT_LINE_EVENTS = AgentCreditLineAbi;
+
+/**
+ * erc-8004/erc-8004-contracts abis/ReputationRegistry.json and abis/IdentityRegistry.json at the vendor commit
+ * in src/generated/erc8004.json. test/unit/erc8004.test.ts checks each item against the copied vendor ABI.
+ */
+export const ReputationRegistryAbi = parseAbi([
+  "event NewFeedback(uint256 indexed agentId, address indexed clientAddress, uint64 feedbackIndex, int128 value, uint8 valueDecimals, string indexed indexedTag1, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)",
+]);
+export const IdentityRegistryAbi = parseAbi([
+  "event MetadataSet(uint256 indexed agentId, string indexed indexedMetadataKey, string metadataKey, bytes metadataValue)",
+  "function getAgentWallet(uint256 agentId) view returns (address)",
+]);

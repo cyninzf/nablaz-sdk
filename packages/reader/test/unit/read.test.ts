@@ -94,28 +94,42 @@ describe("exposure (s3 §6.4a reader note)", () => {
   });
 });
 
-describe("notes (R-S189-6)", () => {
-  const ranges = { record: "a", vault_payment: "b", spm: "c", dm: "d", credit: "e" };
-  it("states every empty source, and the absent lender, never omitting one", () => {
+describe("notes (R-S189-6, R-S190-5, R-S190-6)", () => {
+  const ranges = { record: { from: 1, to: 10n }, vault_payment: { from: 2, to: 10n }, spm: { from: 3, to: 10n }, dm: { from: 4, to: 10n }, credit: { from: 5, to: 10n } };
+  it("states every source with nothing indexed, with its range, and the absent lender, never omitting one", () => {
     const n = emptySourceNotes({ chainId: 8453, hasNabla: false, indexed: new Set(["nabla", "external"]), lenders: 0, counts: {}, ranges });
     expect(n).toEqual([
       "no NablaZ source on chain 8453 (R-S189-1)",
-      "SpendPermissionManager permissions and spends for this address: empty (c)",
-      "DelegationManager redemptions naming this address: empty (d)",
+      "SpendPermissionManager permissions and spends for this address: nothing indexed (blocks 3..10)",
+      "DelegationManager redemptions naming this address: nothing indexed (blocks 4..10)",
       "no Agent Credit Lines lender registered on this chain",
+      "ERC-8004 agentIds whose agentWallet this address has been: nothing indexed (blocks ?..0)",
     ]);
   });
-  it("a source group this instance does not index is said so, never reported as empty", () => {
+  it("never a backwards range: below a source's start block the note says how far the index has got", () => {
+    const n = emptySourceNotes({ chainId: 8453, hasNabla: false, indexed: new Set(["external"]), lenders: 0, counts: {}, ranges: { spm: { from: 518780000, to: 516668399n }, dm: { from: 4, to: 10n } } });
+    expect(n).toContain("SpendPermissionManager permissions and spends for this address: indexed up to 516668399; source starts at 518780000");
+    for (const line of n) {
+      const m = /blocks (\d+)\.\.(\d+)/.exec(line);
+      if (m) expect(BigInt(m[1]!)).toBeLessThanOrEqual(BigInt(m[2]!));
+    }
+  });
+  it("never says empty or none", () => {
+    const n = emptySourceNotes({ chainId: 42161, hasNabla: true, indexed: new Set(["nabla", "external"]), lenders: 1, counts: { agent_wallet: 1 }, ranges });
+    expect(n.join("\n")).not.toMatch(/\b(empty|none)\b/i);
+    expect(n.join("\n")).toContain("ERC-8004 feedback about those agentIds: nothing indexed");
+  });
+  it("a source group this instance does not index is said so, never reported as nothing indexed", () => {
     const n = emptySourceNotes({ chainId: 42161, hasNabla: true, indexed: new Set(["nabla"]), lenders: 0, counts: { record: 1, vault_payment: 1 }, ranges });
     expect(n.join("\n")).toMatch(/third-party sources: not indexed by this instance/);
-    expect(n.join("\n")).not.toMatch(/: empty/);
+    expect(n.join("\n")).not.toMatch(/nothing indexed/);
   });
   it("every (c) fact becomes a note with its citation", () => {
     const f = redemptionFacts([
       { ...ev(5, 2), reproduce: "x", rootDelegator: OTHER, redeemer: OTHER, delegate: OTHER, delegator: OTHER, authority: "0x", hop: "root", delegationHash: "0x", hadTransfer: false, shape: "c", label: LABEL.c, enforcers: [{ enforcer: "0x29fcBBa852439616c4D614A2fa6411E42b760153", name: null }] },
     ]);
     expect(notDeterminableNotes(f)[0]).toMatch(/block 5 .* log 2: \(c\) not determinable \(enforcer not in the table: 0x29fc/);
-    expect((f[0]!.terms as any).payment).toMatch(/none: no ERC-20 Transfer/);
+    expect((f[0]!.terms as any).payment).toBe("no ERC-20 Transfer from the delegator in this tx; not a payment (R-S189-5)");
   });
 });
 

@@ -29,6 +29,8 @@ export const EXTERNAL_TABLES = [
   "external_payments",
   "external_redemptions",
   "credit_line_events",
+  "feedbacks",
+  "agent_wallets",
 ] as const;
 export type Tables = Record<(typeof TABLES)[number] | (typeof EXTERNAL_TABLES)[number], Record<string, unknown>[]>;
 
