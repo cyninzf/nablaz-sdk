@@ -2,7 +2,7 @@ import { createConfig, factory } from "ponder";
 import { getAbiItem, parseAbi } from "viem";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain, type NablaContracts } from "./src/chains";
 import { DelegationManagerAbi } from "./src/delegation";
-import { AgentCreditLineAbi, SpendPermissionManagerAbi } from "./src/external-abis";
+import { AgentCreditLineAbi, IdentityRegistryAbi, ReputationRegistryAbi, SpendPermissionManagerAbi } from "./src/external-abis";
 import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi } from "@nablaz/sdk/abis";
 
 // Every source is parameterized by chain (src/chains.ts). Only enabled chains are configured; a NablaZ
@@ -93,8 +93,18 @@ export default createConfig({
       abi: DelegationManagerAbi,
       chain: on(externalOn, (c) => ({ address: c.external.DelegationManager }), (c) => externalStart(c, "DelegationManager")),
     },
+    // ERC-8004 (R-D2B-2): NewFeedback, and the agentWallet history from MetadataSet (other keys are skipped by
+    // the handler).
+    ReputationRegistry: {
+      abi: ReputationRegistryAbi,
+      chain: on(externalOn, (c) => ({ address: c.external.ReputationRegistry }), (c) => externalStart(c, "ReputationRegistry")),
+    },
+    IdentityRegistry: {
+      abi: IdentityRegistryAbi,
+      chain: on(externalOn, (c) => ({ address: c.external.IdentityRegistry }), (c) => externalStart(c, "IdentityRegistry")),
+    },
     // Agent Credit Lines: registered only on chains with a configured lender. None today (R-S189-6: the
-    // decoder and its fixtures ship anyway; an empty source is reported as empty).
+    // decoder and its fixtures ship anyway; a source with nothing indexed says "nothing indexed", R-S190-5).
     CreditLine: {
       abi: AgentCreditLineAbi,
       chain: on(

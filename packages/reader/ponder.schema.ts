@@ -291,3 +291,52 @@ export const creditLineEvents = onchainTable(
   }),
   (t) => ({ byAgent: index().on(t.chainId, t.agentId) }),
 );
+
+/**
+ * ERC-8004 NewFeedback (s3 §6.4b (7)): who rated which agent id, and where. The feedback's value,
+ * valueDecimals, tags, endpoint, feedbackURI and feedbackHash are not stored (R-D2B-2: never a value or rank).
+ */
+export const feedbacks = onchainTable(
+  "feedbacks",
+  (t) => ({
+    id: t.text().primaryKey(), // chainId-tx-logIndex
+    ...evidence(t),
+    agentId: t.bigint().notNull(),
+    /** clientAddress: the rater. */
+    client: t.hex().notNull(),
+    feedbackIndex: t.bigint().notNull(),
+  }),
+  (t) => ({ byAgent: index().on(t.chainId, t.agentId), byClient: index().on(t.chainId, t.client) }),
+);
+
+/**
+ * ERC-8004 MetadataSet for the agentWallet key (s3 §6.4b (10)): every wallet an agent id has held. Used to find
+ * the agent ids a subject has been the wallet of; the wallet at a feedback block is read by getAgentWallet.
+ */
+export const agentWallets = onchainTable(
+  "agent_wallets",
+  (t) => ({
+    id: t.text().primaryKey(), // chainId-tx-logIndex
+    ...evidence(t),
+    agentId: t.bigint().notNull(),
+    /** Null when the event cleared the wallet. */
+    wallet: t.hex(),
+  }),
+  (t) => ({ byWallet: index().on(t.chainId, t.wallet), byAgent: index().on(t.chainId, t.agentId) }),
+);
+
+/**
+ * The Identity Registry's ERC-721 Transfer (s3 §6.4b (11)): every owner an agentId has had. With agent_wallets,
+ * how a subject is found as an agentId's bound address (R-S191-16: agentWallet, else owner).
+ */
+export const agentOwners = onchainTable(
+  "agent_owners",
+  (t) => ({
+    id: t.text().primaryKey(), // chainId-tx-logIndex
+    ...evidence(t),
+    agentId: t.bigint().notNull(),
+    /** The new owner; null on burn. */
+    owner: t.hex(),
+  }),
+  (t) => ({ byOwner: index().on(t.chainId, t.owner), byAgent: index().on(t.chainId, t.agentId) }),
+);

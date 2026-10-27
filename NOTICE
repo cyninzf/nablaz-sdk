@@ -1,0 +1,12 @@
+nablaz-sdk
+Copyright (c) the nablaz-sdk contributors. MIT licence (LICENSE).
+
+This repository includes material adapted from third parties:
+
+- packages/reader/test/fixtures/afg/erc8004-base-grounded-feedback-2026-10-20.derived.csv and
+  docs/reader/afg-agreement-2026-10-20.csv are adapted from Agentic Finance Graph,
+  fixtures/erc8004-base-grounded-feedback-2026-10-20.csv in
+  https://github.com/AgenticFinanceGraph/agentic-finance-graph-spec at commit
+  d6458fe4ea0efe187378db6a71e37bebb1462a3a, licensed under CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/). Columns were removed and a comparison column was added;
+  packages/reader/test/fixtures/afg/README.md lists the changes.

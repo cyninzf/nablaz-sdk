@@ -6,24 +6,35 @@ import { Hono } from "hono";
 import { db, publicClients } from "ponder:api";
 import {
   accounts,
+  agentOwners,
+  agentWallets,
   creditLineEvents,
   externalPayments,
   externalPermissions,
   externalRedemptions,
   factoryAccounts,
+  feedbacks,
   grants,
   implementationHistory,
   recordEntries,
   vaultPayments,
   vaults,
 } from "ponder:schema";
-import { and, asc, eq, inArray, or } from "ponder";
+import { and, asc, eq, inArray, isNotNull, or } from "ponder";
 import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, type PublicClient } from "viem";
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
+import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
 import {
+  FEEDBACK_URI_NOT_READ,
+  GROUNDING_SOURCE,
+  NATIVE_NOT_READ,
+  cShare,
+  controllerAt,
   creditLineFacts,
+  groundingFact,
+  groundingTransfers,
   emptySourceNotes,
   exposure,
   notDeterminableNotes,
@@ -36,6 +47,8 @@ import {
   type ControllerInput,
   type ExposureGrant,
   type Fact,
+  type LabelledPayment,
+  type RaterTransfer,
   type Payment,
 } from "../read";
 
@@ -73,6 +86,18 @@ async function implementationsOf(chainId: number, account: Hex): Promise<Address
     .where(and(eq(implementationHistory.chainId, chainId), eq(implementationHistory.account, account), eq(implementationHistory.source, "Upgraded")))
     .orderBy(asc(implementationHistory.blockNumber), asc(implementationHistory.logIndex));
   return ups.map((u) => u.implementation as Address);
+}
+
+/** The NablaZ label of an account at the read block (lineage from Upgraded events, mandate code hash). */
+async function nablaLabelOf(client: PublicClient, chain: EnabledChain & { nabla: { ConsumerAIMandateV4: Address } }, account: Hex, asOfBlock: bigint): Promise<NablaLabel> {
+  const implementations = await implementationsOf(chain.chainId, account);
+  const deps = await client
+    .readContract({ address: account, abi: NablaAccountV3_1Abi, functionName: "dependencies", blockNumber: asOfBlock })
+    .catch(() => null);
+  const mandate = deps ? (deps[0] as Address) : null;
+  const camV4CodeHash = (await codeHash(client, chain.nabla.ConsumerAIMandateV4, asOfBlock))!;
+  const mandateCodeHash = mandate ? await codeHash(client, mandate, asOfBlock) : null;
+  return nablaLabel({ implementations, mandateCodeHash, camV4CodeHash });
 }
 
 app.get("/read/:chainId/:address", async (c) => {
@@ -201,6 +226,121 @@ app.get("/read/:chainId/:address", async (c) => {
     notes.push(`self-dealing and exposure: ${subject} is not a NablaZ account on chain ${chainId}`);
   }
 
+  // ERC-8004 feedback grounding (R-D2B-2, R-S191-11, R-S191-16): when the subject has been the agentWallet or the
+  // owner of an indexed agentId. A feedback is grounded by any ERC-20 Transfer from the rater to the address bound at the
+  // transfer's block: getAgentWallet there, else ownerOf there. The rater's transfers are read by eth_getLogs (topic1 = rater, any token) from the
+  // Identity Registry's start (no agentWallet exists before it) to the feedback block; a settlement from one of
+  // the rater's own grantee vaults counts as from the rater. A transfer that is an indexed payment fact keeps its
+  // label; any other is (c), "direct transfer, no permission object".
+  const external = sourcesOn().has("external");
+  const walletRows = external
+    ? await db
+        .selectDistinct({ agentId: agentWallets.agentId })
+        .from(agentWallets)
+        .where(and(eq(agentWallets.chainId, chainId), isNotNull(agentWallets.wallet), eq(agentWallets.wallet, a)))
+    : [];
+  const ownerRows = external
+    ? await db
+        .selectDistinct({ agentId: agentOwners.agentId })
+        .from(agentOwners)
+        .where(and(eq(agentOwners.chainId, chainId), isNotNull(agentOwners.owner), eq(agentOwners.owner, a)))
+    : [];
+  // R-S191-16: an agentId is the subject's when the subject has been its agentWallet or its owner.
+  const agentIds = [...new Set([...walletRows, ...ownerRows].map((w) => w.agentId))];
+  const fbs = agentIds.length
+    ? await db.select().from(feedbacks).where(and(eq(feedbacks.chainId, chainId), inArray(feedbacks.agentId, agentIds)))
+    : [];
+  const groundingFacts: Fact[] = [];
+  if (fbs.length) {
+    const registry = chain.external.IdentityRegistry;
+    const transfersFromBlock = externalStart(chain, "IdentityRegistry");
+    const nablaOn = hasNabla(chain) && sourcesOn().has("nabla");
+    const controllerOf = async (who: Hex, block: bigint) => {
+      if (!hasNabla(chain)) return null;
+      const [isAccount] = await db.select().from(accounts).where(eq(accounts.id, `${chainId}-${who}`));
+      if (!isAccount) return null;
+      const ok = canonicalLineage({ implementations: await implementationsOf(chainId, who) }).ok;
+      return controllerAt(getAddress(who), block, await controllerInput(chainId, who, ok));
+    };
+    // Per rater: its transfers up to its latest feedback here, and its indexed payment facts (with labels).
+    const raters = new Map<string, Promise<{ transfers: RaterTransfer[]; labelled: LabelledPayment[] } | { error: string }>>();
+    const raterData = (rater: Hex, upTo: bigint) => {
+      if (!raters.has(rater))
+        raters.set(
+          rater,
+          (async () => {
+            try {
+              const transfers = await transfersFrom(client, chainId, getAddress(rater), BigInt(transfersFromBlock), upTo);
+              const labelled: LabelledPayment[] = [];
+              if (nablaOn) {
+                const vout = await db.select().from(vaultPayments).where(and(eq(vaultPayments.chainId, chainId), eq(vaultPayments.account, rater)));
+                const label = vout.length ? await nablaLabelOf(client, chain as never, rater, asOfBlock) : null;
+                for (const v of vout) {
+                  if (v.payee === null || v.value === null || v.transferLogIndex === null || v.blockNumber > upTo) continue;
+                  const [fact] = vaultPaymentFacts([v], label);
+                  labelled.push({ fact: fact!, tx: v.txHash, transferLogIndex: v.transferLogIndex });
+                  // The vault's Transfer is sent by the vault; it is the rater's payment (the payer is the account).
+                  transfers.push({ chainId, token: getAddress(v.token), from: getAddress(rater), to: getAddress(v.payee), amount: v.value, block: v.blockNumber, tx: v.txHash, logIndex: v.transferLogIndex });
+                }
+              }
+              const out = await db.select().from(externalPayments).where(and(eq(externalPayments.chainId, chainId), eq(externalPayments.payer, rater)));
+              const facts = paymentFacts(out, permById);
+              out.forEach((p, i) => {
+                // A delegation payment row is its Transfer log; an SPM payment row is SpendPermissionUsed, so its
+                // Transfer is the one in the same tx to the same payee with the same amount.
+                const t =
+                  p.source === "spm"
+                    ? transfers.find((x) => lc(x.tx) === lc(p.txHash) && lc(x.to) === lc(p.payee) && x.amount === p.amount)
+                    : transfers.find((x) => lc(x.tx) === lc(p.txHash) && x.logIndex === p.logIndex);
+                if (t) labelled.push({ fact: facts[i]!, tx: p.txHash, transferLogIndex: t.logIndex });
+              });
+              return { transfers, labelled };
+            } catch (e) {
+              return { error: String((e as Error).message ?? e).split("\n")[0]! };
+            }
+          })(),
+        );
+      return raters.get(rater)!;
+    };
+    const lastFeedback = new Map<string, bigint>();
+    for (const f of fbs) {
+      const r = lc(f.client);
+      if ((lastFeedback.get(r) ?? 0n) < f.blockNumber) lastFeedback.set(r, f.blockNumber);
+    }
+    for (const f of fbs) {
+      const rater = lc(f.client);
+      const data = await raterData(rater, lastFeedback.get(rater)!);
+      let payments: ReturnType<typeof groundingTransfers> | { error: string };
+      if ("error" in data) payments = data;
+      else {
+        try {
+          const prior = data.transfers.filter((t) => t.block <= f.blockNumber);
+          const candidates = await boundHistory(client, registry, f.agentId, BigInt(transfersFromBlock), f.blockNumber);
+          payments = groundingTransfers(prior, await bindingsAtTransferBlocks(client, registry, f.agentId, prior, candidates), data.labelled);
+        } catch (e) {
+          payments = { error: String((e as Error).message ?? e).split("\n")[0]! };
+        }
+      }
+      const walletAtFeedback = await walletAt(client, registry, f.agentId, f.blockNumber).catch((e) => ({ error: String((e as Error).message ?? e).split("\n")[0]! }));
+      groundingFacts.push(
+        groundingFact({
+          subject,
+          feedback: f,
+          payments,
+          transfersRange: { from: transfersFromBlock, to: f.blockNumber },
+          walletAtFeedback,
+          raterController: await controllerOf(rater, f.blockNumber),
+          subjectController: await controllerOf(a, f.blockNumber),
+        }),
+      );
+    }
+    notes.push(FEEDBACK_URI_NOT_READ, NATIVE_NOT_READ);
+    for (const g of groundingFacts) {
+      const t = g.terms as { grounding: string; reason?: string };
+      if (t.grounding !== "grounded") notes.push(`${GROUNDING_SOURCE} at block ${g.cite.block} tx ${g.cite.tx} log ${g.cite.logIndex}: ${t.grounding}${t.reason ? ` (${t.reason})` : ""}`);
+    }
+  }
+
   const facts: Fact[] = [
     ...recordFacts(records, nabla),
     ...vaultPaymentFacts(vpay, nabla),
@@ -208,9 +348,10 @@ app.get("/read/:chainId/:address", async (c) => {
     ...paymentFacts(pays, permById),
     ...redemptionFacts(reds),
     ...creditLineFacts(credit),
+    ...groundingFacts,
   ].sort((x, y) => (BigInt(x.cite.block) === BigInt(y.cite.block) ? x.cite.logIndex - y.cite.logIndex : BigInt(x.cite.block) < BigInt(y.cite.block) ? -1 : 1));
 
-  const range = (from: number | null) => `blocks ${from}..${asOfBlock}`;
+  const range = (from: number | null) => ({ from, to: asOfBlock });
   notes.push(
     ...emptySourceNotes({
       chainId,
@@ -223,6 +364,8 @@ app.get("/read/:chainId/:address", async (c) => {
         spm: perms.filter((p) => p.source === "spm").length + pays.filter((p) => p.source === "spm").length,
         dm: reds.length,
         credit: credit.length,
+        agent_wallet: agentIds.length,
+        feedback: fbs.length,
       },
       ranges: {
         record: range(nablaStart(chain)),
@@ -230,12 +373,16 @@ app.get("/read/:chainId/:address", async (c) => {
         spm: range(externalStart(chain, "SpendPermissionManager")),
         dm: range(externalStart(chain, "DelegationManager")),
         credit: range(externalStart(chain, "creditLineLenders")),
+        agent_wallet: range(externalStart(chain, "IdentityRegistry")),
+        feedback: range(externalStart(chain, "ReputationRegistry")),
       },
     }),
     ...notDeterminableNotes(facts),
   );
 
-  return c.body(json({ subject, chainId, asOfBlock, facts, selfDealing: selfDealingOut, exposure: exposureOut, notes }), 200, {
+  // R-S190-3: per token, the payment facts in this read labelled (c), over all payment facts.
+  const cShareOut = { chainId, asOfBlock: asOfBlock.toString(), byToken: cShare(facts) };
+  return c.body(json({ subject, chainId, asOfBlock, facts, selfDealing: selfDealingOut, exposure: exposureOut, cShare: cShareOut, notes }), 200, {
     "content-type": "application/json",
   });
 });

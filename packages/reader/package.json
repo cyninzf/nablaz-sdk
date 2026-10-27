@@ -13,7 +13,8 @@
     "codegen": "ponder codegen",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
-    "test:fork": "vitest run --project fork"
+    "test:fork": "vitest run --project fork",
+    "report:c-share": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/c-share.ts"
   },
   "dependencies": {
     "@nablaz/sdk": "workspace:*",

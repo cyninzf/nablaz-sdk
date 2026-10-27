@@ -1,5 +1,6 @@
 import type { Address } from "viem";
 import { ARBITRUM_ONE } from "@nablaz/sdk/addresses";
+import erc8004 from "./generated/erc8004.json" with { type: "json" };
 
 /**
  * One chain's sources. Every address is public on chain; nothing here is a secret.
@@ -30,12 +31,20 @@ export type ChainSources = {
   external: {
     SpendPermissionManager: Address | null;
     DelegationManager: Address | null;
-    /** ERC-8004 Reputation Registry: carried for the feedback grounding read (part 3); not indexed here. */
+    /** ERC-8004 Reputation Registry: NewFeedback, the input of the feedback grounding read (R-D2B-2). */
     ReputationRegistry: Address | null;
+    /** ERC-8004 Identity Registry: agentWallet history (MetadataSet) and getAgentWallet at a block. */
+    IdentityRegistry: Address | null;
     /** Agent Credit Lines lenders. None is known on either chain (s3 §6.4b (6)). */
     creditLineLenders: Address[];
     /** Per source: its deployment block. */
-    startBlocks: { SpendPermissionManager: number; DelegationManager: number; creditLineLenders: number };
+    startBlocks: {
+      SpendPermissionManager: number;
+      DelegationManager: number;
+      creditLineLenders: number;
+      ReputationRegistry: number;
+      IdentityRegistry: number;
+    };
   };
 };
 
@@ -48,16 +57,21 @@ const arb = ARBITRUM_ONE.contracts;
  *   log same block); ReputationRegistry 428895450 (same block).
  *   Base: SpendPermissionManager 23499060 (first log 23622712); DelegationManager 28207787 (same block);
  *   ReputationRegistry 41663784 (same block).
+ * ERC-8004 IdentityRegistry, same method (Oct 27 2026): Arbitrum 428895443 (first Registered 428913028);
+ * Base 41663783 (first Registered 41673162). erc-8004/erc-8004-contracts publishes addresses only, no
+ * deployment block, at the pinned vendor commit (src/generated/erc8004.json).
  */
 const DEPLOYED = {
-  42161: { SpendPermissionManager: 283144909, DelegationManager: 320575464, ReputationRegistry: 428895450 },
-  8453: { SpendPermissionManager: 23499060, DelegationManager: 28207787, ReputationRegistry: 41663784 },
+  42161: { SpendPermissionManager: 283144909, DelegationManager: 320575464, ReputationRegistry: 428895450, IdentityRegistry: 428895443 },
+  8453: { SpendPermissionManager: 23499060, DelegationManager: 28207787, ReputationRegistry: 41663784, IdentityRegistry: 41663783 },
 } as const;
+
+/** ERC-8004 registries per chain, from src/generated/erc8004.json (scripts/gen-erc8004.ts). */
+const ERC8004 = erc8004.chains as Record<string, { IdentityRegistry: string; ReputationRegistry: string }>;
 
 // Same address on both chains (s3 §6.4c premise 1).
 const SPM: Address = "0xf85210B21cC50302F477BA56686d2019dC9b67Ad";
 const DM: Address = "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
-const REPUTATION: Address = "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63";
 
 export const CHAINS: Record<number, ChainSources> = {
   42161: {
@@ -76,12 +90,15 @@ export const CHAINS: Record<number, ChainSources> = {
     external: {
       SpendPermissionManager: SPM,
       DelegationManager: DM,
-      ReputationRegistry: REPUTATION,
+      ReputationRegistry: ERC8004["42161"]!.ReputationRegistry as Address,
+      IdentityRegistry: ERC8004["42161"]!.IdentityRegistry as Address,
       creditLineLenders: [],
       startBlocks: {
         SpendPermissionManager: DEPLOYED[42161].SpendPermissionManager,
         DelegationManager: DEPLOYED[42161].DelegationManager,
         creditLineLenders: DEPLOYED[42161].SpendPermissionManager,
+        ReputationRegistry: DEPLOYED[42161].ReputationRegistry,
+        IdentityRegistry: DEPLOYED[42161].IdentityRegistry,
       },
     },
   },
@@ -96,12 +113,15 @@ export const CHAINS: Record<number, ChainSources> = {
     external: {
       SpendPermissionManager: SPM,
       DelegationManager: DM,
-      ReputationRegistry: REPUTATION,
+      ReputationRegistry: ERC8004["8453"]!.ReputationRegistry as Address,
+      IdentityRegistry: ERC8004["8453"]!.IdentityRegistry as Address,
       creditLineLenders: [],
       startBlocks: {
         SpendPermissionManager: DEPLOYED[8453].SpendPermissionManager,
         DelegationManager: DEPLOYED[8453].DelegationManager,
         creditLineLenders: DEPLOYED[8453].SpendPermissionManager,
+        ReputationRegistry: DEPLOYED[8453].ReputationRegistry,
+        IdentityRegistry: DEPLOYED[8453].IdentityRegistry,
       },
     },
   },
@@ -142,7 +162,7 @@ export function startBlockOf(c: ChainSources): number {
 export type NablaContracts = { [K in Exclude<keyof ChainSources["nabla"], "startBlock">]: Address } & { startBlock: number };
 
 export type EnabledChain = ChainSources & {
-  external: ChainSources["external"] & { SpendPermissionManager: Address; DelegationManager: Address; ReputationRegistry: Address };
+  external: ChainSources["external"] & { SpendPermissionManager: Address; DelegationManager: Address; ReputationRegistry: Address; IdentityRegistry: Address };
 };
 
 /** True when every NablaZ source on the chain has an address. */

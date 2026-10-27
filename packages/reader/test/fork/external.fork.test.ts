@@ -5,8 +5,12 @@
 
 import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createPublicClient, http, parseAbi, type Address } from "viem";
-import { CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src/chains";
+import { PGlite } from "@electric-sql/pglite";
+import { createPublicClient, getAddress, http, parseAbi, type Address, type Hex, type PublicClient } from "viem";
+import { cShareOverIndex, formatShare } from "../../src/c-share";
+import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
+import { groundingFact, groundingTransfers, paymentFacts, type LabelledPayment } from "../../src/read";
+import { CHAINS, CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src/chains";
 import { render } from "../../src/oneliners";
 import { UPSTREAM, UPSTREAM_BASE, indexOnce, redact, stopAndDump, type Served, type Tables } from "./harness";
 
@@ -127,6 +131,79 @@ describe.each([42161, 8453] as const)("chain %i, external sources", (chainId) =>
     console.log(`(c) share, chain ${chainId}, blocks ${w.from}..${w.to}: ${c}/${all.length} redemptions labelled (c)`);
     expect(all.length).toBeGreaterThan(0);
   });
+});
+
+/** A dumped row (snake_case columns) in the camelCase shape src/read.ts takes. */
+const camel = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()), v]));
+
+describe.each([42161, 8453] as const)("chain %i, ERC-8004 and the (c) share", (chainId) => {
+  const t = () => runs[chainId]!.tables;
+  const w = WINDOWS[chainId];
+  const rpcUrl = chainId === 8453 ? UPSTREAM_BASE! : UPSTREAM!;
+
+  it("(7) NewFeedback: the rendered line through cast equals the reader's rows for an agentId in the window", () => {
+    const fb = t().feedbacks;
+    console.log(`ERC-8004, chain ${chainId}, blocks ${w.from}..${w.to}: ${fb.length} feedback rows, ${t().agent_wallets.length} agentWallet rows`);
+    for (const r of fb) {
+      expect(r.reproduce).toContain("NewFeedback(");
+      for (const col of ["value", "value_decimals", "tag1", "tag2", "endpoint", "feedback_uri", "feedback_hash"]) expect(r).not.toHaveProperty(col);
+    }
+    if (fb.length === 0) return;
+    const agentId = String(fb[0]!.agent_id);
+    const line = render("7-new-feedback", { chainId, agentId, from: w.from });
+    expect(castLogCount(line, w.to)).toBe(fb.filter((r) => String(r.agent_id) === agentId).length);
+  });
+
+  it("R-S190-3: (c) share of payment facts per token over the window (monitor, not a gate)", async () => {
+    const db = new PGlite(runs[chainId]!.served.dir);
+    try {
+      const q = async <T>(sql: string, params: unknown[]) => (await db.query<T>(sql, params)).rows;
+      const r = await cShareOverIndex(q, chainId, BigInt(w.from), BigInt(w.to), async () => {
+        throw new Error("no vault payment in an external-only index");
+      });
+      for (const line of formatShare(chainId, BigInt(w.from), BigInt(w.to), r)) console.log(`(c) share: ${line}`);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("R-D2B-2 (R-S191-11/16): grounding of every feedback in the window, counted (monitor, not a gate)", async () => {
+    const client = createPublicClient({ transport: http(rpcUrl) }) as PublicClient;
+    const registry = CHAINS[chainId]!.external.IdentityRegistry!;
+    const identityStart = BigInt(CHAINS[chainId]!.external.startBlocks.IdentityRegistry);
+    // Payment facts in the window, by payer, matched to their Transfer logs below (labels only).
+    const pays = t().external_payments.map(camel);
+    const perms = new Map(t().external_permissions.map((p) => [String(p.id), camel(p)]));
+    const facts = paymentFacts(pays, perms);
+    const counts: Record<string, number> = { grounded: 0, "not grounded": 0, "not determinable": 0 };
+    const cites: Record<string, string[]> = { grounded: [], "not grounded": [], "not determinable": [] };
+    for (const row of t().feedbacks.map(camel)) {
+      const agentId = BigInt(String(row.agentId));
+      const block = BigInt(String(row.blockNumber));
+      const rater = getAddress(String(row.client));
+      let payments: ReturnType<typeof groundingTransfers> | { error: string };
+      try {
+        const transfers = await transfersFrom(client, chainId, rater, BigInt(w.from), block);
+        const labelled: LabelledPayment[] = [];
+        pays.forEach((p, i) => {
+          const tr = transfers.find((x) => x.tx === p.txHash && (p.source === "spm" ? x.to.toLowerCase() === String(p.payee) && x.amount === BigInt(String(p.amount)) : x.logIndex === Number(p.logIndex)));
+          if (tr) labelled.push({ fact: facts[i]!, tx: tr.tx, transferLogIndex: tr.logIndex });
+        });
+        const candidates = await boundHistory(client, registry, agentId, identityStart, block);
+        payments = groundingTransfers(transfers, await bindingsAtTransferBlocks(client, registry, agentId, transfers, candidates), labelled);
+      } catch (e) {
+        payments = { error: String((e as Error).message).split("\n")[0]! };
+      }
+      const walletAtFeedback = await walletAt(client, registry, agentId, block).catch((e) => ({ error: String((e as Error).message).split("\n")[0]! }));
+      const g = groundingFact({ subject: rater, feedback: { ...row, blockNumber: block }, payments, transfersRange: { from: w.from, to: block }, walletAtFeedback, raterController: null, subjectController: null });
+      const tm = g.terms as { grounding: string; reason?: string; walletAtFeedback: string };
+      counts[tm.grounding]!++;
+      cites[tm.grounding]!.push(`${g.cite.block}:${g.cite.tx as Hex}:${g.cite.logIndex} (${tm.reason ?? "grounded"}; ${tm.walletAtFeedback})`);
+    }
+    console.log(`grounding, chain ${chainId}, blocks ${w.from}..${w.to} (rater transfers read over ${w.from}..feedback block): ${JSON.stringify(counts)}`);
+    for (const [k, v] of Object.entries(cites)) for (const c of v) console.log(`  ${k}: ${c}`);
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(t().feedbacks.length);
+  }, 600_000);
 });
 
 describe("GET /read", () => {

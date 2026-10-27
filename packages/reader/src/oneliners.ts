@@ -1,5 +1,5 @@
 // The s3 §6.4b one-liners (R-D2B-1: the ground truth), rendered per chain with the subject substituted.
-// Every line of §6.4b at nablaz-protocol 4ace372840989469430996afd7f4668cab046e8e has one renderer here;
+// Every line of §6.4b at nablaz-protocol 51c1379622ec837375e5d8ddf42b29032990b997 has one renderer here;
 // test/unit/oneliners.test.ts renders each with its placeholders and diffs against
 // test/fixtures/s3-6.4b-oneliners.txt. The `reproduce` column of the external tables and the `reproduce`
 // field of every /read fact come from this module. RPC URLs stay as shell variables, never values.
@@ -9,6 +9,10 @@ const FACTORY = "0x86dbDF2570a8670b866340e9e0A1A4B1FC5508ca";
 const SPM = "0xf85210B21cC50302F477BA56686d2019dC9b67Ad";
 const DM = "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
 const REPUTATION = "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63";
+const IDENTITY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
+const METADATA_SET_TOPIC = "0x2c149ed548c6d2993cd73efe187df6eccabe4538091b33adbd25fafdb8a1468b";
+/** cast keccak agentWallet: topic2 of MetadataSet for the wallet key. */
+export const AGENT_WALLET_KEY_TOPIC = "0x2ac6109326e720d1435c0db66f7e35eda7839f52b6f1f5520a60788e132b4e39";
 const USDC: Record<number, string> = {
   42161: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
   8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -84,6 +88,12 @@ export const ONELINERS = {
     `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${NABLA_FROM} --address ${RECORD} "${RECORD_ENTRY_SIG}" ${v.account ?? "<ACCOUNT>"} ${CONTROLLER_ROTATED} ${v.account ?? "<ACCOUNT>"}`,
   "8-account-created-by-account": (v: V) =>
     `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${NABLA_FROM} --address ${FACTORY} "${ACCOUNT_CREATED_SIG}" "" "" ${v.account ?? "<ACCOUNT>"}`,
+  "9-identity-registered": (v: V) =>
+    `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${f(v)} --address ${IDENTITY} "Registered(uint256 indexed agentId, string agentURI, address indexed owner)" ${v.agentId ?? "<AGENT_ID>"}`,
+  "10-agentwallet-history": (v: V) =>
+    `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${f(v)} --address ${IDENTITY} ${METADATA_SET_TOPIC} "$(cast to-uint256 ${v.agentId ?? "<AGENT_ID>"})" ${AGENT_WALLET_KEY_TOPIC} --json | jq -r '.[].data' | while read -r d; do cast abi-decode --input 'f(string,bytes)' "$d" | tail -1; done`,
+  "11-identity-transfers": (v: V) =>
+    `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${f(v)} --address ${IDENTITY} "Transfer(address indexed from, address indexed to, uint256 indexed tokenId)" "" "" ${v.agentId ?? "<AGENT_ID>"}`,
 } as const;
 
 export type OnelinerId = keyof typeof ONELINERS;
@@ -109,4 +119,7 @@ export const AS_PRINTED_CHAIN: Record<OnelinerId, number> = {
   "7-new-feedback": 8453,
   "8-controller-rotated-by-self": 42161,
   "8-account-created-by-account": 42161,
+  "9-identity-registered": 42161,
+  "10-agentwallet-history": 42161,
+  "11-identity-transfers": 42161,
 };

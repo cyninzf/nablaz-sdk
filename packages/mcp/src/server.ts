@@ -10,10 +10,10 @@ export const DEFAULT_READER_URL = "http://localhost:42069";
 
 export const READ_TOOL = "read_subject";
 
-/** Two sentences: the source-and-label model and what an empty note means. */
+/** Two sentences: the source-and-label model and what a nothing-indexed note means. */
 export const READ_TOOL_DESCRIPTION =
   "Returns every fact the reader has indexed about an address on one chain, as GET /read/:chainId/:address JSON: each fact names its source, carries a permission label of shape (a) to (e), and cites the block, transaction and log index with a command that returns the same log from any RPC. " +
-  "A note that a source is empty means nothing indexed for that source in the stated block range, not that nothing happened on chain.";
+  "A note reading nothing indexed (blocks X..Y) covers only that block range, and does not mean nothing happened on chain.";
 
 export type ReadServerOptions = {
   /** Reader base URL. Default DEFAULT_READER_URL. */

@@ -2,13 +2,13 @@
 // DelegationManager, Agent Credit Lines. Labels from src/labels.ts; the reproduce column from src/oneliners.ts.
 
 import { ponder, type Context } from "ponder:registry";
-import { creditLineEvents, externalPayments, externalPermissions, externalRedemptions } from "ponder:schema";
-import type { Address, Hex } from "viem";
+import { agentOwners, agentWallets, creditLineEvents, externalPayments, externalPermissions, externalRedemptions, feedbacks } from "ponder:schema";
+import { getAddress, size, type Address, type Hex } from "viem";
 import { chainById } from "./chains";
 import { delegationHash, erc20TransfersFrom, hopOf, type Delegation, type ReceiptLogLike } from "./delegation";
 import { ethGetLogs, rowId } from "./derive";
 import { SPM_LABEL, attestationLabel, shapeJson, shapeOfDelegation } from "./labels";
-import { render } from "./oneliners";
+import { AGENT_WALLET_KEY_TOPIC, render } from "./oneliners";
 
 type LogLike = { address: Address; topics: readonly (Hex | null)[]; logIndex: number };
 type BlockLike = { number: bigint; timestamp: bigint };
@@ -222,3 +222,34 @@ async function onCreditLine(event: any, context: Context, kind: "borrowed" | "re
 ponder.on("CreditLine:Borrowed", async ({ event, context }) => onCreditLine(event, context, "borrowed"));
 ponder.on("CreditLine:Repaid", async ({ event, context }) => onCreditLine(event, context, "repaid"));
 ponder.on("CreditLine:Defaulted", async ({ event, context }) => onCreditLine(event, context, "defaulted"));
+
+// ── ERC-8004 (s3 §6.4b (7), (10); R-D2B-2) ──────────────────────────
+
+// Only who rated which agentId, and where. value, valueDecimals, tags, endpoint, feedbackURI and feedbackHash
+// are decoded by the ABI and dropped here: never stored, never output.
+ponder.on("ReputationRegistry:NewFeedback", async ({ event, context }) => {
+  const chainId = context.chain.id;
+  const { agentId, clientAddress, feedbackIndex } = event.args;
+  const from = chainById(chainId).external.startBlocks.ReputationRegistry;
+  const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("7-new-feedback", { chainId, agentId: agentId.toString(), from }));
+  await context.db.insert(feedbacks).values({ id: rowId(chainId, ev.txHash, ev.logIndex), ...ev, agentId, client: clientAddress, feedbackIndex: BigInt(feedbackIndex) });
+});
+
+ponder.on("IdentityRegistry:MetadataSet", async ({ event, context }) => {
+  if (event.log.topics[2]?.toLowerCase() !== AGENT_WALLET_KEY_TOPIC) return;
+  const chainId = context.chain.id;
+  const { agentId, metadataValue } = event.args;
+  const from = chainById(chainId).external.startBlocks.IdentityRegistry;
+  const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("10-agentwallet-history", { chainId, agentId: agentId.toString(), from }));
+  // abi.encodePacked(address): 20 bytes; empty bytes clear the wallet (IdentityRegistryUpgradeable :177-178, :194-195).
+  const wallet = size(metadataValue) === 20 ? getAddress(metadataValue) : null;
+  await context.db.insert(agentWallets).values({ id: rowId(chainId, ev.txHash, ev.logIndex), ...ev, agentId, wallet });
+});
+
+ponder.on("IdentityRegistry:Transfer", async ({ event, context }) => {
+  const chainId = context.chain.id;
+  const { to, tokenId } = event.args;
+  const from = chainById(chainId).external.startBlocks.IdentityRegistry;
+  const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("11-identity-transfers", { chainId, agentId: tokenId.toString(), from }));
+  await context.db.insert(agentOwners).values({ id: rowId(chainId, ev.txHash, ev.logIndex), ...ev, agentId: tokenId, owner: to === "0x0000000000000000000000000000000000000000" ? null : to });
+});
