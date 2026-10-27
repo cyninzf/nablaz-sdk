@@ -3,6 +3,7 @@ import { ponder, type Context } from "ponder:registry";
 import {
   accounts,
   counterparties,
+  factoryAccounts,
   grants,
   implementationHistory,
   obligationPairs,
@@ -12,7 +13,8 @@ import {
   vaults,
 } from "ponder:schema";
 import { BaseError, ContractFunctionRevertedError, getAddress, parseAbi, type Address, type Hex } from "viem";
-import { chainById } from "./chains";
+import { nablaOf } from "./chains";
+import { render } from "./oneliners";
 import {
   COUNTERPARTY_KINDS,
   DEPENDENCY_FIELD_MANDATE,
@@ -120,6 +122,14 @@ ponder.on("AccountFactory:AccountCreated", async ({ event, context }) => {
   const ev = evidence(context.chain.id, event.block, event.transaction.hash, event.log);
   const { account, accountId, owner } = event.args;
   await noteAccount(context, ev, { account, accountId, owner }, "factory");
+  // R-S189-4 AMENDED 2: the controller fallback is the factory's own owner, never the registry's.
+  await context.db.insert(factoryAccounts).values({
+    id: `${ev.chainId}-${lc(account)}`,
+    ...ev,
+    reproduce: render("8-account-created-by-account", { chainId: ev.chainId, account }),
+    account,
+    owner,
+  });
 });
 
 ponder.on("AccountRegistry:AccountCreated", async ({ event, context }) => {
@@ -332,7 +342,7 @@ ponder.on("Usdc:AuthorizationUsed", async ({ event, context }) => {
   const vault = await context.db.find(vaults, { id: `${chainId}-${lc(authorizer)}` });
   if (!vault) return; // not a grantee vault
 
-  const chain = chainById(chainId);
+  const chain = nablaOf(chainId);
   const token = event.log.address;
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log);
   const id = rowId(chainId, ev.txHash, ev.logIndex);
@@ -349,7 +359,7 @@ ponder.on("Usdc:AuthorizationUsed", async ({ event, context }) => {
   const inTx = vaultSettlementsInReceipt(logs, token, (x) => known.has(lc(x)));
   const recordEntriesForAccount = logs.filter(
     (l) =>
-      lc(l.address) === lc(chain.contracts.NablaRecord) &&
+      lc(l.address) === lc(chain.NablaRecord) &&
       l.topics[1] !== undefined &&
       lc(bytes32ToAddress(l.topics[1])) === lc(vault.account),
   ).length;
@@ -372,7 +382,7 @@ ponder.on("Usdc:AuthorizationUsed", async ({ event, context }) => {
     )
     .orderBy(desc(recordEntries.blockNumber), desc(recordEntries.logIndex))
     .limit(1);
-  const mandate = getAddress(dep?.counterparty ?? chain.contracts.ConsumerAIMandateV4);
+  const mandate = getAddress(dep?.counterparty ?? chain.ConsumerAIMandateV4);
 
   let envelope: Record<string, unknown> = {
     envelopeMandate: mandate,

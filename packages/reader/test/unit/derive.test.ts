@@ -17,7 +17,7 @@ import {
   vaultSettlementsInReceipt,
   type ReceiptLog,
 } from "../../src/derive";
-import { CHAINS, enabledChains } from "../../src/chains";
+import { CHAINS, enabledChains, hasNabla, startBlockOf } from "../../src/chains";
 import { ARBITRUM_ONE, PROTO_SHA } from "@nablaz/sdk/addresses";
 import { ABI_PROTO_SHA } from "@nablaz/sdk/abis";
 
@@ -120,13 +120,34 @@ describe("envelope (R-S184-2)", () => {
 });
 
 describe("chains", () => {
-  it("has Arbitrum enabled and Base present but disabled", () => {
-    expect(enabledChains().map((c) => c.chainId)).toEqual([42161]);
-    expect(CHAINS[8453]?.enabled).toBe(false);
-    expect(CHAINS[8453]?.contracts.NablaAccountFactoryPermanent).toBe(CHAINS[42161]?.contracts.NablaAccountFactoryPermanent);
+  it("has Arbitrum and Base enabled; NablaZ sources on Arbitrum only (R-S189-1)", () => {
+    expect(enabledChains(CHAINS, "").map((c) => c.chainId)).toEqual([8453, 42161]);
+    expect(hasNabla(CHAINS[42161]!)).toBe(true);
+    expect(hasNabla(CHAINS[8453]!)).toBe(false);
+    expect(Object.values(CHAINS[8453]!.nabla).every((v) => v === null)).toBe(true);
   });
-  it("refuses to enable a chain with an unpublished address", () => {
-    expect(() => enabledChains({ 8453: { ...CHAINS[8453]!, enabled: true } })).toThrow(/has no address/);
+  it("Base starts at the earliest external deployment block", () => {
+    expect(startBlockOf(CHAINS[8453]!)).toBe(23499060);
+  });
+  it("refuses an enabled chain with a null external address", () => {
+    const base = CHAINS[8453]!;
+    expect(() =>
+      enabledChains({ 8453: { ...base, external: { ...base.external, DelegationManager: null } } }, ""),
+    ).toThrow(/external DelegationManager has no address/);
+  });
+  it("refuses a partial NablaZ source set", () => {
+    const base = CHAINS[8453]!;
+    expect(() => enabledChains({ 8453: { ...base, nabla: { ...base.nabla, NablaRecord: CHAINS[42161]!.nabla.NablaRecord } } }, "")).toThrow(
+      /partial NablaZ source set/,
+    );
+  });
+  it("READER_CHAINS narrows the set", () => {
+    expect(enabledChains(CHAINS, "42161").map((c) => c.chainId)).toEqual([42161]);
+  });
+  it("external addresses are the same on both chains", () => {
+    const { startBlocks: _a, ...arb } = CHAINS[42161]!.external;
+    const { startBlocks: _b, ...base } = CHAINS[8453]!.external;
+    expect(base).toEqual(arb);
   });
   it("addresses and ABIs come from the same protocol commit", () => {
     expect(PROTO_SHA).toBe(ABI_PROTO_SHA);
