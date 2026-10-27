@@ -5,7 +5,10 @@
 //   3. A pays W 0.01 USDC from a grantee vault, then rates: grounded, the vault payment keeps its label.
 //   4. R pays W 0.01 USDC by a plain transfer, then rates: grounded, (c) direct transfer (R-S191-11).
 //   5. W transfers the identity away (the agentWallet clears), then R rates again: still grounded, because the
-//      wallet is resolved at the payment block; "wallet at feedback: cleared" is reported beside it (R-S191-12).
+//      address is resolved at the payment block; "wallet at feedback: cleared" is reported beside it (R-S191-12).
+//   6. R pays the new owner (no agentWallet), then rates: grounded, binding "owner, no agentWallet" (R-S191-16).
+//   7. R pays P2; only then is a second identity minted and moved to P2; R rates it. GET /read of P2 (an owner,
+//      never an agentWallet): not grounded, "identity did not exist at the payment block" (R-S191-16).
 // GET /read of W must never carry a feedback's value, decimals, tags or URIs. No mainnet transaction.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -54,6 +57,7 @@ const controller = key("account A controller");
 const grantee = key("vault grantee");
 const otherRater = key("second rater");
 const newOwner = key("identity's next owner");
+const laterOwner = key("second identity's owner P2");
 
 const identityAbi = parseAbi([
   "function register() returns (uint256)",
@@ -76,7 +80,9 @@ let wallet: ReturnType<typeof createWalletClient>;
 let served: Served;
 let body: string;
 let read: any;
-const S = {} as { A: Address; agentId: bigint; grantId: Hex; vault: Address; feedbackTx: Record<string, Hex>; settleTx: Hex; plainTx: Hex; endBlock: number };
+const S = {} as { A: Address; agentId: bigint; agentId2: bigint; grantId: Hex; vault: Address; feedbackTx: Record<string, Hex>; settleTx: Hex; plainTx: Hex; ownerPayTx: Hex; endBlock: number };
+let body2: string;
+let read2: any;
 
 const send = async (from: Address | PrivateKeyAccount, to: Address, data: Hex) => {
   const r = await pub.waitForTransactionReceipt({ hash: await wallet.sendTransaction({ account: from, to, data, chain: arbitrum }) });
@@ -150,8 +156,20 @@ beforeAll(async () => {
 
   // Feedback 5: W moves the identity (the registry clears the agentWallet), then R rates again.
   await send(agentOwner, IDENTITY, encodeFunctionData({ abi: identityAbi, functionName: "transferFrom", args: [agentOwner.address, newOwner.address, S.agentId] }));
-  const last = await send(otherRater, REPUTATION, feedbackData(S.agentId));
-  S.feedbackTx.cleared = last.transactionHash;
+  S.feedbackTx.cleared = (await send(otherRater, REPUTATION, feedbackData(S.agentId))).transactionHash;
+
+  // Feedback 6: R pays the new owner (the agentWallet is clear), then rates.
+  S.ownerPayTx = (await send(otherRater, USDC, encodeFunctionData({ abi: usdcAbi, functionName: "transfer", args: [newOwner.address, 5_000n] }))).transactionHash;
+  S.feedbackTx.owner = (await send(otherRater, REPUTATION, feedbackData(S.agentId))).transactionHash;
+
+  // Feedback 7: R pays P2 first; then W mints a second identity and moves it to P2; then R rates it.
+  await send(WHALE, USDC, encodeFunctionData({ abi: usdcAbi, functionName: "transfer", args: [otherRater.address, 10_000n] }));
+  await send(otherRater, USDC, encodeFunctionData({ abi: usdcAbi, functionName: "transfer", args: [laterOwner.address, 5_000n] }));
+  const reg2 = await send(agentOwner, IDENTITY, encodeFunctionData({ abi: identityAbi, functionName: "register" }));
+  S.agentId2 = parseEventLogs({ abi: identityAbi, eventName: "Registered", logs: reg2.logs })[0]!.args.agentId;
+  await send(agentOwner, IDENTITY, encodeFunctionData({ abi: identityAbi, functionName: "transferFrom", args: [agentOwner.address, laterOwner.address, S.agentId2] }));
+  const last = await send(otherRater, REPUTATION, feedbackData(S.agentId2));
+  S.feedbackTx.preIdentity = last.transactionHash;
   S.endBlock = Number(last.blockNumber);
   // Ponder treats blocks within 180 s of head as unfinalized; one block an hour later puts the window behind it.
   await test.setNextBlockTimestamp({ timestamp: (await pub.getBlock()).timestamp + 3_600n });
@@ -160,6 +178,8 @@ beforeAll(async () => {
   served = await indexOnce({ rpcUrl: anvil.url, startBlock: FORK_BLOCK + 1, endBlock: S.endBlock, sources: "nabla,external", serve: true });
   body = await (await fetch(`${served.url}/read/42161/${agentOwner.address}`)).text();
   read = JSON.parse(body);
+  body2 = await (await fetch(`${served.url}/read/42161/${laterOwner.address}`)).text();
+  read2 = JSON.parse(body2);
 }, 1_200_000);
 
 afterAll(async () => {
@@ -170,13 +190,14 @@ afterAll(async () => {
 const grounding = () => read.facts.filter((f: any) => f.source === "erc8004:feedback_grounding");
 const byTx = (tx: Hex) => grounding().find((f: any) => f.cite.tx === tx);
 
-describe("feedback grounding on an Arbitrum fork (R-S191-11, R-S191-12)", () => {
+describe("feedback grounding on an Arbitrum fork (R-S191-11, R-S191-12, R-S191-16)", () => {
   it("one grounding fact per feedback about W's agentId, each the rater's attestation (e)", () => {
     console.log(JSON.stringify({ agentId: S.agentId.toString(), A: S.A, W: agentOwner.address, vault: S.vault, settleTx: S.settleTx, plainTx: S.plainTx, feedbackTx: S.feedbackTx, grounding: grounding().map((f: any) => ({ tx: f.cite.tx, block: f.cite.block, ...f.terms, payment: f.terms.payment && { source: f.terms.payment.source, label: f.terms.payment.label, cite: f.terms.payment.cite } })) }, null, 2));
-    expect(grounding()).toHaveLength(5);
+    // W minted both identities, so W's read covers both: six feedbacks about the first, one about the second.
+    expect(grounding().filter((f: any) => f.terms.agentId === S.agentId.toString())).toHaveLength(6);
+    expect(grounding().filter((f: any) => f.terms.agentId === S.agentId2.toString()).map((f: any) => f.cite.tx)).toEqual([S.feedbackTx.preIdentity]);
     for (const f of grounding()) {
       expect(f.shape).toBe("e");
-      expect(f.terms.agentId).toBe(S.agentId.toString());
       expect(f.terms.feedbackURI).toBe("not read");
       expect(f.terms.transfersRead).toMatch(new RegExp(`^blocks ${FORK_BLOCK + 1}\\.\\.\\d+$`));
     }
@@ -199,7 +220,8 @@ describe("feedback grounding on an Arbitrum fork (R-S191-11, R-S191-12)", () => 
     expect(f.terms.payment).toMatchObject({ source: "erc20:transfer", shape: "c", label: "(c) not determinable" });
     expect(f.terms.payment.terms.reason).toBe("direct transfer, no permission object");
     expect(f.terms.payment.cite.tx).toBe(S.plainTx);
-    expect(f.terms.payment.walletAtPayment).toBe(agentOwner.address);
+    expect(f.terms.payment.boundAtPayment).toBe(agentOwner.address);
+    expect(f.terms.binding).toBe("agentWallet");
   });
 
   it("R-S191-12: after the identity moves and the wallet clears, the payment still grounds; the cleared wallet is reported beside it", () => {
@@ -209,11 +231,27 @@ describe("feedback grounding on an Arbitrum fork (R-S191-11, R-S191-12)", () => 
     expect(f.terms.walletAtFeedback).toBe("wallet at feedback: cleared");
   });
 
+  it("R-S191-16: with the agentWallet clear, R's payment to the owner grounds its next feedback, binding owner", () => {
+    const f = byTx(S.feedbackTx.owner!);
+    expect(f.terms.grounding).toBe("grounded");
+    expect(f.terms.binding).toBe("owner, no agentWallet");
+    expect(f.terms.payment.cite.tx).toBe(S.ownerPayTx);
+    expect(f.terms.payment.boundAtPayment).toBe(newOwner.address);
+  });
+
+  it("R-S191-16: a payment made before the identity existed does not ground (GET /read of the later owner)", () => {
+    const g = read2.facts.filter((f: any) => f.source === "erc8004:feedback_grounding");
+    expect(g).toHaveLength(1);
+    expect(g[0].cite.tx).toBe(S.feedbackTx.preIdentity);
+    expect(g[0].terms).toMatchObject({ agentId: S.agentId2.toString(), grounding: "not grounded", reason: "identity did not exist at the payment block" });
+    expect(read2.notes).toContain("native-token transfers not read");
+  });
+
   it("A's feedback before paying, and R's first feedback, are not grounded, with the range read", () => {
     for (const tx of [S.feedbackTx.before!, S.feedbackTx.other!]) {
       const f = byTx(tx);
       expect(f.terms.grounding).toBe("not grounded");
-      expect(f.terms.reason).toMatch(new RegExp(`^no ERC-20 Transfer from the rater to the agentWallet at its block, before the feedback \\(blocks ${FORK_BLOCK + 1}\\.\\.\\d+\\)$`));
+      expect(f.terms.reason).toMatch(new RegExp(`^no ERC-20 Transfer from the rater to the address bound at its block \\(agentWallet, else owner\\), before the feedback \\(blocks ${FORK_BLOCK + 1}\\.\\.\\d+\\)$`));
     }
   });
 
@@ -222,7 +260,10 @@ describe("feedback grounding on an Arbitrum fork (R-S191-11, R-S191-12)", () => 
   });
 
   it("never carries the feedback's value, decimals, tags, endpoint or URI", () => {
-    for (const leak of [LEAKS.value.toString(), LEAKS.tag1, LEAKS.tag2, LEAKS.endpoint, LEAKS.uri]) expect(body).not.toContain(leak);
+    for (const leak of [LEAKS.value.toString(), LEAKS.tag1, LEAKS.tag2, LEAKS.endpoint, LEAKS.uri]) {
+      expect(body).not.toContain(leak);
+      expect(body2).not.toContain(leak);
+    }
     // The grounding fact's own terms: the cited payment fact keeps its own fields (a vault payment's value is the
     // settled amount, not the feedback's).
     for (const f of grounding()) {

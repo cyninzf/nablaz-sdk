@@ -310,7 +310,7 @@ export function emptySourceNotes(x: {
   say("dm", "DelegationManager redemptions naming this address");
   if (x.lenders === 0) notes.push("no Agent Credit Lines lender registered on this chain");
   else say("credit", "Agent Credit Lines events naming this address");
-  say("agent_wallet", "ERC-8004 agentIds whose agentWallet this address has been");
+  say("agent_wallet", "ERC-8004 agentIds whose agentWallet or owner this address has been");
   if ((x.counts.agent_wallet ?? 0) > 0) say("feedback", "ERC-8004 feedback about those agentIds");
   return notes;
 }
@@ -348,20 +348,43 @@ export type RaterTransfer = { chainId: number; token: Address; from: Address; to
 /** A labelled payment fact, matched to a Transfer by transaction and the Transfer's log index. */
 export type LabelledPayment = { fact: Fact; tx: Hex; transferLogIndex: number };
 
-/** A grounding transfer: rater → the agentWallet at the transfer's block (R-S191-12), with its label. */
-export type GroundingPayment = { fact: Fact; payer: Address; payee: Address; block: bigint; logIndex: number };
+/**
+ * R-S191-16: the payment address of an agentId at a block: getAgentWallet there, else ownerOf there. "none" when the
+ * identity did not exist at that block (ownerOf reverts). Always resolved at the payment's own block.
+ */
+export type Binding = { kind: "agentWallet" | "owner"; address: Address } | { kind: "none" };
+export const BINDING_TEXT = { agentWallet: "agentWallet", owner: "owner, no agentWallet" } as const;
+/** R-S191-18: native-token transfers are not read for grounding. */
+export const NATIVE_NOT_READ = "native-token transfers not read";
+export const IDENTITY_DID_NOT_EXIST = "identity did not exist at the payment block";
+
+/** A grounding transfer: rater → the address bound at the transfer's block (R-S191-16), with its label. */
+export type GroundingPayment = { fact: Fact; payer: Address; payee: Address; block: bigint; logIndex: number; binding: "agentWallet" | "owner" };
 
 /**
- * R-S191-11 / R-S191-12: the rater's transfers whose recipient is the agentWallet at the transfer's own block.
- * `walletAt(block)` is getAgentWallet(agentId) at that block (null when unset). Each keeps its permission
- * label when it is one of the reader's payment facts; otherwise it is (c), "direct transfer, no permission
- * object". Labelling and grounding are separate: the label never decides whether a transfer grounds.
+ * R-S191-11 / R-S191-16: the rater's transfers whose recipient is the address bound at the transfer's own block.
+ * `bindingAt(block)` is the binding at exactly that block (undefined when no binding was read for it: the
+ * recipient was not a candidate). Each keeps its permission label when it is one of the reader's payment facts;
+ * otherwise it is (c), "direct transfer, no permission object". The label never decides whether a transfer
+ * grounds. `preIdentity` lists candidate transfers made while the identity did not exist.
  */
-export function groundingTransfers(transfers: RaterTransfer[], walletAt: (block: bigint) => Address | null, labelled: LabelledPayment[]): GroundingPayment[] {
+export function groundingTransfers(
+  transfers: RaterTransfer[],
+  bindingAt: (block: bigint) => Binding | undefined,
+  labelled: LabelledPayment[],
+): { payments: GroundingPayment[]; preIdentity: RaterTransfer[] } {
   const byLog = new Map(labelled.map((l) => [`${lc(l.tx)}-${l.transferLogIndex}`, l.fact]));
-  return transfers
-    .filter((t) => same(t.to, walletAt(t.block)))
-    .map((t) => ({
+  const payments: GroundingPayment[] = [];
+  const preIdentity: RaterTransfer[] = [];
+  for (const t of transfers) {
+    const b = bindingAt(t.block);
+    if (!b) continue;
+    if (b.kind === "none") {
+      preIdentity.push(t);
+      continue;
+    }
+    if (!same(t.to, b.address)) continue;
+    payments.push({
       fact:
         byLog.get(`${lc(t.tx)}-${t.logIndex}`) ?? {
           source: PLAIN_TRANSFER_SOURCE,
@@ -376,18 +399,21 @@ export function groundingTransfers(transfers: RaterTransfer[], walletAt: (block:
       payee: getAddress(t.to),
       block: t.block,
       logIndex: t.logIndex,
-    }));
+      binding: b.kind,
+    });
+  }
+  return { payments, preIdentity };
 }
 
 export type GroundingInput = {
   subject: Address;
   /** A feedbacks row. */
   feedback: Row;
-  /** Grounding transfers (groundingTransfers), or the read that could not be made. */
-  payments: GroundingPayment[] | { error: string };
+  /** groundingTransfers' result, or the read that could not be made. */
+  payments: { payments: GroundingPayment[]; preIdentity: RaterTransfer[] } | { error: string };
   /** The block range the rater's transfers were read over (it ends at the feedback block). */
   transfersRange: { from: number; to: bigint };
-  /** R-S191-12: getAgentWallet at the feedback block (null: cleared or never set). Reported, never the test. */
+  /** R-S191-12/16: getAgentWallet at the feedback block (null: cleared or never set). Reported, never the test. */
   walletAtFeedback: Address | null | { error: string };
   /** The rater's and the subject's controller, when each is a NablaZ account on this chain; else null. */
   raterController: Controller | null;
@@ -397,8 +423,9 @@ export type GroundingInput = {
 const before = (p: { block: bigint; logIndex: number }, block: bigint, logIndex: number) => p.block < block || (p.block === block && p.logIndex < logIndex);
 
 /**
- * One grounding fact per feedback: grounded when an ERC-20 Transfer from the rater to the agentWallet (resolved
- * at the transfer's block) settled before the feedback, by block and then by log index within the block. The
+ * One grounding fact per feedback: grounded when an ERC-20 Transfer from the rater to the address bound at the
+ * transfer's block (agentWallet, else owner; R-S191-16) settled before the feedback, by block and then by log
+ * index within the block. The
  * fact is the rater's attestation (e), writer named. Never the feedback's value, decimals, tags or URIs.
  */
 export function groundingFact(x: GroundingInput): Fact {
@@ -416,7 +443,8 @@ export function groundingFact(x: GroundingInput): Fact {
     status = "not determinable";
     reason = `the rater's transfers in ${range} could not be read (${x.payments.error})`;
   } else {
-    const mine = x.payments.filter((p) => same(p.payer, client));
+    const mine = x.payments.payments.filter((p) => same(p.payer, client));
+    const preIdentity = x.payments.preIdentity.some((t) => same(t.from, client) && before(t, block, f.logIndex));
     const sameBlockUnordered = mine.some((p) => p.block === block && !Number.isInteger(p.logIndex));
     payment = mine
       .filter((p) => before(p, block, f.logIndex))
@@ -426,9 +454,12 @@ export function groundingFact(x: GroundingInput): Fact {
     else if (sameBlockUnordered) {
       status = "not determinable";
       reason = "same block";
+    } else if (preIdentity) {
+      status = "not grounded";
+      reason = IDENTITY_DID_NOT_EXIST;
     } else {
       status = "not grounded";
-      reason = `no ERC-20 Transfer from the rater to the agentWallet at its block, before the feedback (${range})`;
+      reason = `no ERC-20 Transfer from the rater to the address bound at its block (agentWallet, else owner), before the feedback (${range})`;
     }
   }
   const walletAtFeedback =
@@ -452,8 +483,9 @@ export function groundingFact(x: GroundingInput): Fact {
       feedbackIndex: str(f.feedbackIndex),
       grounding: status,
       ...(reason ? { reason } : {}),
-      ...(payment ? { payment: { ...payment.fact, payer: payment.payer, walletAtPayment: payment.payee } } : {}),
+      ...(payment ? { payment: { ...payment.fact, payer: payment.payer, boundAtPayment: payment.payee }, binding: BINDING_TEXT[payment.binding] } : {}),
       transfersRead: range,
+      nativeTransfers: "not read",
       walletAtFeedback,
       raterIsSubject: same(client, x.subject),
       sameController,

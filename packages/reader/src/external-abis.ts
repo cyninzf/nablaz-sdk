@@ -32,5 +32,7 @@ export const ReputationRegistryAbi = parseAbi([
 ]);
 export const IdentityRegistryAbi = parseAbi([
   "event MetadataSet(uint256 indexed agentId, string indexed indexedMetadataKey, string metadataKey, bytes metadataValue)",
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
   "function getAgentWallet(uint256 agentId) view returns (address)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
 ]);

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { db, publicClients } from "ponder:api";
 import {
   accounts,
+  agentOwners,
   agentWallets,
   creditLineEvents,
   externalPayments,
@@ -24,10 +25,11 @@ import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, typ
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
-import { agentWalletHistory, transfersFrom, walletAt, walletsAtTransferBlocks } from "../grounding-rpc";
+import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
 import {
   FEEDBACK_URI_NOT_READ,
   GROUNDING_SOURCE,
+  NATIVE_NOT_READ,
   cShare,
   controllerAt,
   creditLineFacts,
@@ -45,7 +47,6 @@ import {
   type ControllerInput,
   type ExposureGrant,
   type Fact,
-  type GroundingPayment,
   type LabelledPayment,
   type RaterTransfer,
   type Payment,
@@ -225,9 +226,9 @@ app.get("/read/:chainId/:address", async (c) => {
     notes.push(`self-dealing and exposure: ${subject} is not a NablaZ account on chain ${chainId}`);
   }
 
-  // ERC-8004 feedback grounding (R-D2B-2, R-S191-11, R-S191-12): when the subject has been the agentWallet of an
-  // indexed agentId. A feedback is grounded by any ERC-20 Transfer from the rater to the agentWallet resolved at
-  // the transfer's block. The rater's transfers are read by eth_getLogs (topic1 = rater, any token) from the
+  // ERC-8004 feedback grounding (R-D2B-2, R-S191-11, R-S191-16): when the subject has been the agentWallet or the
+  // owner of an indexed agentId. A feedback is grounded by any ERC-20 Transfer from the rater to the address bound at the
+  // transfer's block: getAgentWallet there, else ownerOf there. The rater's transfers are read by eth_getLogs (topic1 = rater, any token) from the
   // Identity Registry's start (no agentWallet exists before it) to the feedback block; a settlement from one of
   // the rater's own grantee vaults counts as from the rater. A transfer that is an indexed payment fact keeps its
   // label; any other is (c), "direct transfer, no permission object".
@@ -238,7 +239,14 @@ app.get("/read/:chainId/:address", async (c) => {
         .from(agentWallets)
         .where(and(eq(agentWallets.chainId, chainId), isNotNull(agentWallets.wallet), eq(agentWallets.wallet, a)))
     : [];
-  const agentIds = walletRows.map((w) => w.agentId);
+  const ownerRows = external
+    ? await db
+        .selectDistinct({ agentId: agentOwners.agentId })
+        .from(agentOwners)
+        .where(and(eq(agentOwners.chainId, chainId), isNotNull(agentOwners.owner), eq(agentOwners.owner, a)))
+    : [];
+  // R-S191-16: an agentId is the subject's when the subject has been its agentWallet or its owner.
+  const agentIds = [...new Set([...walletRows, ...ownerRows].map((w) => w.agentId))];
   const fbs = agentIds.length
     ? await db.select().from(feedbacks).where(and(eq(feedbacks.chainId, chainId), inArray(feedbacks.agentId, agentIds)))
     : [];
@@ -302,14 +310,13 @@ app.get("/read/:chainId/:address", async (c) => {
     for (const f of fbs) {
       const rater = lc(f.client);
       const data = await raterData(rater, lastFeedback.get(rater)!);
-      let payments: GroundingPayment[] | { error: string };
+      let payments: ReturnType<typeof groundingTransfers> | { error: string };
       if ("error" in data) payments = data;
       else {
         try {
           const prior = data.transfers.filter((t) => t.block <= f.blockNumber);
-          const history = await agentWalletHistory(client, registry, f.agentId, BigInt(transfersFromBlock), f.blockNumber);
-          const wallets = await walletsAtTransferBlocks(client, registry, f.agentId, prior, history);
-          payments = groundingTransfers(prior, wallets, data.labelled);
+          const candidates = await boundHistory(client, registry, f.agentId, BigInt(transfersFromBlock), f.blockNumber);
+          payments = groundingTransfers(prior, await bindingsAtTransferBlocks(client, registry, f.agentId, prior, candidates), data.labelled);
         } catch (e) {
           payments = { error: String((e as Error).message ?? e).split("\n")[0]! };
         }
@@ -327,7 +334,7 @@ app.get("/read/:chainId/:address", async (c) => {
         }),
       );
     }
-    notes.push(FEEDBACK_URI_NOT_READ);
+    notes.push(FEEDBACK_URI_NOT_READ, NATIVE_NOT_READ);
     for (const g of groundingFacts) {
       const t = g.terms as { grounding: string; reason?: string };
       if (t.grounding !== "grounded") notes.push(`${GROUNDING_SOURCE} at block ${g.cite.block} tx ${g.cite.tx} log ${g.cite.logIndex}: ${t.grounding}${t.reason ? ` (${t.reason})` : ""}`);

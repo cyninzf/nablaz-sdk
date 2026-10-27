@@ -1,16 +1,20 @@
-// The chain reads behind feedback grounding (R-S191-11, R-S191-12), shared by GET /read and the AFG test.
+// The chain reads behind feedback grounding (R-S191-11, R-S191-16), shared by GET /read and the AFG test.
 //
 // Plain transfers are not indexed: no source filter can name every rater in advance. They are read at read
 // time with eth_getLogs, topic0 = Transfer, topic1 = the rater, any token address, over an explicit block range
 // that ends at the feedback block. ERC-721 Transfers (four topics) are dropped. A transfer counts only if its
-// recipient is the agentWallet at the transfer's own block: candidates are the recipients in the agentId's
-// agentWallet history (MetadataSet, s3 §6.4b (10)), each confirmed by getAgentWallet at that block.
+// recipient is the address bound at the transfer's own block (R-S191-16): getAgentWallet there, else ownerOf
+// there. Candidates are the recipients that appear in the agentId's agentWallet history (MetadataSet, s3 §6.4b
+// (10)) or owner history (the Identity Registry's ERC-721 Transfer, s3 §6.4b (11)); each candidate's binding is
+// read at exactly the transfer's block, never later.
 
-import { getAddress, hexToBigInt, type Address, type Hex, type PublicClient } from "viem";
+import { getAddress, hexToBigInt, parseAbi, type Address, type Hex, type PublicClient } from "viem";
 import { IdentityRegistryAbi } from "./external-abis.ts";
 import { AGENT_WALLET_KEY_TOPIC } from "./oneliners.ts";
 import { TRANSFER_TOPIC } from "./delegation.ts";
-import type { RaterTransfer } from "./read.ts";
+import type { Binding, RaterTransfer } from "./read.ts";
+
+const ownerOfAbi = parseAbi(["function ownerOf(uint256 tokenId) view returns (address)"]);
 
 const METADATA_SET_TOPIC: Hex = "0x2c149ed548c6d2993cd73efe187df6eccabe4538091b33adbd25fafdb8a1468b";
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -69,21 +73,53 @@ export async function walletAt(client: PublicClient, registry: Address, agentId:
   return w === ZERO ? null : getAddress(w);
 }
 
+/** Every address that has owned `agentId` up to `toBlock` (the Identity Registry's ERC-721 Transfer, topic3). */
+export async function ownerHistory(client: PublicClient, registry: Address, agentId: bigint, fromBlock: bigint, toBlock: bigint): Promise<Set<string>> {
+  const logs = await getLogsSplit(client, { address: registry, topics: [TRANSFER_TOPIC, null, null, pad32(`0x${agentId.toString(16)}`)] }, fromBlock, toBlock);
+  const out = new Set<string>();
+  for (const l of logs) if (l.topics.length === 4) out.add(`0x${l.topics[2]!.slice(26)}`.toLowerCase());
+  out.delete(ZERO);
+  return out;
+}
+
 /**
- * The agentWallet at each candidate transfer's block, for transfers whose recipient the agentId's wallet
- * history contains. Returns a lookup for groundingTransfers; a block not looked up reads as null.
+ * R-S191-16 at one block: getAgentWallet, else ownerOf; "none" when ownerOf reverts with the registry's
+ * ERC721NonexistentToken (the identity did not exist). Any other failure is thrown: a read that cannot be made.
  */
-export async function walletsAtTransferBlocks(
+export async function bindingAt(client: PublicClient, registry: Address, agentId: bigint, blockNumber: bigint): Promise<Binding> {
+  const wallet = await walletAt(client, registry, agentId, blockNumber);
+  if (wallet) return { kind: "agentWallet", address: wallet };
+  try {
+    const owner = await client.readContract({ address: registry, abi: ownerOfAbi, functionName: "ownerOf", args: [agentId], blockNumber });
+    return { kind: "owner", address: getAddress(owner) };
+  } catch (e) {
+    // ERC721NonexistentToken(uint256): selector 0x7e273289.
+    if (/0x7e273289/.test(String((e as { message?: string }).message ?? e)) || /0x7e273289/.test(JSON.stringify(e, Object.getOwnPropertyNames(e as object)))) return { kind: "none" };
+    throw e;
+  }
+}
+
+/** Every address the agentId has been bound to up to `toBlock`: its agentWallet history and its owner history. */
+export async function boundHistory(client: PublicClient, registry: Address, agentId: bigint, fromBlock: bigint, toBlock: bigint): Promise<Set<string>> {
+  const [w, o] = await Promise.all([agentWalletHistory(client, registry, agentId, fromBlock, toBlock), ownerHistory(client, registry, agentId, fromBlock, toBlock)]);
+  return new Set([...w, ...o]);
+}
+
+/**
+ * The binding at each candidate transfer's own block, for transfers whose recipient is in `candidates`. Returns
+ * the lookup groundingTransfers takes; a block with no candidate transfer reads as undefined.
+ */
+export async function bindingsAtTransferBlocks(
   client: PublicClient,
   registry: Address,
   agentId: bigint,
   transfers: RaterTransfer[],
-  history: Set<string>,
-): Promise<(block: bigint) => Address | null> {
-  const at = new Map<bigint, Address | null>();
+  candidates: Set<string>,
+): Promise<(block: bigint) => Binding | undefined> {
+  const at = new Map<bigint, Binding>();
   for (const t of transfers) {
-    if (!history.has(t.to.toLowerCase()) || at.has(t.block)) continue;
-    at.set(t.block, await walletAt(client, registry, agentId, t.block));
+    if (!candidates.has(t.to.toLowerCase()) || at.has(t.block)) continue;
+    at.set(t.block, await bindingAt(client, registry, agentId, t.block));
   }
-  return (block) => at.get(block) ?? null;
+  return (block) => at.get(block);
 }

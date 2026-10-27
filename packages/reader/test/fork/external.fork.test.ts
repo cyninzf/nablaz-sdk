@@ -8,8 +8,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { createPublicClient, getAddress, http, parseAbi, type Address, type Hex, type PublicClient } from "viem";
 import { cShareOverIndex, formatShare } from "../../src/c-share";
-import { agentWalletHistory, transfersFrom, walletAt, walletsAtTransferBlocks } from "../../src/grounding-rpc";
-import { groundingFact, groundingTransfers, paymentFacts, type GroundingPayment, type LabelledPayment } from "../../src/read";
+import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
+import { groundingFact, groundingTransfers, paymentFacts, type LabelledPayment } from "../../src/read";
 import { CHAINS, CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src/chains";
 import { render } from "../../src/oneliners";
 import { UPSTREAM, UPSTREAM_BASE, indexOnce, redact, stopAndDump, type Served, type Tables } from "./harness";
@@ -167,7 +167,7 @@ describe.each([42161, 8453] as const)("chain %i, ERC-8004 and the (c) share", (c
     }
   });
 
-  it("R-D2B-2 (R-S191-11/12): grounding of every feedback in the window, counted (monitor, not a gate)", async () => {
+  it("R-D2B-2 (R-S191-11/16): grounding of every feedback in the window, counted (monitor, not a gate)", async () => {
     const client = createPublicClient({ transport: http(rpcUrl) }) as PublicClient;
     const registry = CHAINS[chainId]!.external.IdentityRegistry!;
     const identityStart = BigInt(CHAINS[chainId]!.external.startBlocks.IdentityRegistry);
@@ -181,7 +181,7 @@ describe.each([42161, 8453] as const)("chain %i, ERC-8004 and the (c) share", (c
       const agentId = BigInt(String(row.agentId));
       const block = BigInt(String(row.blockNumber));
       const rater = getAddress(String(row.client));
-      let payments: GroundingPayment[] | { error: string };
+      let payments: ReturnType<typeof groundingTransfers> | { error: string };
       try {
         const transfers = await transfersFrom(client, chainId, rater, BigInt(w.from), block);
         const labelled: LabelledPayment[] = [];
@@ -189,8 +189,8 @@ describe.each([42161, 8453] as const)("chain %i, ERC-8004 and the (c) share", (c
           const tr = transfers.find((x) => x.tx === p.txHash && (p.source === "spm" ? x.to.toLowerCase() === String(p.payee) && x.amount === BigInt(String(p.amount)) : x.logIndex === Number(p.logIndex)));
           if (tr) labelled.push({ fact: facts[i]!, tx: tr.tx, transferLogIndex: tr.logIndex });
         });
-        const history = await agentWalletHistory(client, registry, agentId, identityStart, block);
-        payments = groundingTransfers(transfers, await walletsAtTransferBlocks(client, registry, agentId, transfers, history), labelled);
+        const candidates = await boundHistory(client, registry, agentId, identityStart, block);
+        payments = groundingTransfers(transfers, await bindingsAtTransferBlocks(client, registry, agentId, transfers, candidates), labelled);
       } catch (e) {
         payments = { error: String((e as Error).message).split("\n")[0]! };
       }

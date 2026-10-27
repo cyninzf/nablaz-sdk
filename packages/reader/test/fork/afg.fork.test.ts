@@ -1,8 +1,9 @@
-// This reader's grounding (R-D2B-2 as corrected by R-S191-11/12) on every row of AFG's grounded-feedback fixture
+// This reader's grounding (R-D2B-2 as corrected by R-S191-11/12/16) on every row of AFG's grounded-feedback fixture
 // (Base, CC BY 4.0; test/fixtures/afg/README.md). Per row, read-only against Base, with the reader's own code
 // (src/grounding-rpc.ts, src/read.ts): the NewFeedback log at the row's transaction and log index; every ERC-20
 // Transfer from the rater (eth_getLogs, topic1 = rater, any token) over blocks IDENTITY_START..feedback block; the
-// agentWallet at each candidate transfer's block; the wallet at the feedback block, reported beside it. Labels
+// binding at each candidate transfer's block (agentWallet, else owner; candidates from the agentWallet and owner
+// histories); the wallet at the feedback block, reported beside it. Labels
 // come from decoding the grounding transaction (SpendPermissionUsed; a delegator's Transfer beside a
 // RedeemedDelegation); any other transfer is (c), direct transfer. The comparison is written to
 // docs/reader/afg-agreement-2026-10-20.csv (AFG_WRITE=1, replacing it) and otherwise must equal it.
@@ -13,7 +14,7 @@ import { createPublicClient, decodeEventLog, getAddress, http, type Address, typ
 import { CHAINS } from "../../src/chains";
 import { decodeRedeemedDelegation, delegationHash, erc20TransfersFrom, type Delegation, type ReceiptLogLike } from "../../src/delegation";
 import { ReputationRegistryAbi, SpendPermissionManagerAbi } from "../../src/external-abis";
-import { agentWalletHistory, transfersFrom, walletAt, walletsAtTransferBlocks } from "../../src/grounding-rpc";
+import { bindingAt, bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
 import { SPM_LABEL, shapeOfDelegation } from "../../src/labels";
 import { groundingFact, groundingTransfers, paymentFacts, type GroundingPayment, type LabelledPayment, type RaterTransfer } from "../../src/read";
 import { UPSTREAM_BASE } from "./harness";
@@ -43,7 +44,9 @@ const receipt = (hash: Hex) => {
 const lc = (a: string) => a.toLowerCase();
 
 /** The payment facts the reader's handlers would write for one transaction (src/external.ts). */
-async function paymentsIn(tx: Hex): Promise<GroundingPayment[]> {
+type TxPayment = Omit<GroundingPayment, "binding">;
+
+async function paymentsIn(tx: Hex): Promise<TxPayment[]> {
   const { logs } = await receipt(tx);
   const like: ReceiptLogLike[] = logs.map((l) => ({ address: l.address, topics: l.topics as Hex[], data: l.data, logIndex: l.logIndex! }));
   const rows: Record<string, unknown>[] = [];
@@ -111,42 +114,43 @@ async function labelsIn(tx: Hex, transfers: RaterTransfer[]): Promise<LabelledPa
   return out;
 }
 
-type Result = { ours: string; ourPaymentTx: string; label: string; walletAtFeedback: string; reason: string };
+type Result = { ours: string; ourPaymentTx: string; label: string; binding: string; walletAtFeedback: string; reason: string };
 
 async function evaluate(row: Row): Promise<Result> {
   const [tx, logHex] = row.feedback_id.split(":") as [Hex, string];
   const { logs } = await receipt(tx);
   const log = logs.find((l) => l.logIndex === Number(logHex));
-  const none = { ourPaymentTx: "", label: "", walletAtFeedback: "" };
+  const none = { ourPaymentTx: "", label: "", binding: "", walletAtFeedback: "" };
   if (!log) return { ours: "not determinable", ...none, reason: "feedback log not found at the row's transaction and log index" };
   const fb = decodeEventLog({ abi: ReputationRegistryAbi, data: log.data, topics: log.topics as [Hex, ...Hex[]] }).args as { agentId: bigint; clientAddress: Address; feedbackIndex: bigint };
   if (fb.agentId.toString() !== row.agent_id || lc(fb.clientAddress) !== lc(row.rater)) return { ours: "not determinable", ...none, reason: "the feedback log does not match the row's agent_id and rater" };
   const block = log.blockNumber!;
   const prior = (await transfersOf(row.rater)).filter((t) => t.block <= block);
-  const history = await agentWalletHistory(client, BASE.IdentityRegistry!, fb.agentId, IDENTITY_START, block);
-  const wallets = await walletsAtTransferBlocks(client, BASE.IdentityRegistry!, fb.agentId, prior, history);
-  const candidateTxs = [...new Set(prior.filter((t) => wallets(t.block) !== null && lc(wallets(t.block)!) === lc(t.to)).map((t) => t.tx))];
+  const history = await boundHistory(client, BASE.IdentityRegistry!, fb.agentId, IDENTITY_START, block);
+  const bindings = await bindingsAtTransferBlocks(client, BASE.IdentityRegistry!, fb.agentId, prior, history);
+  const candidateTxs = [...new Set(prior.filter((t) => { const b = bindings(t.block); return b && b.kind !== "none" && lc(b.address) === lc(t.to); }).map((t) => t.tx))];
   const labelled = (await Promise.all(candidateTxs.map((h) => labelsIn(h, prior)))).flat();
   const g = groundingFact({
     subject: fb.clientAddress,
     feedback: { chainId: 8453, blockNumber: block, txHash: tx, logIndex: log.logIndex, reproduce: "", agentId: fb.agentId, client: fb.clientAddress, feedbackIndex: fb.feedbackIndex },
-    payments: groundingTransfers(prior, wallets, labelled),
+    payments: groundingTransfers(prior, bindings, labelled),
     transfersRange: { from: Number(IDENTITY_START), to: block },
     walletAtFeedback: await walletAt(client, BASE.IdentityRegistry!, fb.agentId, block),
     raterController: null,
     subjectController: null,
   });
-  const t = g.terms as { grounding: string; reason?: string; walletAtFeedback: string; payment?: { cite: { tx: string }; label: string; source: string } };
-  const base = { ourPaymentTx: t.payment?.cite.tx ?? "", label: t.payment ? `${t.payment.source} ${t.payment.label}` : "", walletAtFeedback: t.walletAtFeedback };
+  const t = g.terms as { grounding: string; reason?: string; binding?: string; walletAtFeedback: string; payment?: { cite: { tx: string }; label: string; source: string } };
+  const base = { ourPaymentTx: t.payment?.cite.tx ?? "", label: t.payment ? `${t.payment.source} ${t.payment.label}` : "", binding: t.binding ?? "", walletAtFeedback: t.walletAtFeedback };
   if (t.grounding === "grounded") return { ours: "grounded", ...base, reason: t.payment!.cite.tx === row.payment_tx ? "same payment as AFG" : "grounded by another rater transfer than AFG's payment" };
   if (t.grounding === "not determinable") return { ours: t.grounding, ...base, reason: t.reason! };
-  // Not grounded: say what the chain shows about AFG's payee.
+  // Not grounded: say what the chain shows about AFG's payee at AFG's payment block.
   const payee = row.payee.split(":").at(-1)!;
   const afgPay = (await receipt(row.payment_tx)).logs[0]?.blockNumber;
-  const atAfgPay = afgPay ? await walletAt(client, BASE.IdentityRegistry!, fb.agentId, afgPay) : null;
-  if (!history.has(lc(payee))) return { ours: t.grounding, ...base, reason: `AFG's payee was never this agentId's agentWallet (on-chain history up to the feedback); agentWallet at AFG's payment block: ${atAfgPay ?? "unset"}` };
-  if (!atAfgPay || lc(atAfgPay) !== lc(payee)) return { ours: t.grounding, ...base, reason: `AFG's payee was an agentWallet of this agentId, but not at AFG's payment block (agentWallet there: ${atAfgPay ?? "unset"})` };
-  return { ours: t.grounding, ...base, reason: "AFG's payee was the agentWallet at its payment block, yet no rater Transfer to it was found before the feedback" };
+  const at = afgPay ? await bindingAt(client, BASE.IdentityRegistry!, fb.agentId, afgPay) : null;
+  const atText = !at ? "unread" : at.kind === "none" ? "identity did not exist" : `${at.kind} ${at.address}`;
+  if (t.reason === "identity did not exist at the payment block") return { ours: t.grounding, ...base, reason: `identity did not exist at the payment block (AFG's payee ${history.has(lc(payee)) ? "was bound to it later" : "was never bound to it"})` };
+  if (at && at.kind !== "none" && lc(at.address) === lc(payee)) return { ours: t.grounding, ...base, reason: `AFG's payee was bound at its payment block (${atText}), yet no rater Transfer to it was found before the feedback` };
+  return { ours: t.grounding, ...base, reason: `AFG's payee was not the bound address at AFG's payment block (bound there: ${atText})` };
 }
 
 async function pool<T, R>(xs: T[], n: number, f: (x: T) => Promise<R>): Promise<R[]> {
@@ -166,10 +170,10 @@ describe("AFG fixture (Base, 816 grounded feedback entries)", () => {
     expect(rows).toHaveLength(816);
     const results = await pool(rows, 8, evaluate);
     const csv = [
-      "feedback_id,agent_id,rater,feedback_block,afg_payment_tx,rail,afg,ours,our_payment_tx,our_payment_label,wallet_at_feedback,reason",
+      "feedback_id,agent_id,rater,feedback_block,afg_payment_tx,rail,afg,ours,our_payment_tx,our_payment_label,binding,wallet_at_feedback,reason",
       ...rows.map((r, i) => {
         const x = results[i]!;
-        return [r.feedback_id, r.agent_id, r.rater, r.feedback_block, r.payment_tx, r.rail, "grounded", x.ours, x.ourPaymentTx, `"${x.label}"`, `"${x.walletAtFeedback}"`, `"${x.reason}"`].join(",");
+        return [r.feedback_id, r.agent_id, r.rater, r.feedback_block, r.payment_tx, r.rail, "grounded", x.ours, x.ourPaymentTx, `"${x.label}"`, `"${x.binding}"`, `"${x.walletAtFeedback}"`, `"${x.reason}"`].join(",");
       }),
     ].join("\n") + "\n";
     const agree = results.filter((r) => r.ours === "grounded").length;

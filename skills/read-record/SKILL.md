@@ -74,7 +74,7 @@ Each fact has `source`, `label`, `shape`, `terms`, `cite` (`chainId`, `block`, `
 | `metamask:delegation_payment` | an ERC-20 `Transfer` from the delegator in a redemption's transaction | its delegation's label, or (c) if that delegation row is not indexed |
 | `metamask:redemption` | a `RedeemedDelegation`, whether or not it moved value | its shape from the caveats |
 | `agent_credit_lines` | `Borrowed`, `Repaid` or `Defaulted` at a registered lender | (e), naming the lender |
-| `erc8004:feedback_grounding` | an ERC-8004 `NewFeedback` about an agentId whose agentWallet the subject has been, with its grounding | (e), naming the rater |
+| `erc8004:feedback_grounding` | an ERC-8004 `NewFeedback` about an agentId whose agentWallet or owner the subject has been, with its grounding | (e), naming the rater |
 
 To cite a fact, give `cite` and `reproduce`. `reproduce` is a `cast` command. It reads the RPC URL from
 `$ARB_ONE_RPC_URL` or `$BASE_RPC_URL` (README, "Citation rule"). A vault payment's citation has two parts:
@@ -135,22 +135,28 @@ this chain` means no lender is configured (`packages/reader/src/read.ts`, `range
 Say "nothing indexed" and give the range. A redemption with no same-transaction Transfer says so:
 `terms.payment` reads `no ERC-20 Transfer from the delegator in this tx; not a payment (R-S189-5)`.
 
-**Feedback grounding (R-D2B-2, R-S191-11, R-S191-12).** When the subject has been the agentWallet of an
-ERC-8004 agentId, every `NewFeedback` about that agentId becomes an `erc8004:feedback_grounding` fact, cited
-at the feedback log (`packages/reader/src/read.ts`, `groundingFact`). The ERC-8004 "Reputation Registry"
-emits the feedback; the Identity Registry holds the agentWallet. `terms.grounding` is one of:
+**Feedback grounding (R-D2B-2, R-S191-11, R-S191-16).** When the subject has been the agentWallet or the
+owner of an ERC-8004 agentId, every `NewFeedback` about that agentId becomes an `erc8004:feedback_grounding`
+fact, cited at the feedback log (`packages/reader/src/read.ts`, `groundingFact`). The ERC-8004
+"Reputation Registry" emits the feedback; the Identity Registry holds the agentWallet and the owner.
+`terms.grounding` is one of:
 
-- `grounded`: an ERC-20 Transfer from the rater to the agentWallet settled before the feedback, by block and
-  then by log index within the block. Any token and any route count: a plain transfer, a spend permission
-  spend, a delegation payment, or a settlement from one of the rater's own grantee vaults. The agentWallet is
-  resolved with `getAgentWallet` at the transfer's own block. `terms.payment` is the most recent such
-  transfer: it keeps its permission label when it is one of the reader's payment facts, and is
+- `grounded`: an ERC-20 Transfer from the rater to the identity's payment address settled before the
+  feedback, by block and then by log index within the block. Any token and any route count. The payment
+  address is resolved at the transfer's own block, never later: the agentWallet there, else the owner there.
+  `terms.binding` says which: `agentWallet` or `owner, no agentWallet`. `terms.payment` is the most recent
+  such transfer: it keeps its permission label when it is one of the reader's payment facts, and is
   `(c) not determinable` with reason `direct transfer, no permission object` otherwise. The label says how
   the payment was bounded; it does not decide whether it grounds.
-- `not grounded`: no such transfer in the range `terms.transfersRead` states, including when the agentId had
-  no agentWallet at any of the rater's transfers.
+- `not grounded`: no such transfer in the range `terms.transfersRead` states. When the rater's transfer
+  to an address later bound to the identity was made before the identity existed, the reason is
+  `identity did not exist at the payment block`.
 - `not determinable`: only for reads the reader cannot make: the rater's transfers could not be read, or the
   range starts after the feedback ("indexed up to X; source starts at Y").
+
+A settlement from the rater's own grantee vault is a payment from the rater (R-S191-17).
+Native-token transfers are not read for grounding: `terms.nativeTransfers` is `not read`, and the notes say
+`native-token transfers not read` (R-S191-18).
 
 `terms.walletAtFeedback` reports the agentWallet at the feedback block beside the grounding, as
 `wallet at feedback: <address>` or `wallet at feedback: cleared`. It is never the grounding test: the

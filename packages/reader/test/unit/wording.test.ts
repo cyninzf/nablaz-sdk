@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ALLOWED_NAMES, bannedHits } from "../../src/wording";
-import { DIRECT_TRANSFER, FEEDBACK_URI_NOT_READ, NO_TRANSFER, emptySourceNotes, groundingFact, groundingTransfers, rangeNote } from "../../src/read";
+import { DIRECT_TRANSFER, FEEDBACK_URI_NOT_READ, IDENTITY_DID_NOT_EXIST, NATIVE_NOT_READ, NO_TRANSFER, emptySourceNotes, groundingFact, groundingTransfers, rangeNote } from "../../src/read";
 
 describe("guard", () => {
   it("allows only the exact name Reputation Registry", () => {
@@ -33,18 +33,20 @@ describe("applied", () => {
     const f = { chainId: 8453, blockNumber: 5n, txHash: "0x01", logIndex: 1, reproduce: "", agentId: 1n, client: "0x00000000000000000000000000000000000000c1", feedbackIndex: 1n };
     const W = "0x00000000000000000000000000000000000000b1" as const;
     const t = { chainId: 8453, token: W, from: f.client as `0x${string}`, to: W, amount: 1n, block: 4n, tx: "0x02" as const, logIndex: 0 };
-    for (const payments of [groundingTransfers([t], () => W, []), [], { error: "e" }]) {
+    const bound = (kind: "agentWallet" | "owner" | "none") => () => (kind === "none" ? { kind } : { kind, address: W });
+    for (const payments of [groundingTransfers([t], bound("agentWallet"), []), groundingTransfers([t], bound("owner"), []), groundingTransfers([t], bound("none"), []), { payments: [], preIdentity: [] }, { error: "e" }]) {
       for (const transfersRange of [{ from: 1, to: 5n }, { from: 9, to: 5n }]) {
         for (const walletAtFeedback of [W, null, { error: "e" }]) {
           notes.push(JSON.stringify(groundingFact({ subject: W, feedback: f, payments, transfersRange, walletAtFeedback, raterController: null, subjectController: null })));
         }
       }
     }
-    notes.push(DIRECT_TRANSFER);
+    notes.push(DIRECT_TRANSFER, NATIVE_NOT_READ, IDENTITY_DID_NOT_EXIST);
     for (const n of notes) expect(bannedHits(n), n).toEqual([]);
   });
-  it("to the README", () => {
-    const readme = readFileSync(new URL("../../../../README.md", import.meta.url), "utf8");
-    expect(bannedHits(readme)).toEqual([]);
+  it("to the README and the reader's written findings", () => {
+    for (const f of ["../../../../README.md", "../../../../docs/reader/retroactive-binding-2026-10.md"]) {
+      expect(bannedHits(readFileSync(new URL(f, import.meta.url), "utf8")), f).toEqual([]);
+    }
   });
 });

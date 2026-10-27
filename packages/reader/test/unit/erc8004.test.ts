@@ -40,6 +40,8 @@ describe("ERC-8004 registries", () => {
     expect(mine(ReputationRegistryAbi, "NewFeedback")).toBe(vendor("ReputationRegistry", "NewFeedback"));
     expect(mine(IdentityRegistryAbi, "MetadataSet")).toBe(vendor("IdentityRegistry", "MetadataSet"));
     expect(mine(IdentityRegistryAbi, "getAgentWallet")).toBe(vendor("IdentityRegistry", "getAgentWallet"));
+    expect(mine(IdentityRegistryAbi, "Transfer")).toBe(vendor("IdentityRegistry", "Transfer"));
+    expect(mine(IdentityRegistryAbi, "ownerOf")).toBe(vendor("IdentityRegistry", "ownerOf"));
   });
 
   it("start blocks are each registry's first block with code (no block is published by the vendor)", () => {

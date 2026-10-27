@@ -1,12 +1,14 @@
-// R-D2B-2 feedback grounding, as corrected by R-S191-11 (any ERC-20 Transfer from the rater to the agentWallet;
-// the label is separate) and R-S191-12 (the agentWallet resolved at the payment block; the wallet at the feedback
-// block is reported, never the test), and R-S190-3 (c) share. Pure: rows in, facts out.
+// R-D2B-2 feedback grounding, as corrected by R-S191-11 (any ERC-20 Transfer from the rater; the label is
+// separate) and R-S191-16 (the payment address at the payment block: agentWallet, else owner; never a later
+// block; no identity at that block → not grounded), with the wallet at the feedback block reported beside it
+// (R-S191-12), and R-S190-3 (c) share. Rows in, facts out; the binding reads run against a recording client.
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getAddress, type Address, type Hex } from "viem";
 import { LABEL } from "../../src/labels";
-import { DIRECT_TRANSFER, cShare, groundingFact, groundingTransfers, type Fact, type GroundingInput, type LabelledPayment, type RaterTransfer } from "../../src/read";
+import { DIRECT_TRANSFER, IDENTITY_DID_NOT_EXIST, cShare, groundingFact, groundingTransfers, type Binding, type Fact, type GroundingInput, type LabelledPayment, type RaterTransfer } from "../../src/read";
+import { bindingsAtTransferBlocks } from "../../src/grounding-rpc";
 
 const WALLET: Address = getAddress("0x00000000000000000000000000000000000b0001");
 const LATER_WALLET: Address = getAddress("0x00000000000000000000000000000000000b0002");
@@ -34,8 +36,13 @@ const FEEDBACK = {
 };
 
 const transfer = (block: bigint, logIndex: number, to: Address = WALLET, from: Address = RATER): RaterTransfer => ({ chainId: 8453, token: TOKEN, from, to, amount: 10_000n, block, tx: PAY_TX, logIndex });
-/** The agentWallet: WALLET up to block 80, cleared after, LATER_WALLET from block 95. */
-const walletAt = (b: bigint) => (b <= 80n ? WALLET : b >= 95n ? LATER_WALLET : null);
+const OWNER: Address = getAddress("0x00000000000000000000000000000000000e0001");
+/**
+ * The binding by block: no identity before block 30; agentWallet WALLET up to 80; cleared from 81, so the owner
+ * OWNER is the payment address; agentWallet LATER_WALLET from 95.
+ */
+const bindingAt = (b: bigint): Binding =>
+  b < 30n ? { kind: "none" } : b <= 80n ? { kind: "agentWallet", address: WALLET } : b >= 95n ? { kind: "agentWallet", address: LATER_WALLET } : { kind: "owner", address: OWNER };
 const spm: LabelledPayment = {
   fact: { source: "coinbase:spend_permission_payment", label: "(a) allowance, per period", shape: "a", terms: { payer: RATER, payee: WALLET, token: TOKEN, amount: "10000" }, cite: { chainId: 8453, block: "50", tx: PAY_TX, logIndex: 3 }, reproduce: "cast …" },
   tx: PAY_TX,
@@ -45,21 +52,22 @@ const spm: LabelledPayment = {
 const base: GroundingInput = {
   subject: WALLET,
   feedback: FEEDBACK,
-  payments: [],
+  payments: { payments: [], preIdentity: [] },
   transfersRange: { from: 1, to: 100n },
   walletAtFeedback: WALLET,
   raterController: null,
   subjectController: null,
 };
 const g = (over: Partial<GroundingInput>) => groundingFact({ ...base, ...over });
-const ground = (ts: RaterTransfer[], labelled: LabelledPayment[] = [], over: Partial<GroundingInput> = {}) => g({ payments: groundingTransfers(ts, walletAt, labelled), ...over });
+const ground = (ts: RaterTransfer[], labelled: LabelledPayment[] = [], over: Partial<GroundingInput> = {}) => g({ payments: groundingTransfers(ts, bindingAt, labelled), ...over });
 const terms = (f: Fact) => f.terms as Record<string, any>;
 
 describe("R-S191-11: any ERC-20 Transfer from the rater grounds; the label is a separate question", () => {
   it("a plain transfer with no permission object grounds, labelled (c) direct transfer", () => {
     const f = ground([transfer(50n, 2)]);
     expect(terms(f).grounding).toBe("grounded");
-    expect(terms(f).payment).toMatchObject({ source: "erc20:transfer", shape: "c", label: LABEL.c, payer: RATER, walletAtPayment: WALLET });
+    expect(terms(f).payment).toMatchObject({ source: "erc20:transfer", shape: "c", label: LABEL.c, payer: RATER, boundAtPayment: WALLET });
+    expect(terms(f).binding).toBe("agentWallet");
     expect(terms(f).payment.terms.reason).toBe(DIRECT_TRANSFER);
     expect(terms(f).payment.cite).toEqual({ chainId: 8453, block: "50", tx: PAY_TX, logIndex: 2 });
   });
@@ -74,21 +82,46 @@ describe("R-S191-11: any ERC-20 Transfer from the rater grounds; the label is a 
   });
 });
 
-describe("R-S191-12: the agentWallet is resolved at the payment block", () => {
-  it("a payment to the wallet of its block grounds, even when the wallet is cleared at the feedback block", () => {
+describe("R-S191-16: the payment address is resolved at the payment block, agentWallet else owner", () => {
+  it("a payment to the agentWallet of its block grounds, even when the wallet is cleared at the feedback block", () => {
     const f = ground([transfer(50n, 2)], [], { walletAtFeedback: null });
-    expect(terms(f).grounding).toBe("grounded");
-    expect(terms(f).walletAtFeedback).toBe("wallet at feedback: cleared");
+    expect(terms(f)).toMatchObject({ grounding: "grounded", binding: "agentWallet", walletAtFeedback: "wallet at feedback: cleared" });
   });
-  it("a payment to the wallet at the feedback block, made when that address was not the wallet, does not ground", () => {
-    // LATER_WALLET is the wallet from block 95 on; a transfer to it at block 60 went to a non-wallet.
-    const f = ground([transfer(60n, 2, LATER_WALLET)], [], { walletAtFeedback: LATER_WALLET, subject: LATER_WALLET });
+  it("with no agentWallet at the payment block, a payment to the owner grounds, binding owner", () => {
+    const f = ground([transfer(85n, 2, OWNER)], [], { walletAtFeedback: null });
+    expect(terms(f)).toMatchObject({ grounding: "grounded", binding: "owner, no agentWallet" });
+    expect(terms(f).payment.boundAtPayment).toBe(OWNER);
+  });
+  it("a payment to an address bound only later does not ground (never resolved at a later block)", () => {
+    // LATER_WALLET is the agentWallet from block 95 on, and the payment address at the feedback (100).
+    const f = ground([transfer(60n, 2, LATER_WALLET), transfer(85n, 1, LATER_WALLET)], [], { walletAtFeedback: LATER_WALLET, subject: LATER_WALLET });
     expect(terms(f).grounding).toBe("not grounded");
     expect(terms(f).walletAtFeedback).toBe(`wallet at feedback: ${LATER_WALLET}`);
   });
-  it("no wallet at any payment block: not grounded, not not determinable", () => {
+  it("a payment made before the identity existed does not ground: identity did not exist at the payment block", () => {
+    const f = ground([transfer(20n, 2), transfer(25n, 1, OWNER)], [], { walletAtFeedback: WALLET });
+    expect(terms(f)).toMatchObject({ grounding: "not grounded", reason: IDENTITY_DID_NOT_EXIST });
+    expect(terms(ground([transfer(20n, 2), transfer(50n, 1)])).grounding).toBe("grounded");
+  });
+  it("the binding reads go to exactly each candidate transfer's block, never a later one", async () => {
+    const calls: { fn: string; block: bigint }[] = [];
+    const client = {
+      readContract: async ({ functionName, blockNumber }: { functionName: string; blockNumber: bigint }) => {
+        calls.push({ fn: functionName, block: blockNumber });
+        if (functionName === "getAgentWallet") return blockNumber <= 80n ? WALLET : "0x0000000000000000000000000000000000000000";
+        return OWNER;
+      },
+    } as never;
+    const ts = [transfer(50n, 2), transfer(85n, 1, OWNER), transfer(90n, 1, OTHER)];
+    const lookup = await bindingsAtTransferBlocks(client, OTHER, 42n, ts, new Set([WALLET.toLowerCase(), OWNER.toLowerCase()]));
+    expect(new Set(calls.map((c) => c.block))).toEqual(new Set([50n, 85n]));
+    expect(lookup(50n)).toEqual({ kind: "agentWallet", address: WALLET });
+    expect(lookup(85n)).toEqual({ kind: "owner", address: OWNER });
+    expect(lookup(90n)).toBeUndefined();
+  });
+  it("no payment address at any payment block: not grounded, not not determinable", () => {
     const f = ground([transfer(85n, 2), transfer(90n, 1)], [], { walletAtFeedback: null });
-    expect(terms(f)).toMatchObject({ grounding: "not grounded", reason: "no ERC-20 Transfer from the rater to the agentWallet at its block, before the feedback (blocks 1..100)" });
+    expect(terms(f)).toMatchObject({ grounding: "not grounded", reason: "no ERC-20 Transfer from the rater to the address bound at its block (agentWallet, else owner), before the feedback (blocks 1..100)" });
   });
 });
 
@@ -109,7 +142,7 @@ describe("grounding: order, ranges and reads", () => {
   it("the fact is the rater's attestation (e), cites the feedback log, states the range read, and says the feedbackURI is not read", () => {
     const f = g({});
     expect(f).toMatchObject({ source: "erc8004:feedback_grounding", shape: "e", label: `${LABEL.e}: ${RATER}`, cite: { chainId: 8453, block: "100", tx: TX, logIndex: 7 } });
-    expect(terms(f)).toMatchObject({ transfersRead: "blocks 1..100", walletAtFeedback: `wallet at feedback: ${WALLET}`, feedbackURI: "not read" });
+    expect(terms(f)).toMatchObject({ transfersRead: "blocks 1..100", nativeTransfers: "not read", walletAtFeedback: `wallet at feedback: ${WALLET}`, feedbackURI: "not read" });
   });
   it("writer == subject and the controller comparison (R-S189-4)", () => {
     expect(terms(g({})).raterIsSubject).toBe(false);

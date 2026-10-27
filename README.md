@@ -23,8 +23,8 @@ Third-party sources, on both chains:
   either chain today, so no lender is registered. The decoder ships with tests, and a read with nothing
   indexed says "nothing indexed" with its block range.
 - ERC-8004: `NewFeedback` from the "Reputation Registry" (who rated which agentId, and where; never the
-  feedback's value, decimals, tags, endpoint or URIs), and the agentWallet history from the Identity
-  Registry's `MetadataSet`. Addresses from `src/generated/erc8004.json` (vendor commit pinned there).
+  feedback's value, decimals, tags, endpoint or URIs), and the agentWallet and owner histories from the
+  Identity Registry's `MetadataSet` and ERC-721 `Transfer`. Addresses from `src/generated/erc8004.json` (vendor commit pinned there).
 
 NablaZ sources, where deployed:
 
@@ -52,6 +52,7 @@ NablaZ sources, where deployed:
 | `credit_line_events` | `Borrowed` / `Repaid` / `Defaulted` at a configured lender |
 | `feedbacks` | ERC-8004 `NewFeedback`: agentId, rater, feedback index; no value, tags or URIs |
 | `agent_wallets` | ERC-8004 `MetadataSet` for the agentWallet key: agentId and wallet (null when cleared) |
+| `agent_owners` | ERC-8004 identity `Transfer` (ERC-721): agentId and new owner |
 
 Rows hold facts and counts. The reader states facts and passes no judgement on any subject.
 
@@ -131,24 +132,30 @@ a `cast` command you can run yourself with an RPC URL in `$ARB_ONE_RPC_URL` or `
 
 ### Feedback grounding
 
-When the subject has been the agentWallet of an ERC-8004 agentId, every `NewFeedback` about that agentId
-becomes an `erc8004:feedback_grounding` fact (R-D2B-2). A feedback is grounded when an ERC-20 Transfer from
-the rater to the agentWallet settled before it (by block, then by log index within a block), whatever the
-token or route (R-S191-11). The agentWallet is resolved with `getAgentWallet` at the transfer's block; the
-wallet at the feedback block is reported beside the grounding ("wallet at feedback: <address>" or
-"wallet at feedback: cleared") and is never the test (R-S191-12).
+When the subject has been the agentWallet or the owner of an ERC-8004 agentId, every `NewFeedback` about that
+agentId becomes an `erc8004:feedback_grounding` fact (R-D2B-2). A feedback is grounded when an ERC-20
+Transfer from the rater to the identity's payment address settled before it (by block, then by log index
+within a block), whatever the token or route (R-S191-11). The payment address is resolved at the transfer's
+block, never later: `getAgentWallet` there, else `ownerOf` there, and the fact says which binding applied
+(R-S191-16). A transfer made before the identity existed does not ground ("identity did not exist at the
+payment block"). The wallet at the feedback block is reported beside the grounding ("wallet at feedback:
+<address>" or "wallet at feedback: cleared") and is never the test (R-S191-12).
 
 Plain transfers are not indexed. At read time the reader calls `eth_getLogs` with topic0 = `Transfer` and
 topic1 = the rater, any token address, from the Identity Registry's start block (or the instance's start) to
-the feedback block, and states that range in the fact. A settlement from one of the rater's own grantee
-vaults counts as the rater's. A transfer that is one of the reader's payment facts keeps its permission
-label; any other is labelled (c) with reason "direct transfer, no permission object". The fact also says
-whether the rater is the subject, and whether the two share a controller when both are NablaZ accounts. It
-carries no value, decimals, tags or URIs, and the feedback file is not fetched ("feedbackURI not read").
+the feedback block, and states that range in the fact. Candidates are the addresses in the identity's
+agentWallet history (`MetadataSet`) and owner history (ERC-721 `Transfer`), each confirmed at the transfer's
+block. A settlement from the rater's own grantee vault is a payment from the rater (R-S191-17).
+Native-token transfers are not read ("native-token transfers not read", R-S191-18). A transfer that is one of
+the reader's payment facts keeps its permission label; any other is labelled (c) with reason "direct
+transfer, no permission object". The fact also says whether the rater is the subject, and whether the two
+share a controller when both are NablaZ accounts. It carries no value, decimals, tags or URIs, and the
+feedback file is not fetched ("feedbackURI not read").
 
 `test/fork/afg.fork.test.ts` runs this grounding on the 816 grounded feedback entries in Agentic Finance
 Graph's Base fixture (CC BY 4.0, see NOTICE) and writes the comparison to
-`docs/reader/afg-agreement-2026-10-20.csv`.
+`docs/reader/afg-agreement-2026-10-20.csv`. `docs/reader/retroactive-binding-2026-10.md` describes the
+remaining disagreements.
 
 ## Running it locally
 

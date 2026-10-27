@@ -103,7 +103,7 @@ describe("notes (R-S189-6, R-S190-5, R-S190-6)", () => {
       "SpendPermissionManager permissions and spends for this address: nothing indexed (blocks 3..10)",
       "DelegationManager redemptions naming this address: nothing indexed (blocks 4..10)",
       "no Agent Credit Lines lender registered on this chain",
-      "ERC-8004 agentIds whose agentWallet this address has been: nothing indexed (blocks ?..0)",
+      "ERC-8004 agentIds whose agentWallet or owner this address has been: nothing indexed (blocks ?..0)",
     ]);
   });
   it("never a backwards range: below a source's start block the note says how far the index has got", () => {

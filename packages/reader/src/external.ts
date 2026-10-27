@@ -2,7 +2,7 @@
 // DelegationManager, Agent Credit Lines. Labels from src/labels.ts; the reproduce column from src/oneliners.ts.
 
 import { ponder, type Context } from "ponder:registry";
-import { agentWallets, creditLineEvents, externalPayments, externalPermissions, externalRedemptions, feedbacks } from "ponder:schema";
+import { agentOwners, agentWallets, creditLineEvents, externalPayments, externalPermissions, externalRedemptions, feedbacks } from "ponder:schema";
 import { getAddress, size, type Address, type Hex } from "viem";
 import { chainById } from "./chains";
 import { delegationHash, erc20TransfersFrom, hopOf, type Delegation, type ReceiptLogLike } from "./delegation";
@@ -244,4 +244,12 @@ ponder.on("IdentityRegistry:MetadataSet", async ({ event, context }) => {
   // abi.encodePacked(address): 20 bytes; empty bytes clear the wallet (IdentityRegistryUpgradeable :177-178, :194-195).
   const wallet = size(metadataValue) === 20 ? getAddress(metadataValue) : null;
   await context.db.insert(agentWallets).values({ id: rowId(chainId, ev.txHash, ev.logIndex), ...ev, agentId, wallet });
+});
+
+ponder.on("IdentityRegistry:Transfer", async ({ event, context }) => {
+  const chainId = context.chain.id;
+  const { to, tokenId } = event.args;
+  const from = chainById(chainId).external.startBlocks.IdentityRegistry;
+  const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("11-identity-transfers", { chainId, agentId: tokenId.toString(), from }));
+  await context.db.insert(agentOwners).values({ id: rowId(chainId, ev.txHash, ev.logIndex), ...ev, agentId: tokenId, owner: to === "0x0000000000000000000000000000000000000000" ? null : to });
 });

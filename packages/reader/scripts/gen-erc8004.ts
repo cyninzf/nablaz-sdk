@@ -14,7 +14,7 @@ import { writeFileSync } from "node:fs";
 const PINNED = "51c1379622ec837375e5d8ddf42b29032990b997";
 const FILES = { 42161: "script/expected/external-arbitrum.txt", 8453: "script/expected/external-base.txt" } as const;
 const NAMES = { IdentityRegistry: "ERC8004IdentityRegistry", ReputationRegistry: "ERC8004ReputationRegistry" } as const;
-const ITEMS = { IdentityRegistry: ["MetadataSet", "getAgentWallet"], ReputationRegistry: ["NewFeedback"] } as const;
+const ITEMS = { IdentityRegistry: ["MetadataSet", "Transfer", "getAgentWallet", "ownerOf"], ReputationRegistry: ["NewFeedback"] } as const;
 
 const proto = process.argv[2];
 const sha = process.argv[3] ?? PINNED;

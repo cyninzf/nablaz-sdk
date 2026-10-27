@@ -324,3 +324,19 @@ export const agentWallets = onchainTable(
   }),
   (t) => ({ byWallet: index().on(t.chainId, t.wallet), byAgent: index().on(t.chainId, t.agentId) }),
 );
+
+/**
+ * The Identity Registry's ERC-721 Transfer (s3 §6.4b (11)): every owner an agentId has had. With agent_wallets,
+ * how a subject is found as an agentId's bound address (R-S191-16: agentWallet, else owner).
+ */
+export const agentOwners = onchainTable(
+  "agent_owners",
+  (t) => ({
+    id: t.text().primaryKey(), // chainId-tx-logIndex
+    ...evidence(t),
+    agentId: t.bigint().notNull(),
+    /** The new owner; null on burn. */
+    owner: t.hex(),
+  }),
+  (t) => ({ byOwner: index().on(t.chainId, t.owner), byAgent: index().on(t.chainId, t.agentId) }),
+);
