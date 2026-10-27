@@ -6,10 +6,10 @@
 import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
-import { createPublicClient, getAddress, http, parseAbi, type Address, type Hex } from "viem";
+import { createPublicClient, getAddress, http, parseAbi, type Address, type Hex, type PublicClient } from "viem";
 import { cShareOverIndex, formatShare } from "../../src/c-share";
-import { IdentityRegistryAbi } from "../../src/external-abis";
-import { groundingFact, paymentFacts, type GroundingPayment } from "../../src/read";
+import { agentWalletHistory, transfersFrom, walletAt, walletsAtTransferBlocks } from "../../src/grounding-rpc";
+import { groundingFact, groundingTransfers, paymentFacts, type GroundingPayment, type LabelledPayment } from "../../src/read";
 import { CHAINS, CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src/chains";
 import { render } from "../../src/oneliners";
 import { UPSTREAM, UPSTREAM_BASE, indexOnce, redact, stopAndDump, type Served, type Tables } from "./harness";
@@ -167,41 +167,41 @@ describe.each([42161, 8453] as const)("chain %i, ERC-8004 and the (c) share", (c
     }
   });
 
-  it("R-D2B-2: grounding of every feedback in the window, counted (monitor, not a gate)", async () => {
-    const client = createPublicClient({ transport: http(rpcUrl) });
+  it("R-D2B-2 (R-S191-11/12): grounding of every feedback in the window, counted (monitor, not a gate)", async () => {
+    const client = createPublicClient({ transport: http(rpcUrl) }) as PublicClient;
     const registry = CHAINS[chainId]!.external.IdentityRegistry!;
-    const walletAt = async (agentId: bigint, blockNumber: bigint) => {
-      const a = await client.readContract({ address: registry, abi: IdentityRegistryAbi, functionName: "getAgentWallet", args: [agentId], blockNumber });
-      return a === "0x0000000000000000000000000000000000000000" ? null : getAddress(a);
-    };
+    const identityStart = BigInt(CHAINS[chainId]!.external.startBlocks.IdentityRegistry);
+    // Payment facts in the window, by payer, matched to their Transfer logs below (labels only).
     const pays = t().external_payments.map(camel);
     const perms = new Map(t().external_permissions.map((p) => [String(p.id), camel(p)]));
-    const candidates: GroundingPayment[] = paymentFacts(pays, perms).map((fact, i) => ({
-      fact,
-      payer: getAddress(String(pays[i]!.payer)),
-      payee: getAddress(String(pays[i]!.payee)),
-      block: BigInt(String(pays[i]!.blockNumber)),
-      logIndex: Number(pays[i]!.logIndex),
-    }));
+    const facts = paymentFacts(pays, perms);
     const counts: Record<string, number> = { grounded: 0, "not grounded": 0, "not determinable": 0 };
     const cites: Record<string, string[]> = { grounded: [], "not grounded": [], "not determinable": [] };
     for (const row of t().feedbacks.map(camel)) {
       const agentId = BigInt(String(row.agentId));
       const block = BigInt(String(row.blockNumber));
-      let wallet: { before: Address | null; at: Address | null } | { error: string };
+      const rater = getAddress(String(row.client));
+      let payments: GroundingPayment[] | { error: string };
       try {
-        wallet = { before: await walletAt(agentId, block - 1n), at: await walletAt(agentId, block) };
+        const transfers = await transfersFrom(client, chainId, rater, BigInt(w.from), block);
+        const labelled: LabelledPayment[] = [];
+        pays.forEach((p, i) => {
+          const tr = transfers.find((x) => x.tx === p.txHash && (p.source === "spm" ? x.to.toLowerCase() === String(p.payee) && x.amount === BigInt(String(p.amount)) : x.logIndex === Number(p.logIndex)));
+          if (tr) labelled.push({ fact: facts[i]!, tx: tr.tx, transferLogIndex: tr.logIndex });
+        });
+        const history = await agentWalletHistory(client, registry, agentId, identityStart, block);
+        payments = groundingTransfers(transfers, await walletsAtTransferBlocks(client, registry, agentId, transfers, history), labelled);
       } catch (e) {
-        wallet = { error: String((e as Error).message).split("\n")[0]! };
+        payments = { error: String((e as Error).message).split("\n")[0]! };
       }
-      const subject = ("at" in wallet && wallet.at) || ("0x0000000000000000000000000000000000000000" as Address);
-      const g = groundingFact({ subject, feedback: { ...row, client: row.client, blockNumber: block }, wallet, payments: candidates, paymentsFrom: w.from, raterController: null, subjectController: null });
-      const status = (g!.terms as { grounding: string }).grounding;
-      counts[status]!++;
-      cites[status]!.push(`${g!.cite.block}:${g!.cite.tx as Hex}:${g!.cite.logIndex}${(g!.terms as { reason?: string }).reason ? ` (${(g!.terms as { reason?: string }).reason})` : ""}`);
+      const walletAtFeedback = await walletAt(client, registry, agentId, block).catch((e) => ({ error: String((e as Error).message).split("\n")[0]! }));
+      const g = groundingFact({ subject: rater, feedback: { ...row, blockNumber: block }, payments, transfersRange: { from: w.from, to: block }, walletAtFeedback, raterController: null, subjectController: null });
+      const tm = g.terms as { grounding: string; reason?: string; walletAtFeedback: string };
+      counts[tm.grounding]!++;
+      cites[tm.grounding]!.push(`${g.cite.block}:${g.cite.tx as Hex}:${g.cite.logIndex} (${tm.reason ?? "grounded"}; ${tm.walletAtFeedback})`);
     }
-    console.log(`grounding, chain ${chainId}, blocks ${w.from}..${w.to}: ${JSON.stringify(counts)}`);
-    for (const [k, v] of Object.entries(cites)) for (const c of v.slice(0, 5)) console.log(`  ${k}: ${c}`);
+    console.log(`grounding, chain ${chainId}, blocks ${w.from}..${w.to} (rater transfers read over ${w.from}..feedback block): ${JSON.stringify(counts)}`);
+    for (const [k, v] of Object.entries(cites)) for (const c of v) console.log(`  ${k}: ${c}`);
     expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(t().feedbacks.length);
   }, 600_000);
 });

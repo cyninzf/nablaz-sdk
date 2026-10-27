@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ALLOWED_NAMES, bannedHits } from "../../src/wording";
-import { FEEDBACK_URI_NOT_READ, NO_TRANSFER, emptySourceNotes, groundingFact, rangeNote } from "../../src/read";
+import { DIRECT_TRANSFER, FEEDBACK_URI_NOT_READ, NO_TRANSFER, emptySourceNotes, groundingFact, groundingTransfers, rangeNote } from "../../src/read";
 
 describe("guard", () => {
   it("allows only the exact name Reputation Registry", () => {
@@ -32,12 +32,15 @@ describe("applied", () => {
     ];
     const f = { chainId: 8453, blockNumber: 5n, txHash: "0x01", logIndex: 1, reproduce: "", agentId: 1n, client: "0x00000000000000000000000000000000000000c1", feedbackIndex: 1n };
     const W = "0x00000000000000000000000000000000000000b1" as const;
-    for (const wallet of [{ before: W, at: W }, { before: null, at: W }, { before: null, at: null }, { error: "e" }]) {
-      for (const paymentsFrom of [1, 9, null]) {
-        const g = groundingFact({ subject: W, feedback: f, wallet, payments: [], paymentsFrom, raterController: null, subjectController: null });
-        if (g) notes.push(JSON.stringify(g));
+    const t = { chainId: 8453, token: W, from: f.client as `0x${string}`, to: W, amount: 1n, block: 4n, tx: "0x02" as const, logIndex: 0 };
+    for (const payments of [groundingTransfers([t], () => W, []), [], { error: "e" }]) {
+      for (const transfersRange of [{ from: 1, to: 5n }, { from: 9, to: 5n }]) {
+        for (const walletAtFeedback of [W, null, { error: "e" }]) {
+          notes.push(JSON.stringify(groundingFact({ subject: W, feedback: f, payments, transfersRange, walletAtFeedback, raterController: null, subjectController: null })));
+        }
       }
     }
+    notes.push(DIRECT_TRANSFER);
     for (const n of notes) expect(bannedHits(n), n).toEqual([]);
   });
   it("to the README", () => {

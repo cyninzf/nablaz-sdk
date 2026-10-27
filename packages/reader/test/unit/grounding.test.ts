@@ -1,17 +1,20 @@
-// R-D2B-2 feedback grounding (AFG definition: a payment from the rater to the rated agentWallet settled before
-// the feedback), and R-S190-3 (c) share. Pure: rows in, facts out.
+// R-D2B-2 feedback grounding, as corrected by R-S191-11 (any ERC-20 Transfer from the rater to the agentWallet;
+// the label is separate) and R-S191-12 (the agentWallet resolved at the payment block; the wallet at the feedback
+// block is reported, never the test), and R-S190-3 (c) share. Pure: rows in, facts out.
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getAddress, type Address, type Hex } from "viem";
 import { LABEL } from "../../src/labels";
-import { cShare, groundingFact, type Fact, type GroundingInput, type GroundingPayment } from "../../src/read";
+import { DIRECT_TRANSFER, cShare, groundingFact, groundingTransfers, type Fact, type GroundingInput, type LabelledPayment, type RaterTransfer } from "../../src/read";
 
-const WALLET: Address = "0x00000000000000000000000000000000000B0001";
-const RATER: Address = "0x00000000000000000000000000000000000C0001";
-const OTHER: Address = "0x00000000000000000000000000000000000D0001";
+const WALLET: Address = getAddress("0x00000000000000000000000000000000000b0001");
+const LATER_WALLET: Address = getAddress("0x00000000000000000000000000000000000b0002");
+const RATER: Address = getAddress("0x00000000000000000000000000000000000c0001");
+const OTHER: Address = getAddress("0x00000000000000000000000000000000000d0001");
 const TOKEN: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const TX: Hex = `0x${"ab".repeat(32)}`;
+const PAY_TX: Hex = `0x${"cd".repeat(32)}`;
 
 // A feedbacks row as the database could hold it, plus the fields the reader must never output.
 const FEEDBACK = {
@@ -30,69 +33,83 @@ const FEEDBACK = {
   feedbackURI: "https://zz-leak.example/feedback.json",
 };
 
-const pay = (block: bigint, logIndex: number, over: Partial<GroundingPayment> = {}, shape = "a"): GroundingPayment => ({
-  fact: {
-    source: "coinbase:spend_permission_payment",
-    label: shape === "c" ? LABEL.c : "(a) allowance, per period",
-    shape,
-    terms: { payer: RATER, payee: WALLET, token: TOKEN, amount: "10000" },
-    cite: { chainId: 8453, block: String(block), tx: TX, logIndex },
-    reproduce: "cast …",
-  },
-  payer: RATER,
-  payee: WALLET,
-  block,
-  logIndex,
-  ...over,
-});
+const transfer = (block: bigint, logIndex: number, to: Address = WALLET, from: Address = RATER): RaterTransfer => ({ chainId: 8453, token: TOKEN, from, to, amount: 10_000n, block, tx: PAY_TX, logIndex });
+/** The agentWallet: WALLET up to block 80, cleared after, LATER_WALLET from block 95. */
+const walletAt = (b: bigint) => (b <= 80n ? WALLET : b >= 95n ? LATER_WALLET : null);
+const spm: LabelledPayment = {
+  fact: { source: "coinbase:spend_permission_payment", label: "(a) allowance, per period", shape: "a", terms: { payer: RATER, payee: WALLET, token: TOKEN, amount: "10000" }, cite: { chainId: 8453, block: "50", tx: PAY_TX, logIndex: 3 }, reproduce: "cast …" },
+  tx: PAY_TX,
+  transferLogIndex: 2,
+};
 
 const base: GroundingInput = {
   subject: WALLET,
   feedback: FEEDBACK,
-  wallet: { before: WALLET, at: WALLET },
   payments: [],
-  paymentsFrom: 1,
+  transfersRange: { from: 1, to: 100n },
+  walletAtFeedback: WALLET,
   raterController: null,
   subjectController: null,
 };
-const g = (over: Partial<GroundingInput>) => groundingFact({ ...base, ...over })!;
+const g = (over: Partial<GroundingInput>) => groundingFact({ ...base, ...over });
+const ground = (ts: RaterTransfer[], labelled: LabelledPayment[] = [], over: Partial<GroundingInput> = {}) => g({ payments: groundingTransfers(ts, walletAt, labelled), ...over });
 const terms = (f: Fact) => f.terms as Record<string, any>;
 
-describe("grounding", () => {
-  it("a payment from the rater to the agentWallet in an earlier block grounds it; the most recent one is cited, with its own label", () => {
-    const f = g({ payments: [pay(50n, 1), pay(90n, 4), pay(120n, 0)] });
+describe("R-S191-11: any ERC-20 Transfer from the rater grounds; the label is a separate question", () => {
+  it("a plain transfer with no permission object grounds, labelled (c) direct transfer", () => {
+    const f = ground([transfer(50n, 2)]);
     expect(terms(f).grounding).toBe("grounded");
-    expect(terms(f).payment.cite).toEqual({ chainId: 8453, block: "90", tx: TX, logIndex: 4 });
-    expect(terms(f).payment.label).toBe("(a) allowance, per period");
-    expect(terms(f).payment.payer).toBe(RATER);
+    expect(terms(f).payment).toMatchObject({ source: "erc20:transfer", shape: "c", label: LABEL.c, payer: RATER, walletAtPayment: WALLET });
+    expect(terms(f).payment.terms.reason).toBe(DIRECT_TRANSFER);
+    expect(terms(f).payment.cite).toEqual({ chainId: 8453, block: "50", tx: PAY_TX, logIndex: 2 });
   });
-  it("same block: log order decides; a payment logged after the feedback does not ground it", () => {
-    expect(terms(g({ payments: [pay(100n, 6)] })).grounding).toBe("grounded");
-    expect(terms(g({ payments: [pay(100n, 8)] }))).toMatchObject({ grounding: "not grounded" });
+  it("a transfer that is a payment fact keeps that fact's label", () => {
+    const f = ground([transfer(50n, 2)], [spm]);
+    expect(terms(f).payment).toMatchObject({ source: "coinbase:spend_permission_payment", label: "(a) allowance, per period", shape: "a" });
+  });
+  it("the most recent prior transfer is cited; transfers from anyone else do not count", () => {
+    const f = ground([transfer(40n, 1), transfer(60n, 9), transfer(60n, 4, WALLET, OTHER)]);
+    expect(terms(f).payment.cite.logIndex).toBe(9);
+    expect(terms(ground([transfer(60n, 4, WALLET, OTHER)])).grounding).toBe("not grounded");
+  });
+});
+
+describe("R-S191-12: the agentWallet is resolved at the payment block", () => {
+  it("a payment to the wallet of its block grounds, even when the wallet is cleared at the feedback block", () => {
+    const f = ground([transfer(50n, 2)], [], { walletAtFeedback: null });
+    expect(terms(f).grounding).toBe("grounded");
+    expect(terms(f).walletAtFeedback).toBe("wallet at feedback: cleared");
+  });
+  it("a payment to the wallet at the feedback block, made when that address was not the wallet, does not ground", () => {
+    // LATER_WALLET is the wallet from block 95 on; a transfer to it at block 60 went to a non-wallet.
+    const f = ground([transfer(60n, 2, LATER_WALLET)], [], { walletAtFeedback: LATER_WALLET, subject: LATER_WALLET });
+    expect(terms(f).grounding).toBe("not grounded");
+    expect(terms(f).walletAtFeedback).toBe(`wallet at feedback: ${LATER_WALLET}`);
+  });
+  it("no wallet at any payment block: not grounded, not not determinable", () => {
+    const f = ground([transfer(85n, 2), transfer(90n, 1)], [], { walletAtFeedback: null });
+    expect(terms(f)).toMatchObject({ grounding: "not grounded", reason: "no ERC-20 Transfer from the rater to the agentWallet at its block, before the feedback (blocks 1..100)" });
+  });
+});
+
+describe("grounding: order, ranges and reads", () => {
+  it("same block: log order decides; a transfer logged after the feedback does not ground", () => {
+    expect(terms(ground([transfer(100n, 6, LATER_WALLET)], [], { subject: LATER_WALLET })).grounding).toBe("grounded");
+    expect(terms(ground([transfer(100n, 8, LATER_WALLET)], [], { subject: LATER_WALLET })).grounding).toBe("not grounded");
   });
   it("same block without a log order is not determinable: same block", () => {
-    expect(terms(g({ payments: [pay(100n, Number.NaN)] }))).toMatchObject({ grounding: "not determinable", reason: "same block" });
+    expect(terms(ground([transfer(100n, Number.NaN, LATER_WALLET)]))).toMatchObject({ grounding: "not determinable", reason: "same block" });
   });
-  it("only rater → agentWallet payments count", () => {
-    const f = g({ payments: [pay(50n, 1, { payer: OTHER }), pay(50n, 2, { payee: OTHER })] });
-    expect(terms(f)).toMatchObject({ grounding: "not grounded", reason: "nothing indexed from the rater to this wallet before the feedback (blocks 1..100)" });
+  it("not determinable only for reads the reader cannot make", () => {
+    expect(terms(g({ payments: { error: "query timeout" } }))).toMatchObject({ grounding: "not determinable" });
+    expect(terms(g({ payments: { error: "query timeout" } })).reason).toMatch(/^the rater's transfers in blocks 1\.\.100 could not be read/);
+    expect(terms(g({ transfersRange: { from: 150, to: 100n } }))).toMatchObject({ grounding: "not determinable", reason: "transfers indexed up to 100; source starts at 150" });
+    expect(terms(g({ walletAtFeedback: { error: "missing trie node" } })).walletAtFeedback).toMatch(/^wallet at feedback: not determinable/);
   });
-  it("payment sources indexed only after the feedback, or not at all: not determinable", () => {
-    expect(terms(g({ paymentsFrom: 150 }))).toMatchObject({ grounding: "not determinable", reason: "payment sources are indexed from block 150, after the feedback" });
-    expect(terms(g({ paymentsFrom: null }))).toMatchObject({ grounding: "not determinable" });
-  });
-  it("the agentWallet is read at the feedback block and the block before; a change within the block is not determinable", () => {
-    expect(terms(g({ wallet: { before: OTHER, at: WALLET }, payments: [pay(50n, 1)] }))).toMatchObject({ grounding: "not determinable", reason: "agentWallet changed within the feedback block" });
-    expect(terms(g({ wallet: { before: null, at: null } }))).toMatchObject({ grounding: "not determinable" });
-    expect(terms(g({ wallet: { error: "missing trie node" } })).reason).toMatch(/getAgentWallet at blocks 99 and 100 could not be read/);
-  });
-  it("a feedback whose agentWallet at the feedback block is another address is not about the subject", () => {
-    expect(groundingFact({ ...base, wallet: { before: OTHER, at: OTHER } })).toBeNull();
-  });
-  it("the fact is the rater's attestation (e), cites the feedback log, and says the feedbackURI is not read", () => {
+  it("the fact is the rater's attestation (e), cites the feedback log, states the range read, and says the feedbackURI is not read", () => {
     const f = g({});
     expect(f).toMatchObject({ source: "erc8004:feedback_grounding", shape: "e", label: `${LABEL.e}: ${RATER}`, cite: { chainId: 8453, block: "100", tx: TX, logIndex: 7 } });
-    expect(terms(f).feedbackURI).toBe("not read");
+    expect(terms(f)).toMatchObject({ transfersRead: "blocks 1..100", walletAtFeedback: `wallet at feedback: ${WALLET}`, feedbackURI: "not read" });
   });
   it("writer == subject and the controller comparison (R-S189-4)", () => {
     expect(terms(g({})).raterIsSubject).toBe(false);
@@ -104,9 +121,10 @@ describe("grounding", () => {
     expect(terms(g({ raterController: { controller: null, reason: "x" }, subjectController: ctl(RATER) })).sameController).toMatch(/^not determinable/);
   });
   it("never outputs the feedback's value, valueDecimals, tags or URIs", () => {
-    for (const f of [g({}), g({ payments: [pay(50n, 1)] }), g({ wallet: { error: "x" } })]) {
+    for (const f of [g({}), ground([transfer(50n, 2)]), g({ payments: { error: "x" } })]) {
+      const own = Object.keys(f.terms);
+      for (const k of ["value", "valueDecimals", "tag1", "tag2", "endpoint", "feedbackHash"]) expect(own).not.toContain(k);
       const out = JSON.stringify(f, (_, v) => (typeof v === "bigint" ? v.toString() : v));
-      for (const k of ["value", "valueDecimals", "tag1", "tag2", "feedbackURI\":\"https", "endpoint", "feedbackHash"]) expect(out).not.toContain(`"${k}"`);
       for (const leak of ["9137", "zz-leak-tag-one", "zz-leak-tag-two", "zz-leak.example"]) expect(out).not.toContain(leak);
     }
   });
