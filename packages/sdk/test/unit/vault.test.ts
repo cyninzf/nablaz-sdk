@@ -3,6 +3,7 @@ import { decodeAbiParameters, hashTypedData, keccak256, stringToHex, type Addres
 import { privateKeyToAccount } from "viem/accounts";
 import {
   ARBITRUM_ONE,
+  AmountOverPerTx,
   NEVER_PAYMENT_TARGET,
   envelopeExactScheme,
   granteeKeyOf,
@@ -14,6 +15,7 @@ import {
   NeverPaymentTarget,
   ValidBeforeExceeded,
   VaultMismatch,
+  type GranteeKey,
 } from "../../src/index";
 
 const C = ARBITRUM_ONE.contracts;
@@ -164,7 +166,7 @@ describe("vault signer refuses a vault it cannot derive (R-B0-1, R-S184-5)", () 
     expect(() => granteeVaultSigner({ ...base, granteeKey: granteeKeyOf(grantee.address, 0n), vault: agent7.vault })).toThrow(VaultMismatch);
   });
   it("envelopeExactScheme carries the same check", () => {
-    expect(() => envelopeExactScheme({ ...base, vault: PAY_TO, readEnvelopeExpiry: async () => M.validBefore })).toThrow(VaultMismatch);
+    expect(() => envelopeExactScheme({ ...base, vault: PAY_TO, readEnvelopeExpiry: async () => M.validBefore, readPerTx: async () => 1_000_000n })).toThrow(VaultMismatch);
   });
   it("granteeVaultSignerFromChain reads VAULT_IMPL from the account and refuses v1", async () => {
     const reads: unknown[] = [];
@@ -186,8 +188,9 @@ describe("envelope exact scheme (official ExactEvmScheme underneath)", () => {
     vi.setSystemTime(NOW * 1000);
   });
   afterEach(() => vi.useRealTimers());
-  const schemeReading = (readEnvelopeExpiry: () => Promise<bigint>, now?: () => number) =>
-    envelopeExactScheme({ grantee, ...BIND, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, readEnvelopeExpiry, now });
+  const PER_TX = 1_000_000n;
+  const schemeReading = (readEnvelopeExpiry: () => Promise<bigint>, now?: () => number, signer: GranteeKey = grantee) =>
+    envelopeExactScheme({ grantee: signer, ...BIND, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, readEnvelopeExpiry, readPerTx: async () => PER_TX, now });
   const scheme = (expiry: bigint, now?: () => number) => schemeReading(async () => expiry, now);
   const req = (maxTimeoutSeconds: number) => ({
     scheme: "exact",
@@ -232,6 +235,24 @@ describe("envelope exact scheme (official ExactEvmScheme underneath)", () => {
     // This clock is 100 s behind Date.now(): the official scheme's validBefore lands 100 s past the bound.
     await expect(scheme(BigInt(NOW + 3600), () => NOW - 100).createPaymentPayload(2, req(7 * 86_400))).rejects.toBeInstanceOf(ValidBeforeExceeded);
     await expect(scheme(BigInt(NOW + 8 * 86_400), () => NOW - 100).createPaymentPayload(2, req(3600))).rejects.toBeInstanceOf(ValidBeforeExceeded);
+  });
+  it("refuses an amount over the grant's perTx before signing: no signature is produced", async () => {
+    const signTypedData = vi.fn((a: Parameters<GranteeKey["signTypedData"]>[0]) => grantee.signTypedData(a as never));
+    const s = schemeReading(async () => BigInt(NOW + 3600), undefined, { address: grantee.address, signTypedData });
+    // Over perTx, and (separately) the vault's whole balance in the Phase 0 setup: 1_980_000 > perTx.
+    for (const amount of ["1000001", "1980000"]) {
+      await expect(s.createPaymentPayload(2, { ...req(60), amount })).rejects.toBeInstanceOf(AmountOverPerTx);
+    }
+    expect(signTypedData).not.toHaveBeenCalled();
+    // Exactly perTx is signed.
+    expect(auth(await s.createPaymentPayload(2, { ...req(60), amount: String(PER_TX) })).value).toBe(String(PER_TX));
+    expect(signTypedData).toHaveBeenCalledTimes(1);
+  });
+  it("re-reads perTx before every payment", async () => {
+    let calls = 0;
+    const s = envelopeExactScheme({ grantee, ...BIND, vault: M.from, grantId: keccak256("0x01"), token: USDC, chainId: 42161, readEnvelopeExpiry: async () => BigInt(NOW + 3600), readPerTx: async () => (calls++ === 0 ? PER_TX : 5_000n) });
+    await s.createPaymentPayload(2, req(60));
+    await expect(s.createPaymentPayload(2, req(60))).rejects.toThrow(/over the grant's perTx 5000; refused before signing/);
   });
   it("refuses Permit2, an expired envelope and a seller window too short to pay in", async () => {
     await expect(scheme(BigInt(NOW + 3600)).createPaymentPayload(2, { ...req(60), extra: { name: "USD Coin", version: "2", assetTransferMethod: "permit2" } })).rejects.toThrow(/out of scope/);
