@@ -56,9 +56,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     timeout-minutes: 45
+    # One secret per chain serves both RPC roles here (src/rpc.ts); the roles test tells them apart by proxy.
+    # READER_ARB_RPC_URL is packages/sdk's name for the Arbitrum One RPC.
     env:
       READER_ARB_RPC_URL: ${{ secrets.READER_ARB_RPC_URL }}
+      READER_ARBITRUM_RPC_URL: ${{ secrets.READER_ARB_RPC_URL }}
+      READER_ARBITRUM_GROUNDING_RPC_URL: ${{ secrets.READER_ARB_RPC_URL }}
       READER_BASE_RPC_URL: ${{ secrets.READER_BASE_RPC_URL }}
+      READER_BASE_GROUNDING_RPC_URL: ${{ secrets.READER_BASE_RPC_URL }}
     steps:
       # The fork tests run on Arbitrum One and Base (R-S189-1). A missing secret fails the job; it never skips.
       - name: require the RPC secrets

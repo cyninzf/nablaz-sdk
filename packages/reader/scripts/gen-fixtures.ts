@@ -4,7 +4,7 @@
 //
 //   node --experimental-strip-types scripts/gen-fixtures.ts
 //
-// Needs READER_ARB_RPC_URL and READER_BASE_RPC_URL (never printed).
+// Needs READER_ARBITRUM_RPC_URL and READER_BASE_RPC_URL (never printed).
 
 import { writeFileSync } from "node:fs";
 import { createPublicClient, http, type Hex, type PublicClient } from "viem";
@@ -60,7 +60,7 @@ const SPM_LOGS: Ref[] = [
 ];
 
 const clients: Record<number, PublicClient> = {
-  42161: createPublicClient({ transport: http(process.env.READER_ARB_RPC_URL!, { retryCount: 5 }) }) as PublicClient,
+  42161: createPublicClient({ transport: http(process.env.READER_ARBITRUM_RPC_URL!, { retryCount: 5 }) }) as PublicClient,
   8453: createPublicClient({ transport: http(process.env.READER_BASE_RPC_URL!, { retryCount: 5 }) }) as PublicClient,
 };
 

@@ -1,6 +1,8 @@
 // The read API. Keyless: no key, no account, no write. GET /read/:chainId/:address returns every indexed fact
 // about the address with its source, permission label, citation and reproducing one-liner. Assembly is in
 // src/read.ts; this file runs the queries and the state reads (at the indexed block, never the chain head).
+// State reads go through the indexer's transport; the grounding reads through the grounding client only
+// (src/rpc.ts, R-S192-8).
 
 import { Hono } from "hono";
 import { db, publicClients } from "ponder:api";
@@ -26,6 +28,7 @@ import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
+import { groundingClient } from "../rpc";
 import {
   FEEDBACK_URI_NOT_READ,
   GROUNDING_SOURCE,
@@ -53,6 +56,12 @@ import {
 } from "../read";
 
 const app = new Hono();
+
+const groundingClients = new Map<number, PublicClient>();
+const groundingOf = (chain: EnabledChain) => {
+  if (!groundingClients.has(chain.chainId)) groundingClients.set(chain.chainId, groundingClient(chain));
+  return groundingClients.get(chain.chainId)!;
+};
 
 const lc = (a: string) => a.toLowerCase() as Hex;
 const json = (x: unknown) => JSON.stringify(x, (_, v) => (typeof v === "bigint" ? v.toString() : v), 2);
@@ -253,6 +262,7 @@ app.get("/read/:chainId/:address", async (c) => {
   const groundingFacts: Fact[] = [];
   if (fbs.length) {
     const registry = chain.external.IdentityRegistry;
+    const grounding = groundingOf(chain);
     const transfersFromBlock = externalStart(chain, "IdentityRegistry");
     const nablaOn = hasNabla(chain) && sourcesOn().has("nabla");
     const controllerOf = async (who: Hex, block: bigint) => {
@@ -270,7 +280,7 @@ app.get("/read/:chainId/:address", async (c) => {
           rater,
           (async () => {
             try {
-              const transfers = await transfersFrom(client, chainId, getAddress(rater), BigInt(transfersFromBlock), upTo);
+              const transfers = await transfersFrom(grounding, chainId, getAddress(rater), BigInt(transfersFromBlock), upTo);
               const labelled: LabelledPayment[] = [];
               if (nablaOn) {
                 const vout = await db.select().from(vaultPayments).where(and(eq(vaultPayments.chainId, chainId), eq(vaultPayments.account, rater)));
@@ -315,13 +325,13 @@ app.get("/read/:chainId/:address", async (c) => {
       else {
         try {
           const prior = data.transfers.filter((t) => t.block <= f.blockNumber);
-          const candidates = await boundHistory(client, registry, f.agentId, BigInt(transfersFromBlock), f.blockNumber);
-          payments = groundingTransfers(prior, await bindingsAtTransferBlocks(client, registry, f.agentId, prior, candidates), data.labelled);
+          const candidates = await boundHistory(grounding, registry, f.agentId, BigInt(transfersFromBlock), f.blockNumber);
+          payments = groundingTransfers(prior, await bindingsAtTransferBlocks(grounding, registry, f.agentId, prior, candidates), data.labelled);
         } catch (e) {
           payments = { error: String((e as Error).message ?? e).split("\n")[0]! };
         }
       }
-      const walletAtFeedback = await walletAt(client, registry, f.agentId, f.blockNumber).catch((e) => ({ error: String((e as Error).message ?? e).split("\n")[0]! }));
+      const walletAtFeedback = await walletAt(grounding, registry, f.agentId, f.blockNumber).catch((e) => ({ error: String((e as Error).message ?? e).split("\n")[0]! }));
       groundingFacts.push(
         groundingFact({
           subject,

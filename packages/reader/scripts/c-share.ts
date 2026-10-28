@@ -3,7 +3,7 @@
 // R-S190-3: per token, the count and value of payment facts labelled (c) over all payment facts, over the whole
 // index in the block range. Reads the PGlite index directly (READER_PGLITE_DIR, default .ponder/pglite); stop
 // the reader first, PGlite allows one process. Vault payments are labelled by their account's NablaZ label,
-// which needs the chain's RPC (READER_ARB_RPC_URL) for the mandate code hash at <toBlock>. Prints the inputs,
+// which needs the chain's RPC (READER_ARBITRUM_RPC_URL) for the mandate code hash at <toBlock>. Prints the inputs,
 // the shares and the reproducing queries.
 
 import { PGlite } from "@electric-sql/pglite";
