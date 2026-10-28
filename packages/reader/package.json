@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:fork": "vitest run --project fork",
-    "report:c-share": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/c-share.ts"
+    "report:c-share": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/c-share.ts",
+    "estimate:backfill": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/estimate-backfill.ts"
   },
   "dependencies": {
     "@nablaz/sdk": "workspace:*",

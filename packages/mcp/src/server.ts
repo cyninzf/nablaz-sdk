@@ -1,5 +1,5 @@
-// A stdio MCP server over the reader's GET /read (R-S189-2: run locally; no hosted URL is assumed). Reads only:
-// one tool, no write, no signing, no key. The reader's JSON is returned byte for byte, after one line naming
+// The MCP server core over the reader's GET /read, shared by the stdio and Streamable HTTP doors (R-S192-1). Reads
+// only: one tool, no write, no signing, no key. The reader's JSON is returned byte for byte, after one line naming
 // the chain and the as-of block.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
