@@ -31,12 +31,19 @@ Chainstack URL.
 
 ## Deploys
 
-One machine (`min_machines_running = 1`, `auto_stop_machines = false`): the rate limit is held in process, and
-one indexer writes the database. Each deployment indexes into its own schema, named from the deployment's
-image tag in `FLY_IMAGE_REF`; the views schema `reader` points at the deployment that is live. The `GET
-/ready` check answers 200 once the indexer has caught up. The RPC cache (schema `ponder_sync`) is shared, so a
-redeploy reindexes from the cache rather than from the RPCs. Ponder does not drop the schema of a deployment
+`fly.toml` builds the root `Dockerfile`, whose CMD runs `scripts/reader-start.sh` as the non-root user
+`reader`. One machine (`min_machines_running = 1`, `auto_stop_machines = false`): the rate limit is held in
+process, and one indexer writes the database. Each deployment indexes into its own schema, named from the
+deployment's image tag in `FLY_IMAGE_REF`; the views schema `reader` points at the deployment that is live. The
+RPC cache (schema `ponder_sync`) is shared, so a redeploy reindexes from the cache rather than from the RPCs. Ponder does not drop the schema of a deployment
 that has been replaced; replaced schemas are dropped by hand once the new deployment is live.
+
+## Health: /live and /ready
+
+- `GET /live` is deploy health, and Fly's check (`fly.toml`, 60 s grace). It answers 200 when the front is up
+  and the reader process answers, whatever the index progress; 503 otherwise.
+- `GET /ready` is index readiness, the public signal: 503 until the index has caught up, 200 after. `/ready`
+  503 during backfill is expected, not an incident.
 
 ## Database backup (off-platform)
 

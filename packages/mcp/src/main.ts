@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --experimental-strip-types --disable-warning=ExperimentalWarning
 // Entry point. --transport stdio (default) or http. The reader URL comes from --reader-url or NABLAZ_READER_URL,
 // default the local reader. On stdio, stdout carries the protocol; nothing else is written to it. On http (POST
-// /mcp, and GET /read and /ready relayed to the reader), the port comes from --port or PORT (default 3042), the per-IP limit from MCP_RATE_LIMIT_PER_MIN (default 60),
+// /mcp, GET /live, and GET /read and /ready relayed to the reader), the port comes from --port or PORT (default 3042), the per-IP limit from MCP_RATE_LIMIT_PER_MIN (default 60),
 // and MCP_CLIENT_IP_HEADER names the header that carries the client IP (unset: the socket peer).
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

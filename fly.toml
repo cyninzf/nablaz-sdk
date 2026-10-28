@@ -16,11 +16,11 @@ primary_region = "iad"
 
   [[http_service.checks]]
     method = "GET"
-    path = "/ready"
+    path = "/live"
     interval = "15s"
     timeout = "5s"
-    grace_period = "30s"
+    grace_period = "60s"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "512mb"                  # CTO to confirm against reader+Ponder footprint; bump to 1gb if the smoke run shows pressure
+  memory = "1gb"

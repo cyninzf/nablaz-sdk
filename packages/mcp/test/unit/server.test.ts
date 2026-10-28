@@ -177,6 +177,32 @@ describe("entry points", () => {
     }
   }, 30_000);
 
+  it("GET /live: 200 while the reader process answers /health, 503 once it does not; index progress plays no part", async () => {
+    let up = true;
+    const reader = createServer((req, res) => {
+      if (req.url === "/health" && up) return res.writeHead(200).end();
+      // /ready answers 503 throughout: the index has not caught up, which /live ignores.
+      res.writeHead(503).end();
+    });
+    await new Promise<void>((r) => reader.listen(0, "127.0.0.1", r));
+    const http = await overHttp(`http://127.0.0.1:${(reader.address() as { port: number }).port}`);
+    try {
+      const get = async (p: string) => {
+        const r = await fetch(`http://127.0.0.1:${http.port}${p}`);
+        return [r.status, await r.text()];
+      };
+      expect(await get("/live")).toEqual([200, "live\n"]);
+      expect((await get("/ready"))[0]).toBe(503);
+      up = false;
+      expect(await get("/live")).toEqual([503, "reader process not answering\n"]);
+      await new Promise<void>((r) => reader.close(() => r()));
+      expect(await get("/live")).toEqual([503, "reader process not answering\n"]);
+    } finally {
+      await http.stop();
+      reader.close();
+    }
+  }, 30_000);
+
   it("HTTP sends no CORS headers and serves nothing of the reader but /read and /ready", async () => {
     const http = await overHttp(base);
     try {

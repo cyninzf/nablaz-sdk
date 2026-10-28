@@ -1,7 +1,8 @@
 // The HTTP front of one instance with two doors (R-S192-1). POST /mcp: Streamable HTTP onto the same read
 // server, stateless, one fresh server and transport per request, the same single read_subject tool. GET
 // /read/:chainId/:address and GET /ready: relayed to the reader unchanged (status, content type, body bytes), so
-// the reader itself need not be public. Every request is rate-limited per IP in process so the limit holds
+// the reader itself need not be public. GET /live: 200 when the front is up and the reader process answers its
+// /health, 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
 // overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint;
 // any other path is 404.
@@ -50,6 +51,15 @@ function plain(res: ServerResponse, status: number, text: string) {
   res.writeHead(status, { "content-type": "text/plain; charset=utf-8" }).end(text);
 }
 
+/** 200 when the reader process answers GET /health (it does from start-up, before the index has caught up). */
+async function live(res: ServerResponse, readerUrl: string, get: typeof fetch) {
+  try {
+    const r = await get(new URL("/health", readerUrl), { signal: AbortSignal.timeout(2_000) });
+    if (r.ok) return plain(res, 200, "live\n");
+  } catch {}
+  plain(res, 503, "reader process not answering\n");
+}
+
 /** GET `path` on the reader; its status, content type and body go back unchanged. */
 async function relay(res: ServerResponse, readerUrl: string, path: string, get: typeof fetch) {
   let r: Response;
@@ -67,6 +77,7 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (!allow(clientIp(req, opts.clientIpHeader))) return plain(res, 429, "rate limit exceeded, try again in a minute\n");
     const path = new URL(req.url ?? "/", "http://x").pathname;
+    if (req.method === "GET" && path === "/live") return live(res, opts.readerUrl ?? DEFAULT_READER_URL, opts.fetch ?? fetch);
     if (req.method === "GET" && READER_PATH.test(path)) return relay(res, opts.readerUrl ?? DEFAULT_READER_URL, path, opts.fetch ?? fetch);
     if (path !== MCP_PATH) return plain(res, 404, "not found\n");
     // Stateless: no session, no server-initiated stream, so only POST carries a request.

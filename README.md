@@ -169,11 +169,13 @@ only. It has two doors:
 - `POST https://read.nablaz.io/mcp`: the MCP server's Streamable HTTP transport, with its one tool,
   `read_subject`. For an MCP client that takes a URL: `{ "type": "http", "url": "https://read.nablaz.io/mcp" }`.
 
-Both doors are rate-limited per client IP; a request over the limit gets 429 with a plain-text body. Nothing
-else of the reader is served: no status, metrics or counts endpoint. Reads are taken at the indexed block and
-cite the contracts' own logs and state, so each fact can be checked with its one-liner against an RPC of your
-own. The deployment is `fly.toml` and `scripts/reader-start.sh`; `docs/runbooks/hosted-read.md` lists the
-variables it reads and the database backup schedule.
+Both doors are rate-limited per client IP; a request over the limit gets 429 with a plain-text body. Beside
+them, `GET /live` (the process is up) and `GET /ready` (the index has caught up) answer with a status code and
+a short text; nothing else is served: no status, metrics or counts endpoint. Reads are taken at the indexed
+block and cite the contracts' own logs and state, so each fact can be checked with its one-liner against an
+RPC of your own. The deployment is `fly.toml`, the `Dockerfile` and `scripts/reader-start.sh`;
+`docs/runbooks/hosted-read.md` lists the variables it reads, the two health paths and the database backup
+schedule.
 
 ## Running it locally
 
@@ -248,8 +250,9 @@ or `PORT` (default 3042). Requests are limited per client IP in process, `MCP_RA
 unless `MCP_CLIENT_IP_HEADER` names a header that a proxy in front overwrites with it (for example
 `X-Real-IP`). Name only a header the proxy always sets: a header the client can send is a header the client
 can spoof. `GET /read/:chainId/:address` and `GET /ready` are relayed to the reader unchanged, under the same
-limit, so one port serves both doors. There are no CORS headers and no counts or metrics endpoint; every
-other path returns 404.
+limit, so one port serves both doors. `GET /live` answers 200 while the front is up and the reader process
+answers, 503 otherwise, whatever the index progress. There are no CORS headers and no counts or metrics
+endpoint; every other path returns 404.
 
 ```sh
 pnpm --silent mcp -- --transport http --port 3042
