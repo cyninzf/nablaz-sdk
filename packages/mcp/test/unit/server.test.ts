@@ -1,15 +1,18 @@
 // The MCP read server against a local HTTP stub of GET /read: pass-through, reads only, the API's errors as-is,
-// the stdio entry point, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
+// the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
 // wording; "nothing indexed", not "none").
 
+import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DEFAULT_READER_URL, READ_TOOL, READ_TOOL_DESCRIPTION, readServer } from "../../src/server.ts";
+import { MCP_PATH, readHttpServer } from "../../src/http.ts";
 import { bannedHits } from "../../../reader/src/wording.ts";
 
 const TEST = "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c";
@@ -107,24 +110,98 @@ describe("reads only", () => {
   }, 30_000);
 });
 
-describe("stdio entry point", () => {
-  it("serves the same tool over stdio, with the reader URL from NABLAZ_READER_URL", async () => {
-    const transport = new StdioClientTransport({
-      command: process.execPath,
-      args: [...NODE_ARGS, MAIN],
-      env: { ...(process.env as Record<string, string>), NABLAZ_READER_URL: base },
-      stderr: "pipe",
+async function overStdio(readerUrl: string) {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [...NODE_ARGS, MAIN],
+    env: { ...(process.env as Record<string, string>), NABLAZ_READER_URL: readerUrl },
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(transport);
+  return client;
+}
+
+/** Spawns main.ts --transport http on a free port; resolves once it logs the port it bound. */
+async function overHttp(readerUrl: string) {
+  const child = spawn(process.execPath, [...NODE_ARGS, MAIN, "--transport", "http", "--port", "0", "--reader-url", readerUrl], {
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    let err = "";
+    child.stderr!.on("data", (d) => {
+      err += d;
+      const m = err.match(/http port (\d+)/);
+      if (m) resolve(Number(m[1]));
     });
-    const client = new Client({ name: "test", version: "0" });
-    await client.connect(transport);
+    child.on("exit", (code) => reject(new Error(`exited ${code}: ${err}`)));
+  });
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}${MCP_PATH}`)));
+  return { client, port, stop: async () => (await client.close(), child.kill()) };
+}
+
+describe("entry points", () => {
+  it("serves the same tool over stdio and Streamable HTTP; both results equal GET /read, byte for byte", async () => {
+    const direct = await (await fetch(`${base}/read/42161/${TEST}`)).text();
+    const stdio = await overStdio(base);
+    const http = await overHttp(base);
     try {
-      expect((await client.listTools()).tools.map((t) => t.name)).toEqual([READ_TOOL]);
-      const r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
-      expect(texts(r)[1]).toBe(BODY);
+      for (const client of [stdio, http.client]) expect((await client.listTools()).tools.map((t) => t.name)).toEqual([READ_TOOL]);
+      const args = { name: READ_TOOL, arguments: { chainId: 42161, address: TEST } };
+      const viaStdio = await stdio.callTool(args);
+      const viaHttp = await http.client.callTool(args);
+      expect(viaHttp).toEqual(viaStdio);
+      expect(texts(viaStdio)).toEqual(["chain 42161, as of block 518782876", direct]);
+      expect(texts(viaHttp)[1]).toBe(direct);
+      expect(direct).toBe(BODY);
     } finally {
-      await client.close();
+      await stdio.close();
+      await http.stop();
     }
   }, 30_000);
+
+  it("HTTP sends no CORS headers and serves nothing but the MCP path", async () => {
+    const http = await overHttp(base);
+    try {
+      for (const path of ["/", "/metrics", "/stats", "/read/42161/x"]) {
+        const r = await fetch(`http://127.0.0.1:${http.port}${path}`, { headers: { origin: "https://example.com" } });
+        expect(r.status).toBe(404);
+        expect(r.headers.get("access-control-allow-origin")).toBeNull();
+      }
+      const r = await fetch(`http://127.0.0.1:${http.port}${MCP_PATH}`, { method: "OPTIONS", headers: { origin: "https://example.com" } });
+      expect(r.headers.get("access-control-allow-origin")).toBeNull();
+    } finally {
+      await http.stop();
+    }
+  }, 30_000);
+});
+
+describe("HTTP rate limit", () => {
+  it("answers 429 with a plain body once an IP exceeds MCP_RATE_LIMIT_PER_MIN in a minute", async () => {
+    const server = readHttpServer({ readerUrl: base, rateLimitPerMin: 3 });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}${MCP_PATH}`;
+    try {
+      const statuses: number[] = [];
+      let last: Response | undefined;
+      for (let i = 0; i < 4; i++) {
+        last = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: i, method: "tools/list" }),
+        });
+        statuses.push(last.status);
+        if (i < 3) await last.text();
+      }
+      expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true);
+      expect(statuses[3]).toBe(429);
+      expect(last!.headers.get("content-type")).toMatch(/^text\/plain/);
+      expect(await last!.text()).toMatch(/rate limit/);
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  });
 });
 
 describe("wording", () => {

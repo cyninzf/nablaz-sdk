@@ -190,7 +190,7 @@ the notes in each read state the range read. `READER_CHAINS=8453` limits the ins
 
 ### MCP server
 
-`packages/mcp` is a stdio MCP server with one tool, `read_subject` (`chainId`, `address`). It calls
+`packages/mcp` is an MCP server, on stdio by default, with one tool, `read_subject` (`chainId`, `address`). It calls
 `GET /read/:chainId/:address` on the reader and returns the JSON unchanged, after a line naming the chain
 and the as-of block. It reads only: there is no write or signing tool, and it holds no key. The reader URL
 comes from `--reader-url` or `NABLAZ_READER_URL`, and defaults to `http://localhost:42069`.
@@ -213,6 +213,32 @@ stdout carries the protocol, so launch it without anything that prints to stdout
   }
 }
 ```
+
+#### HTTP transport
+
+`--transport http` serves the same server, with the same single `read_subject` tool, over Streamable HTTP
+at `POST /mcp`. It is stateless: no session, no key, no write or signing path. The port comes from `--port`
+or `PORT` (default 3042). Requests are limited per client IP in process, `MCP_RATE_LIMIT_PER_MIN` per minute
+(default 60), and a request over the limit gets 429 with a plain-text body. There are no CORS headers and no
+counts or metrics endpoint. Every path other than `/mcp` returns 404.
+
+```sh
+pnpm --silent mcp -- --transport http --port 3042
+```
+
+To run the reader and the HTTP MCP server together as one instance over full history, use this
+environment. Both chains are read, and every source starts at its deployment block:
+
+```sh
+READER_ARB_RPC_URL=...               # Arbitrum One RPC, archive
+READER_BASE_RPC_URL=...              # Base RPC, archive
+PONDER_TELEMETRY_DISABLED=true
+NABLAZ_READER_URL=http://localhost:42069
+PORT=3042
+MCP_RATE_LIMIT_PER_MIN=60
+```
+
+Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES` and `READER_START_BLOCK` unset.
 
 ### Feedback grounding and the (c) share, locally
 

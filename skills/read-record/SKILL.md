@@ -174,6 +174,9 @@ fetched (R-S191-13).
 block and the block before it, not a log. If the two reads differ, the field is stored as not
 determinable with both reads cited (README, "Citation rule").
 
+**An event's time is its own.** State an event's time from the fact's own time or block field only
+(`cite.block`); never date an event by the read's `asOfBlock` or the current date.
+
 **Self-dealing and exposure are counts, with their limits.** `selfDealing` gives distinct counterparties,
 the share of value paid to accounts under the same controller and the share paid to counterparties with
 no record, per token. It always carries the sentence "A payee controlled by the same person under another
