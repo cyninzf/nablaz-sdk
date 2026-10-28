@@ -1,0 +1,13 @@
+# Every dotfile and dot-directory (.git, .env and .env.*, .devcontainer, .github, local tool state).
+.*
+.git
+**/node_modules
+.env
+.env.*
+**/*.log
+.devcontainer
+.github
+docs
+skills
+**/.ponder
+packages/*/test

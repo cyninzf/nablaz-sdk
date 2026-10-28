@@ -1,0 +1,26 @@
+app = "nablaz-reader"
+primary_region = "iad"
+
+[build]
+  # default; the repo's Dockerfile/buildpack builds the reader + front
+
+[env]
+  PORT = "3042"                     # the front listens on PORT (scripts/reader-start.sh); pinned to internal_port
+
+[http_service]
+  internal_port = 3042              # the public front's PORT (DEFAULT_PORT in packages/mcp/src/http.ts)
+  force_https = true
+  auto_stop_machines = false        # an indexer never scales to zero
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/live"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "60s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

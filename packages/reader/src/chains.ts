@@ -16,8 +16,13 @@ export type ChainSources = {
   name: string;
   /** Disabled chains stay in the registry but never reach the Ponder config. */
   enabled: boolean;
-  /** Environment variable holding this chain's RPC URL. The URL itself is never stored in the repo. */
+  /**
+   * Environment variable holding this chain's indexer RPC URL: head tracking and state reads (src/rpc.ts).
+   * The URLs themselves are never stored in the repo.
+   */
   rpcEnv: string;
+  /** Environment variable holding this chain's grounding RPC URL: backfill eth_getLogs and the grounding reads. */
+  groundingRpcEnv: string;
   /** Native USDC on this chain (Circle). */
   usdc: Address;
   nabla: {
@@ -78,7 +83,8 @@ export const CHAINS: Record<number, ChainSources> = {
     chainId: 42161,
     name: "arbitrum",
     enabled: true,
-    rpcEnv: "READER_ARB_RPC_URL",
+    rpcEnv: "READER_ARBITRUM_RPC_URL",
+    groundingRpcEnv: "READER_ARBITRUM_GROUNDING_RPC_URL",
     usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
     nabla: {
       NablaRecord: arb.NablaRecord.address,
@@ -108,6 +114,7 @@ export const CHAINS: Record<number, ChainSources> = {
     name: "base",
     enabled: true,
     rpcEnv: "READER_BASE_RPC_URL",
+    groundingRpcEnv: "READER_BASE_GROUNDING_RPC_URL",
     usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     nabla: { NablaRecord: null, NablaAccountFactoryPermanent: null, AccountRegistryV6: null, ConsumerAIMandateV4: null, startBlock: null },
     external: {

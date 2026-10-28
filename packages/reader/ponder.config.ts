@@ -2,6 +2,7 @@ import { createConfig, factory } from "ponder";
 import { getAbiItem, parseAbi } from "viem";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain, type NablaContracts } from "./src/chains";
 import { DelegationManagerAbi } from "./src/delegation";
+import { indexerTransport, rpcUrls } from "./src/rpc";
 import { AgentCreditLineAbi, IdentityRegistryAbi, ReputationRegistryAbi, SpendPermissionManagerAbi } from "./src/external-abis";
 import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi } from "@nablaz/sdk/abis";
 
@@ -10,6 +11,9 @@ import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi }
 // Optional overrides, used by the tests: READER_START_BLOCK, READER_END_BLOCK, READER_PGLITE_DIR,
 // READER_CHAINS (chain ids, comma-separated), READER_SOURCES ("nabla", "external" or both, comma-separated),
 // READER_EXTERNAL_FROM (src/chains.ts).
+// RPC: two URLs per chain, routed by src/rpc.ts (R-S192-8). Base polls every 2 s; Arbitrum keeps Ponder's 1 s
+// default, since Ponder fetches every new block individually there and a longer interval saves no calls.
+// Database: Postgres when DATABASE_URL is set (the hosted instance), else PGlite.
 // USDC Transfer is not indexed wholesale: the redemption handler reads the tx receipt (R-S189-5).
 
 const UpgradedAbi = parseAbi(["event Upgraded(address indexed implementation)"]);
@@ -26,6 +30,7 @@ const startOverride = envBlock("READER_START_BLOCK");
 const endOverride = envBlock("READER_END_BLOCK");
 
 const chainsOn = enabledChains();
+const POLLING_MS: Record<number, number> = { 8453: 2_000 };
 const sources = sourcesOn();
 
 /** One entry per chain that `pick` accepts; each with its own start block unless overridden. */
@@ -45,8 +50,10 @@ function perChain<T extends object>(build: (c: NablaChain) => T) {
 
 export default createConfig({
   ordering: "omnichain",
-  database: { kind: "pglite", directory: process.env.READER_PGLITE_DIR ?? ".ponder/pglite" },
-  chains: Object.fromEntries(chainsOn.map((c) => [c.name, { id: c.chainId, rpc: process.env[c.rpcEnv] }])),
+  database: process.env.DATABASE_URL ? { kind: "postgres" } : { kind: "pglite", directory: process.env.READER_PGLITE_DIR ?? ".ponder/pglite" },
+  chains: Object.fromEntries(
+    chainsOn.map((c) => [c.name, { id: c.chainId, rpc: indexerTransport(rpcUrls(c)), ...(POLLING_MS[c.chainId] ? { pollingInterval: POLLING_MS[c.chainId] } : {}) }]),
+  ),
   contracts: {
     NablaRecord: {
       abi: NablaRecordAbi,

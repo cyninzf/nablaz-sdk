@@ -1,6 +1,6 @@
 // B4 part 1 step 0: P0-3 (RedeemedDelegation decodes), P0-4 (SpendPermissionManager), P0-6 (Agent Credit
 // Lines topic scan) on Arbitrum One and Base. Writes JSON to the path given; docs/reader/b4-part1.md is
-// the committed record of one run. RPC URLs come from READER_ARB_RPC_URL / READER_BASE_RPC_URL and are
+// the committed record of one run. RPC URLs come from READER_ARBITRUM_RPC_URL / READER_BASE_RPC_URL and are
 // never printed.
 //
 //   node --experimental-strip-types scripts/premises.ts <out.json>
@@ -21,7 +21,7 @@ const out = process.argv[2];
 if (!out) throw new Error("usage: premises.ts <out.json>");
 
 const CHAINS = [
-  { chainId: 42161, rpcEnv: "READER_ARB_RPC_URL" },
+  { chainId: 42161, rpcEnv: "READER_ARBITRUM_RPC_URL" },
   { chainId: 8453, rpcEnv: "READER_BASE_RPC_URL" },
 ] as const;
 const DM: Address = "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";

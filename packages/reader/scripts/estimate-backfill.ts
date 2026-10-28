@@ -2,7 +2,7 @@
 //
 // Prices a full-history backfill (R-S192-1: every source from its deployment block, both chains) and the
 // steady state at head, in eth_getLogs calls and Alchemy compute units. Reads only the current head and a
-// block-time sample from each chain's RPC (READER_ARB_RPC_URL, READER_BASE_RPC_URL); nothing else is fetched.
+// block-time sample from each chain's RPC (READER_ARBITRUM_RPC_URL, READER_BASE_RPC_URL); nothing else is fetched.
 // Prints numbers, writes nothing: the numbers are not committed (S190-L4), this script is.
 //
 // CU per method, from the Alchemy compute-unit cost table (looked up Oct 28 2026):
@@ -12,7 +12,8 @@
 // Pay As You Go and Enterprise unlimited, Free 10 blocks; every response capped at 150MB.
 // Plan prices: https://www.alchemy.com/pricing (Pay As You Go $0.52 per 1M CU, Oct 28 2026).
 //
-// Chunking. The reader sets no ethGetLogsBlockRange, so Ponder 0.18.1 chunks dynamically: the first range is
+// Chunking. The reader sets no ethGetLogsBlockRange (backfill eth_getLogs go to the grounding RPC, src/rpc.ts),
+// so Ponder 0.18.1 chunks dynamically: the first range is
 // 500 blocks and each successful call grows it by 5%, until the RPC refuses a range and suggests one
 // (node_modules/ponder/dist/esm/rpc/actions.js, eth_getLogsWithPagination). "ponder" simulates that growth,
 // capped at --max-range (default unlimited, Alchemy's paid tiers on these chains): a floor, since a dense
@@ -22,7 +23,8 @@
 // Not counted: per-event calls the handlers make (block and receipt fetches, the vault envelope state reads),
 // which scale with matched logs, not with blocks; and the reads' own grounding getLogs (src/grounding-rpc.ts).
 //
-// Steady state. Ponder's realtime sync polls each chain every 1 s (pollingInterval default) and, per new
+// Steady state. Ponder's realtime sync polls each chain every pollingInterval (Base 2 s, Arbitrum 1 s,
+// ponder.config.ts) and, per new
 // block, fetches the block (eth_getBlockByNumber) and its logs (one eth_getLogs by blockHash, for every
 // source at once). Ponder skips the getLogs when no filter matches the block's logsBloom; that skip is not
 // modelled, so the getLogs line is an upper bound.
@@ -33,7 +35,7 @@ import { CHAINS, hasNabla, type ChainSources } from "../src/chains.ts";
 const CU = { eth_getLogs: 60, eth_getBlockByNumber: 20, eth_blockNumber: 10 } as const;
 const PONDER_START_RANGE = 500;
 const PONDER_GROWTH = 1.05;
-const POLL_SECONDS = 1;
+const POLL_SECONDS: Record<number, number> = { 42161: 1, 8453: 2 };
 const SAMPLE_BLOCKS = 100_000n;
 
 function flag(name: string, fallback: number): number {
@@ -112,7 +114,7 @@ for (const c of Object.values(CHAINS).filter((x) => x.enabled)) {
   totalFixed += chainFixed;
 
   const blocksPerDay = 86_400 / blockSeconds;
-  const blockCalls = Math.max(blocksPerDay, 86_400 / POLL_SECONDS);
+  const blockCalls = Math.max(blocksPerDay, 86_400 / POLL_SECONDS[c.chainId]!);
   const dayCu = blockCalls * CU.eth_getBlockByNumber + blocksPerDay * CU.eth_getLogs;
   steady.push(
     `${c.name}: head ${head.number}, ${blockSeconds.toFixed(3)} s/block over the last ${SAMPLE_BLOCKS} blocks; ` +

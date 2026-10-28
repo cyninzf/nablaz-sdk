@@ -157,6 +157,26 @@ Graph's Base fixture (CC BY 4.0, see NOTICE) and writes the comparison to
 `docs/reader/afg-agreement-2026-10-20.csv`. `docs/reader/retroactive-binding-2026-10.md` describes the
 remaining disagreements.
 
+## Hosted read
+
+Not live yet.
+
+`https://read.nablaz.io` runs the reader and the MCP server below as one instance, on both home chains
+(chain IDs 42161 and 8453), with every source indexed from its deployment block. It is keyless and reads
+only. It has two doors:
+
+- `GET https://read.nablaz.io/read/:chainId/:address`: the JSON a local `GET /read` returns.
+- `POST https://read.nablaz.io/mcp`: the MCP server's Streamable HTTP transport, with its one tool,
+  `read_subject`. For an MCP client that takes a URL: `{ "type": "http", "url": "https://read.nablaz.io/mcp" }`.
+
+Both doors are rate-limited per client IP; a request over the limit gets 429 with a plain-text body. Beside
+them, `GET /live` (the process is up) and `GET /ready` (the index has caught up) answer with a status code and
+a short text; nothing else is served: no status, metrics or counts endpoint. Reads are taken at the indexed
+block and cite the contracts' own logs and state, so each fact can be checked with its one-liner against an
+RPC of your own. The deployment is `fly.toml`, the `Dockerfile` and `scripts/reader-start.sh`;
+`docs/runbooks/hosted-read.md` lists the variables it reads, the two health paths and the database backup
+schedule.
+
 ## Running it locally
 
 Everything below runs on your machine: the reader, the MCP server and the skill. Requires Node 22.12+ and
@@ -164,12 +184,19 @@ pnpm. From a clean checkout:
 
 ```sh
 pnpm install --frozen-lockfile
-export READER_ARB_RPC_URL=...        # Arbitrum One RPC; archive for the envelope and exposure reads
-export READER_BASE_RPC_URL=...       # Base RPC; public endpoints rate-limit eth_getLogs
+export READER_ARBITRUM_RPC_URL=...             # Arbitrum One RPC; archive for the envelope and exposure reads
+export READER_ARBITRUM_GROUNDING_RPC_URL=...   # Arbitrum One RPC for backfill eth_getLogs and grounding reads
+export READER_BASE_RPC_URL=...                 # Base RPC
+export READER_BASE_GROUNDING_RPC_URL=...       # Base RPC for backfill eth_getLogs and grounding reads
 export PONDER_TELEMETRY_DISABLED=true
 export READER_EXTERNAL_FROM=42161:518780000,8453:53160000   # optional; see below
 pnpm reader                          # = cd packages/reader && pnpm start --schema reader
 ```
+
+Each chain takes two RPC URLs, one per role, and both are required; one URL may serve both roles. The
+first carries head tracking and the state reads. The second carries every `eth_getLogs` over a block range
+(the backfill, and the grounding reads), so it should accept unlimited ranges. Head-tracking calls fall back
+to it only when the first URL fails; the grounding reads never use the first.
 
 The reader serves on `localhost:42069`. Once `/ready` answers 200 it has caught up, and reads are taken at
 the indexed block:
@@ -222,7 +249,10 @@ or `PORT` (default 3042). Requests are limited per client IP in process, `MCP_RA
 (default 60), and a request over the limit gets 429 with a plain-text body. The client IP is the socket peer,
 unless `MCP_CLIENT_IP_HEADER` names a header that a proxy in front overwrites with it (for example
 `X-Real-IP`). Name only a header the proxy always sets: a header the client can send is a header the client
-can spoof. There are no CORS headers and no counts or metrics endpoint. Every path other than `/mcp` returns 404.
+can spoof. `GET /read/:chainId/:address` and `GET /ready` are relayed to the reader unchanged, under the same
+limit, so one port serves both doors. `GET /live` answers 200 while the front is up and the reader process
+answers, 503 otherwise, whatever the index progress. There are no CORS headers and no counts or metrics
+endpoint; every other path returns 404.
 
 ```sh
 pnpm --silent mcp -- --transport http --port 3042
@@ -232,8 +262,10 @@ To run the reader and the HTTP MCP server together as one instance over full his
 environment. Both chains are read, and every source starts at its deployment block:
 
 ```sh
-READER_ARB_RPC_URL=...               # Arbitrum One RPC, archive
-READER_BASE_RPC_URL=...              # Base RPC, archive
+READER_ARBITRUM_RPC_URL=...             # Arbitrum One RPC, archive: head tracking and state reads
+READER_ARBITRUM_GROUNDING_RPC_URL=...   # Arbitrum One RPC, archive, unlimited eth_getLogs range
+READER_BASE_RPC_URL=...                 # Base RPC, archive
+READER_BASE_GROUNDING_RPC_URL=...       # Base RPC, archive, unlimited eth_getLogs range
 PONDER_TELEMETRY_DISABLED=true
 NABLAZ_READER_URL=http://localhost:42069
 PORT=3042
@@ -261,7 +293,7 @@ pnpm report:c-share 8453 53160000 53160200   # READER_PGLITE_DIR defaults to pac
 ```
 
 It prints its inputs, one line per token, and the SQL that reproduces the count. Vault payments on
-Arbitrum One are labelled through their account, which needs `READER_ARB_RPC_URL`.
+Arbitrum One are labelled through their account, which needs `READER_ARBITRUM_RPC_URL`.
 
 ### Skills
 
@@ -274,9 +306,12 @@ grantee vault.
 ```sh
 pnpm typecheck
 pnpm test          # unit
-pnpm test:fork     # needs READER_ARB_RPC_URL (archive), READER_BASE_RPC_URL, anvil and cast (Foundry)
+pnpm test:fork     # needs anvil and cast (Foundry) and the RPC variables below
 NABLAZ_PROTOCOL_DIR=/path/to/nablaz-protocol pnpm test   # also checks the lineage copy against nablaz-protocol
 ```
+
+The reader's fork tests read `READER_ARBITRUM_RPC_URL` (archive), `READER_BASE_RPC_URL` and their two
+`*_GROUNDING_RPC_URL`; `packages/sdk`'s read `READER_ARB_RPC_URL` (archive).
 
 The fork tests run an anvil fork of Arbitrum One, drive the live contracts from TypeScript using the
 ABIs in `abis/`, index the result from scratch, and assert the derived rows. They index twice and require

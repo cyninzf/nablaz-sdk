@@ -14,7 +14,7 @@ import { CHAINS, CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src
 import { render } from "../../src/oneliners";
 import { UPSTREAM, UPSTREAM_BASE, indexOnce, redact, stopAndDump, type Served, type Tables } from "./harness";
 
-if (!UPSTREAM) throw new Error("READER_ARB_RPC_URL is not set: the fork tests run on both chains and do not skip");
+if (!UPSTREAM) throw new Error("READER_ARBITRUM_RPC_URL is not set: the fork tests run on both chains and do not skip");
 if (!UPSTREAM_BASE) throw new Error("READER_BASE_RPC_URL is not set: the fork tests run on both chains and do not skip");
 
 // Fixed windows, so the counts are reproducible. Each holds redemptions and at least one SpendPermissionUsed.

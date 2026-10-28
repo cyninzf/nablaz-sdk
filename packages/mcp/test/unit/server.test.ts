@@ -1,5 +1,5 @@
 // The MCP read server against a local HTTP stub of GET /read: pass-through, reads only, the API's errors as-is,
-// the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
+// the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP front's GET /read relay, the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
 // wording; "nothing indexed", not "none").
 
 import { spawn } from "node:child_process";
@@ -29,6 +29,7 @@ const seen: string[] = [];
 beforeAll(async () => {
   stub = createServer((req, res) => {
     seen.push(req.url!);
+    if (req.url === "/ready") return res.writeHead(503, { "content-type": "text/plain; charset=UTF-8" }).end("Historical indexing is not complete.");
     const m = req.url!.match(/^\/read\/(\d+)\/(.+)$/);
     if (!m) return res.writeHead(404).end();
     if (m[1] !== "42161") return res.writeHead(404, { "content-type": "application/json" }).end(NOT_READ);
@@ -161,10 +162,51 @@ describe("entry points", () => {
     }
   }, 30_000);
 
-  it("HTTP sends no CORS headers and serves nothing but the MCP path", async () => {
+  it("HTTP relays GET /read and GET /ready to the reader unchanged: status, content type, body bytes", async () => {
     const http = await overHttp(base);
     try {
-      for (const path of ["/", "/metrics", "/stats", "/read/42161/x"]) {
+      for (const path of [`/read/42161/${TEST}`, `/read/1/${TEST}`, "/ready"]) {
+        const direct = await fetch(`${base}${path}`);
+        const front = await fetch(`http://127.0.0.1:${http.port}${path}`);
+        expect([front.status, front.headers.get("content-type")]).toEqual([direct.status, direct.headers.get("content-type")]);
+        expect(Buffer.from(await front.arrayBuffer()).equals(Buffer.from(await direct.arrayBuffer()))).toBe(true);
+      }
+      expect(await (await fetch(`http://127.0.0.1:${http.port}/read/42161/${TEST}`)).text()).toBe(BODY);
+    } finally {
+      await http.stop();
+    }
+  }, 30_000);
+
+  it("GET /live: 200 while the reader process answers /health, 503 once it does not; index progress plays no part", async () => {
+    let up = true;
+    const reader = createServer((req, res) => {
+      if (req.url === "/health" && up) return res.writeHead(200).end();
+      // /ready answers 503 throughout: the index has not caught up, which /live ignores.
+      res.writeHead(503).end();
+    });
+    await new Promise<void>((r) => reader.listen(0, "127.0.0.1", r));
+    const http = await overHttp(`http://127.0.0.1:${(reader.address() as { port: number }).port}`);
+    try {
+      const get = async (p: string) => {
+        const r = await fetch(`http://127.0.0.1:${http.port}${p}`);
+        return [r.status, await r.text()];
+      };
+      expect(await get("/live")).toEqual([200, "live\n"]);
+      expect((await get("/ready"))[0]).toBe(503);
+      up = false;
+      expect(await get("/live")).toEqual([503, "reader process not answering\n"]);
+      await new Promise<void>((r) => reader.close(() => r()));
+      expect(await get("/live")).toEqual([503, "reader process not answering\n"]);
+    } finally {
+      await http.stop();
+      reader.close();
+    }
+  }, 30_000);
+
+  it("HTTP sends no CORS headers and serves nothing of the reader but /read and /ready", async () => {
+    const http = await overHttp(base);
+    try {
+      for (const path of ["/", "/metrics", "/stats", "/status", "/health", "/graphql", "/sql/x", "/read", "/read/42161", `/read/42161/${TEST}/x`, "/read/../metrics"]) {
         const r = await fetch(`http://127.0.0.1:${http.port}${path}`, { headers: { origin: "https://example.com" } });
         expect(r.status).toBe(404);
         expect(r.headers.get("access-control-allow-origin")).toBeNull();
