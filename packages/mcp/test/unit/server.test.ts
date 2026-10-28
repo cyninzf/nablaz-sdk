@@ -177,7 +177,7 @@ describe("entry points", () => {
   }, 30_000);
 });
 
-async function limited(opts: { rateLimitPerMin: number; trustProxy?: string }) {
+async function limited(opts: { rateLimitPerMin: number; clientIpHeader?: string }) {
   const server = readHttpServer({ readerUrl: base, ...opts });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}${MCP_PATH}`;
@@ -207,7 +207,7 @@ describe("HTTP rate limit", () => {
     }
   });
 
-  it("without TRUST_PROXY, spoofed client-IP headers are bucketed by the true peer", async () => {
+  it("without MCP_CLIENT_IP_HEADER, spoofed client-IP headers are bucketed by the true peer", async () => {
     const s = await limited({ rateLimitPerMin: 3 });
     try {
       const statuses = [];
@@ -218,9 +218,9 @@ describe("HTTP rate limit", () => {
     }
   });
 
-  it("with TRUST_PROXY=X-Real-IP, the key is that header; a spoofed X-Forwarded-For changes nothing", async () => {
+  it("with MCP_CLIENT_IP_HEADER=X-Real-IP, the key is that header; a spoofed X-Forwarded-For changes nothing", async () => {
     // The edge overwrites X-Real-IP with the true peer; the client controls X-Forwarded-For.
-    const s = await limited({ rateLimitPerMin: 3, trustProxy: "X-Real-IP" });
+    const s = await limited({ rateLimitPerMin: 3, clientIpHeader: "X-Real-IP" });
     try {
       const statuses = [];
       for (let i = 0; i < 4; i++) statuses.push((await s.post(i, { "x-real-ip": "192.0.2.7", "x-forwarded-for": `203.0.113.${i}` })).status);

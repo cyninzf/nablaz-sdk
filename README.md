@@ -220,9 +220,9 @@ stdout carries the protocol, so launch it without anything that prints to stdout
 at `POST /mcp`. It is stateless: no session, no key, no write or signing path. The port comes from `--port`
 or `PORT` (default 3042). Requests are limited per client IP in process, `MCP_RATE_LIMIT_PER_MIN` per minute
 (default 60), and a request over the limit gets 429 with a plain-text body. The client IP is the socket peer,
-unless `TRUST_PROXY` names a header that a proxy in front overwrites with it (for example `X-Real-IP`). Name
-only a header the proxy always sets: a header the client can send is a header the client can spoof. There are
-no CORS headers and no counts or metrics endpoint. Every path other than `/mcp` returns 404.
+unless `MCP_CLIENT_IP_HEADER` names a header that a proxy in front overwrites with it (for example
+`X-Real-IP`). Name only a header the proxy always sets: a header the client can send is a header the client
+can spoof. There are no CORS headers and no counts or metrics endpoint. Every path other than `/mcp` returns 404.
 
 ```sh
 pnpm --silent mcp -- --transport http --port 3042
@@ -238,7 +238,7 @@ PONDER_TELEMETRY_DISABLED=true
 NABLAZ_READER_URL=http://localhost:42069
 PORT=3042
 MCP_RATE_LIMIT_PER_MIN=60
-TRUST_PROXY=                         # the client-IP header the proxy in front overwrites; unset without one
+MCP_CLIENT_IP_HEADER=                # the client-IP header the proxy in front overwrites; unset without one
 ```
 
 Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES` and `READER_START_BLOCK` unset.

@@ -2,7 +2,7 @@
 // Entry point. --transport stdio (default) or http. The reader URL comes from --reader-url or NABLAZ_READER_URL,
 // default the local reader. On stdio, stdout carries the protocol; nothing else is written to it. On http, the
 // port comes from --port or PORT (default 3042), the per-IP limit from MCP_RATE_LIMIT_PER_MIN (default 60),
-// and TRUST_PROXY names the header that carries the client IP (unset: the socket peer).
+// and MCP_CLIENT_IP_HEADER names the header that carries the client IP (unset: the socket peer).
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { DEFAULT_READER_URL, readServer } from "./server.ts";
@@ -24,11 +24,11 @@ if (transport === "stdio") {
   const rateLimitPerMin = Number(process.env.MCP_RATE_LIMIT_PER_MIN ?? DEFAULT_RATE_LIMIT_PER_MIN);
   if (!Number.isInteger(port) || port < 0) throw new Error(`invalid port: ${port}`);
   if (!Number.isInteger(rateLimitPerMin) || rateLimitPerMin < 1) throw new Error(`invalid MCP_RATE_LIMIT_PER_MIN: ${rateLimitPerMin}`);
-  const trustProxy = process.env.TRUST_PROXY || undefined;
-  const server = readHttpServer({ readerUrl, rateLimitPerMin, trustProxy });
+  const clientIpHeader = process.env.MCP_CLIENT_IP_HEADER || undefined;
+  const server = readHttpServer({ readerUrl, rateLimitPerMin, clientIpHeader });
   server.listen(port, () => {
     const { port: bound } = server.address() as { port: number };
-    console.error(`nablaz-read MCP server on http port ${bound} path ${MCP_PATH}, reader ${readerUrl}, ${rateLimitPerMin} requests/min per IP from ${trustProxy ?? "the socket peer"}`);
+    console.error(`nablaz-read MCP server on http port ${bound} path ${MCP_PATH}, reader ${readerUrl}, ${rateLimitPerMin} requests/min per IP from ${clientIpHeader ?? "the socket peer"}`);
   });
 } else {
   throw new Error(`--transport must be stdio or http, not ${transport}`);
