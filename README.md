@@ -159,6 +159,8 @@ remaining disagreements.
 
 ## Hosted read
 
+Not live yet.
+
 `https://read.nablaz.io` runs the reader and the MCP server below as one instance, on both home chains
 (chain IDs 42161 and 8453), with every source indexed from its deployment block. It is keyless and reads
 only. It has two doors:
@@ -170,7 +172,7 @@ only. It has two doors:
 Both doors are rate-limited per client IP; a request over the limit gets 429 with a plain-text body. Nothing
 else of the reader is served: no status, metrics or counts endpoint. Reads are taken at the indexed block and
 cite the contracts' own logs and state, so each fact can be checked with its one-liner against an RPC of your
-own. The deployment is `railway.json` and `scripts/railway-start.sh`; `docs/runbooks/hosted-read.md` lists the
+own. The deployment is `fly.toml` and `scripts/reader-start.sh`; `docs/runbooks/hosted-read.md` lists the
 variables it reads and the database backup schedule.
 
 ## Running it locally

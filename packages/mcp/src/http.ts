@@ -3,7 +3,7 @@
 // /read/:chainId/:address and GET /ready: relayed to the reader unchanged (status, content type, body bytes), so
 // the reader itself need not be public. Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
-// overwrites (X-Real-IP on Railway), that header's value. No CORS headers, no counts or metrics endpoint;
+// overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint;
 // any other path is 404.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
