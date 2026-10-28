@@ -177,29 +177,57 @@ describe("entry points", () => {
   }, 30_000);
 });
 
+async function limited(opts: { rateLimitPerMin: number; trustProxy?: string }) {
+  const server = readHttpServer({ readerUrl: base, ...opts });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}${MCP_PATH}`;
+  const post = async (i: number, headers: Record<string, string> = {}) => {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+      body: JSON.stringify({ jsonrpc: "2.0", id: i, method: "tools/list" }),
+    });
+    return { status: r.status, type: r.headers.get("content-type"), body: await r.text() };
+  };
+  return { post, close: () => new Promise<void>((r) => server.close(() => r())) };
+}
+
 describe("HTTP rate limit", () => {
   it("answers 429 with a plain body once an IP exceeds MCP_RATE_LIMIT_PER_MIN in a minute", async () => {
-    const server = readHttpServer({ readerUrl: base, rateLimitPerMin: 3 });
-    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}${MCP_PATH}`;
+    const s = await limited({ rateLimitPerMin: 3 });
     try {
-      const statuses: number[] = [];
-      let last: Response | undefined;
-      for (let i = 0; i < 4; i++) {
-        last = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: i, method: "tools/list" }),
-        });
-        statuses.push(last.status);
-        if (i < 3) await last.text();
-      }
-      expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true);
-      expect(statuses[3]).toBe(429);
-      expect(last!.headers.get("content-type")).toMatch(/^text\/plain/);
-      expect(await last!.text()).toMatch(/rate limit/);
+      const rs = [];
+      for (let i = 0; i < 4; i++) rs.push(await s.post(i));
+      expect(rs.slice(0, 3).map((r) => r.status)).not.toContain(429);
+      expect(rs[3]!.status).toBe(429);
+      expect(rs[3]!.type).toMatch(/^text\/plain/);
+      expect(rs[3]!.body).toMatch(/rate limit/);
     } finally {
-      await new Promise<void>((r) => server.close(() => r()));
+      await s.close();
+    }
+  });
+
+  it("without TRUST_PROXY, spoofed client-IP headers are bucketed by the true peer", async () => {
+    const s = await limited({ rateLimitPerMin: 3 });
+    try {
+      const statuses = [];
+      for (let i = 0; i < 4; i++) statuses.push((await s.post(i, { "x-real-ip": `198.51.100.${i}`, "x-forwarded-for": `203.0.113.${i}` })).status);
+      expect(statuses[3]).toBe(429);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("with TRUST_PROXY=X-Real-IP, the key is that header; a spoofed X-Forwarded-For changes nothing", async () => {
+    // The edge overwrites X-Real-IP with the true peer; the client controls X-Forwarded-For.
+    const s = await limited({ rateLimitPerMin: 3, trustProxy: "X-Real-IP" });
+    try {
+      const statuses = [];
+      for (let i = 0; i < 4; i++) statuses.push((await s.post(i, { "x-real-ip": "192.0.2.7", "x-forwarded-for": `203.0.113.${i}` })).status);
+      expect(statuses[3]).toBe(429);
+      expect((await s.post(9, { "x-real-ip": "192.0.2.8" })).status).not.toBe(429);
+    } finally {
+      await s.close();
     }
   });
 });
