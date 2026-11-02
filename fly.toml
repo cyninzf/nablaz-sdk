@@ -22,5 +22,5 @@ primary_region = "iad"
     grace_period = "60s"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "1gb"
+  size = "performance-1x"
+  memory = "2gb"
