@@ -1,6 +1,6 @@
 // The MCP server core over the reader's GET /read, shared by the stdio and Streamable HTTP doors (R-S192-1). Reads
 // only: one tool, no write, no signing, no key. The reader's JSON is returned byte for byte, after one line naming
-// the chain and the as-of block.
+// the chain and the as-of block; a reader 4xx body as-is; a reader 5xx as a fixed text, its body logged only.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -14,6 +14,17 @@ export const READ_TOOL = "read_subject";
 export const READ_TOOL_DESCRIPTION =
   "Returns every fact the reader has indexed about an address on one chain, as GET /read/:chainId/:address JSON: each fact names its source, carries a permission label of shape (a) to (e), and cites the block, transaction and log index with a command that returns the same log from any RPC. " +
   "A note reading nothing indexed (blocks X..Y) covers only that block range, and does not mean nothing happened on chain.";
+
+/** How much of a reader error body the server-side log keeps. */
+const LOGGED_BODY_MAX = 2_000;
+
+/**
+ * A reader 5xx body is the reader's internals (a driver message, a filesystem path), not an answer (R-S198-3/4):
+ * it goes to stderr only, first LOGGED_BODY_MAX characters. A 4xx body is reader-authored and is relayed.
+ */
+export function logReaderError(status: number, path: string, body: string): void {
+  console.error(`reader ${status} on GET ${path}: ${body.slice(0, LOGGED_BODY_MAX)}`);
+}
 
 export type ReadServerOptions = {
   /** Reader base URL. Default DEFAULT_READER_URL. */
@@ -45,7 +56,11 @@ export function readServer(opts: ReadServerOptions = {}): McpServer {
         return { isError: true, content: [{ type: "text", text: `the reader at ${base} did not answer: ${String(e)}` }] };
       }
       const body = await res.text();
-      if (!res.ok) return { isError: true, content: [{ type: "text", text: `GET ${url.pathname}: HTTP ${res.status}` }, { type: "text", text: body }] };
+      if (res.status >= 500) logReaderError(res.status, url.pathname, body);
+      if (!res.ok) {
+        const text = res.status >= 500 ? `reader error (status ${res.status})` : body;
+        return { isError: true, content: [{ type: "text", text: `GET ${url.pathname}: HTTP ${res.status}` }, { type: "text", text }] };
+      }
       const { asOfBlock } = JSON.parse(body) as { asOfBlock?: string };
       return { content: [{ type: "text", text: `chain ${chainId}, as of block ${asOfBlock}` }, { type: "text", text: body }] };
     },

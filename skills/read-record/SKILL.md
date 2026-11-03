@@ -37,7 +37,8 @@ parts:
 2. the `GET /read` body, byte for byte.
 
 If the API answers with a non-2xx status, the result is an error with two parts:
-`GET /read/<chainId>/<address>: HTTP <status>`, then the API's body unchanged. If the reader does not
+`GET /read/<chainId>/<address>: HTTP <status>`, then the API's body unchanged for a 4xx, or
+`reader error (status <status>)` for a 5xx. If the reader does not
 answer at all, the result is an error starting `the reader at <url> did not answer`. That is a failed
 read. It says nothing about the address.
 

@@ -269,7 +269,11 @@ export const externalRedemptions = onchainTable(
     label: t.text().notNull(),
     hadTransfer: t.boolean().notNull(),
   }),
-  (t) => ({ byRoot: index().on(t.chainId, t.rootDelegator), byDelegator: index().on(t.chainId, t.delegator) }),
+  (t) => ({
+    byRoot: index().on(t.chainId, t.rootDelegator),
+    byDelegator: index().on(t.chainId, t.delegator),
+    byDelegate: index().on(t.chainId, t.delegate),
+  }),
 );
 
 /** Agent Credit Lines Borrowed / Repaid / Defaulted at a configured lender. */
@@ -289,7 +293,7 @@ export const creditLineEvents = onchainTable(
     dueAt: t.bigint(),
     label: t.text().notNull(),
   }),
-  (t) => ({ byAgent: index().on(t.chainId, t.agentId) }),
+  (t) => ({ byAgent: index().on(t.chainId, t.agentId), byParty: index().on(t.chainId, t.party) }),
 );
 
 /**

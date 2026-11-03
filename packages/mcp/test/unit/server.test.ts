@@ -1,15 +1,16 @@
-// The MCP read server against a local HTTP stub of GET /read: pass-through, reads only, the API's errors as-is,
-// the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP front's GET /read relay, the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
+// The MCP read server against a local HTTP stub of GET /read: pass-through, reads only, a 4xx as-is and a 5xx as a fixed text,
+// the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP front's GET /read relay (below 500 unchanged, /ready not-ready as {"ready":false}, no reader 5xx body), the /mcp catch-all, the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
 // wording; "nothing indexed", not "none").
 
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DEFAULT_READER_URL, READ_TOOL, READ_TOOL_DESCRIPTION, readServer } from "../../src/server.ts";
 import { MCP_PATH, readHttpServer } from "../../src/http.ts";
@@ -19,6 +20,8 @@ const TEST = "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c";
 // Not the reader's formatting on purpose: the body must come back byte for byte, not re-serialized.
 const BODY = `{"subject":"${TEST}",  "chainId":42161,"asOfBlock":"518782876","facts":[],"selfDealing":null,"exposure":null,"notes":["x: nothing indexed (blocks 1..2)"]}`;
 const NOT_READ = `{"error":"chain 1 is not read here"}`;
+// The body the hosted reader served on S198 (Ponder's pg statement timeout), path and all.
+const UPSTREAM_500 = `error: canceling statement due to statement timeout occurred in '/app/node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.1/node_modules/pg-pool/index.js:45:11' while handling a 'GET' request to the route '/read/42161/${TEST}'`;
 const MAIN = fileURLToPath(new URL("../../src/main.ts", import.meta.url));
 const NODE_ARGS = ["--experimental-strip-types", "--disable-warning=ExperimentalWarning"];
 
@@ -59,7 +62,7 @@ describe("read_subject", () => {
     expect(texts(r)).toEqual(["chain 42161, as of block 518782876", BODY]);
   });
 
-  it("an unknown chain gets the API's 404 message, as-is", async () => {
+  it("a reader 4xx is reader-authored: an unknown chain gets the API's 404 message, as-is", async () => {
     const client = await connected();
     const r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 1, address: TEST } });
     expect(r.isError).toBe(true);
@@ -78,6 +81,23 @@ describe("read_subject", () => {
     const r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
     expect(r.isError).toBe(true);
     expect(texts(r)[0]).toMatch(/^the reader at http:\/\/127\.0\.0\.1:1 did not answer/);
+  });
+
+  it("a reader 5xx never reaches the caller: a fixed text, the reader's body in the server log only", async () => {
+    const reader = createServer((_, res) => res.writeHead(500, { "content-type": "text/plain" }).end(UPSTREAM_500));
+    await new Promise<void>((r) => reader.listen(0, "127.0.0.1", r));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const client = await connected(`http://127.0.0.1:${(reader.address() as { port: number }).port}`);
+      const r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
+      expect(r.isError).toBe(true);
+      expect(texts(r)).toEqual([`GET /read/42161/${TEST}: HTTP 500`, "reader error (status 500)"]);
+      for (const leak of ["/app/", "node_modules", "pg-pool", "statement timeout"]) expect(JSON.stringify(r)).not.toContain(leak);
+      expect(log).toHaveBeenCalledWith(`reader 500 on GET /read/42161/${TEST}: ${UPSTREAM_500}`);
+    } finally {
+      log.mockRestore();
+      await new Promise<void>((r) => reader.close(() => r()));
+    }
   });
 });
 
@@ -162,20 +182,55 @@ describe("entry points", () => {
     }
   }, 30_000);
 
-  it("HTTP relays GET /read and GET /ready to the reader unchanged: status, content type, body bytes", async () => {
+  it("HTTP relays a 2xx or 4xx GET /read unchanged (status, content type, body bytes): reader-authored answers", async () => {
     const http = await overHttp(base);
     try {
-      for (const path of [`/read/42161/${TEST}`, `/read/1/${TEST}`, "/ready"]) {
+      for (const path of [`/read/42161/${TEST}`, `/read/1/${TEST}`]) {
         const direct = await fetch(`${base}${path}`);
         const front = await fetch(`http://127.0.0.1:${http.port}${path}`);
         expect([front.status, front.headers.get("content-type")]).toEqual([direct.status, direct.headers.get("content-type")]);
         expect(Buffer.from(await front.arrayBuffer()).equals(Buffer.from(await direct.arrayBuffer()))).toBe(true);
       }
       expect(await (await fetch(`http://127.0.0.1:${http.port}/read/42161/${TEST}`)).text()).toBe(BODY);
+      expect(await (await fetch(`http://127.0.0.1:${http.port}/read/1/${TEST}`)).text()).toBe(NOT_READ);
     } finally {
       await http.stop();
     }
   }, 30_000);
+
+  it("HTTP GET /ready not ready: 503 with the front's own {\"ready\":false}, never the reader's body or an error", async () => {
+    // The stub answers /ready with 503 "Historical indexing is not complete." (Ponder's text).
+    const http = await overHttp(base);
+    try {
+      const r = await fetch(`http://127.0.0.1:${http.port}/ready`);
+      const body = await r.text();
+      expect([r.status, r.headers.get("content-type"), body]).toEqual([503, "application/json", `{"ready":false}`]);
+      expect(body).not.toContain("Historical");
+      expect(body).not.toContain("error");
+    } finally {
+      await http.stop();
+    }
+  }, 30_000);
+
+  it("HTTP never relays a reader 5xx body: a filesystem path and the driver text stay in the server log", async () => {
+    const UPSTREAM = UPSTREAM_500;
+    const reader = createServer((_, res) => res.writeHead(500, { "content-type": "text/plain" }).end(UPSTREAM));
+    await new Promise<void>((r) => reader.listen(0, "127.0.0.1", r));
+    const front = readHttpServer({ readerUrl: `http://127.0.0.1:${(reader.address() as { port: number }).port}` });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const r = await fetch(`http://127.0.0.1:${(front.address() as { port: number }).port}/read/42161/${TEST}`);
+      const body = await r.text();
+      expect([r.status, r.headers.get("content-type"), body]).toEqual([500, "application/json", `{"error":"internal error"}`]);
+      for (const leak of ["/app/", "node_modules", "pg-pool", "statement timeout", UPSTREAM]) expect(body).not.toContain(leak);
+      expect(log).toHaveBeenCalledWith(`reader 500 on GET /read/42161/${TEST}: ${UPSTREAM}`);
+    } finally {
+      log.mockRestore();
+      await new Promise<void>((r) => front.close(() => r()));
+      await new Promise<void>((r) => reader.close(() => r()));
+    }
+  });
 
   it("GET /live: 200 while the reader process answers /health, 503 once it does not; index progress plays no part", async () => {
     let up = true;
@@ -202,6 +257,29 @@ describe("entry points", () => {
       reader.close();
     }
   }, 30_000);
+
+  it("HTTP POST /mcp: a thrown error answers a fixed 500 \"internal error\"; its message and stack go to the server log only", async () => {
+    const thrown = new Error("ENOENT: no such file or directory, open '/app/packages/mcp/secret/state.json'");
+    const handle = vi.spyOn(StreamableHTTPServerTransport.prototype, "handleRequest").mockRejectedValue(thrown);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const front = readHttpServer({ readerUrl: base });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
+    try {
+      const r = await fetch(`http://127.0.0.1:${(front.address() as { port: number }).port}${MCP_PATH}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      });
+      const body = await r.text();
+      expect([r.status, body]).toEqual([500, "internal error\n"]);
+      for (const leak of ["/app/", "ENOENT", "state.json", thrown.message]) expect(body).not.toContain(leak);
+      expect(log.mock.calls.flat().join("\n")).toContain(thrown.stack!);
+    } finally {
+      handle.mockRestore();
+      log.mockRestore();
+      await new Promise<void>((r) => front.close(() => r()));
+    }
+  });
 
   it("HTTP sends no CORS headers and serves nothing of the reader but /read and /ready", async () => {
     const http = await overHttp(base);
