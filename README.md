@@ -250,8 +250,8 @@ or `PORT` (default 3042). Requests are limited per client IP in process, `MCP_RA
 unless `MCP_CLIENT_IP_HEADER` names a header that a proxy in front overwrites with it (for example
 `X-Real-IP`). Name only a header the proxy always sets: a header the client can send is a header the client
 can spoof. `GET /read/:chainId/:address` and `GET /ready` are relayed to the reader under the same limit, so one
-port serves both doors: a 2xx unchanged, any other status with a fixed JSON body (`{"error":"internal error"}`
-for a 5xx), the reader's own body going only to the front's log. `GET /live` answers 200 while the front is up and the reader process
+port serves both doors: below 500 unchanged; `/ready` at 503 as `{"ready":false}`; any other 5xx as
+`{"error":"internal error"}`, the reader's own body going only to the front's log. `GET /live` answers 200 while the front is up and the reader process
 answers, 503 otherwise, whatever the index progress. There are no CORS headers and no counts or metrics
 endpoint; every other path returns 404.
 

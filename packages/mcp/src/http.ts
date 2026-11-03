@@ -1,15 +1,15 @@
 // The HTTP front of one instance with two doors (R-S192-1). POST /mcp: Streamable HTTP onto the same read
 // server, stateless, one fresh server and transport per request, the same single read_subject tool. GET
-// /read/:chainId/:address and GET /ready: relayed to the reader, so the reader itself need not be public; a 2xx
-// unchanged (status, content type, body bytes), any other status with a fixed body (relay below). GET /live: 200 when the front is up and the reader process answers its
+// /read/:chainId/:address and GET /ready: relayed to the reader, so the reader itself need not be public; a
+// reader-authored answer unchanged (status, content type, body bytes), a 5xx with a fixed body (relay below). GET /live: 200 when the front is up and the reader process answers its
 // /health, 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
 // overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint;
 // any other path is 404.
 
-import { createServer, STATUS_CODES, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { DEFAULT_READER_URL, readServer, type ReadServerOptions } from "./server.ts";
+import { DEFAULT_READER_URL, logReaderError, readServer, type ReadServerOptions } from "./server.ts";
 
 export const DEFAULT_PORT = 3042;
 export const DEFAULT_RATE_LIMIT_PER_MIN = 60;
@@ -60,14 +60,12 @@ async function live(res: ServerResponse, readerUrl: string, get: typeof fetch) {
   plain(res, 503, "reader process not answering\n");
 }
 
-/** How much of a reader error body the server-side log keeps. */
-const LOGGED_BODY_MAX = 2_000;
+const json = (res: ServerResponse, status: number, body: unknown) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
 
 /**
- * GET `path` on the reader. A 2xx goes back unchanged (status, content type, body bytes). Any other status goes
- * back with a fixed body and the reader's body only in the server log (R-S198-3): a reader error can carry
- * internals (a driver message, a filesystem path) that are not the public's. 5xx: {"error":"internal error"};
- * 4xx: {"error":"<the status's reason phrase>"}.
+ * GET `path` on the reader (R-S198-3/4). Below 500 the answer is reader-authored and goes back unchanged (status,
+ * content type, body bytes). /ready at 503 is the index not caught up: the front's own {"ready":false}. Any other
+ * 5xx: {"error":"internal error"}, the reader's body (a driver message, a filesystem path) to the server log only.
  */
 async function relay(res: ServerResponse, readerUrl: string, path: string, get: typeof fetch) {
   let r: Response;
@@ -77,10 +75,10 @@ async function relay(res: ServerResponse, readerUrl: string, path: string, get: 
     return plain(res, 502, "reader unreachable\n");
   }
   const body = Buffer.from(await r.arrayBuffer());
-  if (r.ok) return res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/octet-stream" }).end(body);
-  console.error(`reader ${r.status} on GET ${path}: ${body.toString("utf8").slice(0, LOGGED_BODY_MAX)}`);
-  const error = r.status >= 500 ? "internal error" : (STATUS_CODES[r.status] ?? "request failed").toLowerCase();
-  res.writeHead(r.status, { "content-type": "application/json" }).end(JSON.stringify({ error }));
+  if (r.status < 500) return res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/octet-stream" }).end(body);
+  if (path === "/ready" && r.status === 503) return json(res, 503, { ready: false });
+  logReaderError(r.status, path, body.toString("utf8"));
+  json(res, r.status, { error: "internal error" });
 }
 
 export function readHttpServer(opts: HttpServerOptions = {}): Server {
@@ -103,7 +101,9 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
       await server.connect(transport);
       await transport.handleRequest(req, res);
     } catch (e) {
-      if (!res.headersSent) plain(res, 500, `internal error: ${String(e)}\n`);
+      // The exception (message and stack) is the server's, not the caller's (R-S198-4).
+      console.error(`mcp request failed: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
+      if (!res.headersSent) plain(res, 500, "internal error\n");
     }
   });
 }
