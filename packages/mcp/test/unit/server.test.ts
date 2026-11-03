@@ -1,12 +1,12 @@
 // The MCP read server against a local HTTP stub of GET /read: pass-through, reads only, the API's errors as-is,
-// the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP front's GET /read relay, the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
+// the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP front's GET /read relay (2xx unchanged, no reader error body), the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
 // wording; "nothing indexed", not "none").
 
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -162,20 +162,45 @@ describe("entry points", () => {
     }
   }, 30_000);
 
-  it("HTTP relays GET /read and GET /ready to the reader unchanged: status, content type, body bytes", async () => {
+  it("HTTP relays a 2xx GET /read unchanged (status, content type, body bytes); a non-2xx keeps its status, not its body", async () => {
     const http = await overHttp(base);
     try {
-      for (const path of [`/read/42161/${TEST}`, `/read/1/${TEST}`, "/ready"]) {
-        const direct = await fetch(`${base}${path}`);
-        const front = await fetch(`http://127.0.0.1:${http.port}${path}`);
-        expect([front.status, front.headers.get("content-type")]).toEqual([direct.status, direct.headers.get("content-type")]);
-        expect(Buffer.from(await front.arrayBuffer()).equals(Buffer.from(await direct.arrayBuffer()))).toBe(true);
+      const path = `/read/42161/${TEST}`;
+      const direct = await fetch(`${base}${path}`);
+      const front = await fetch(`http://127.0.0.1:${http.port}${path}`);
+      expect([front.status, front.headers.get("content-type")]).toEqual([direct.status, direct.headers.get("content-type")]);
+      expect(Buffer.from(await front.arrayBuffer()).equals(Buffer.from(await direct.arrayBuffer()))).toBe(true);
+      expect(await (await fetch(`http://127.0.0.1:${http.port}${path}`)).text()).toBe(BODY);
+      // The stub answers /read/1 with 404 NOT_READ and /ready with 503 "Historical indexing is not complete.".
+      for (const [p, status, body] of [[`/read/1/${TEST}`, 404, `{"error":"not found"}`], ["/ready", 503, `{"error":"internal error"}`]] as const) {
+        const r = await fetch(`http://127.0.0.1:${http.port}${p}`);
+        expect([r.status, r.headers.get("content-type"), await r.text()]).toEqual([status, "application/json", body]);
       }
-      expect(await (await fetch(`http://127.0.0.1:${http.port}/read/42161/${TEST}`)).text()).toBe(BODY);
     } finally {
       await http.stop();
     }
   }, 30_000);
+
+  it("HTTP never relays a reader 5xx body: a filesystem path and the driver text stay in the server log", async () => {
+    // The body the hosted reader served on S198 (Ponder's pg statement timeout), path and all.
+    const UPSTREAM = `error: canceling statement due to statement timeout occurred in '/app/node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.1/node_modules/pg-pool/index.js:45:11' while handling a 'GET' request to the route '/read/42161/${TEST}'`;
+    const reader = createServer((_, res) => res.writeHead(500, { "content-type": "text/plain" }).end(UPSTREAM));
+    await new Promise<void>((r) => reader.listen(0, "127.0.0.1", r));
+    const front = readHttpServer({ readerUrl: `http://127.0.0.1:${(reader.address() as { port: number }).port}` });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const r = await fetch(`http://127.0.0.1:${(front.address() as { port: number }).port}/read/42161/${TEST}`);
+      const body = await r.text();
+      expect([r.status, r.headers.get("content-type"), body]).toEqual([500, "application/json", `{"error":"internal error"}`]);
+      for (const leak of ["/app/", "node_modules", "pg-pool", "statement timeout", UPSTREAM]) expect(body).not.toContain(leak);
+      expect(log).toHaveBeenCalledWith(`reader 500 on GET /read/42161/${TEST}: ${UPSTREAM}`);
+    } finally {
+      log.mockRestore();
+      await new Promise<void>((r) => front.close(() => r()));
+      await new Promise<void>((r) => reader.close(() => r()));
+    }
+  });
 
   it("GET /live: 200 while the reader process answers /health, 503 once it does not; index progress plays no part", async () => {
     let up = true;
