@@ -20,7 +20,8 @@ SCHEMA=$(printf '%s' "${ref##*:}" | tr 'A-Z' 'a-z' | cut -c1-45)
 # views schema "reader" always points at the live deployment. Ponder reads PORT before --port, so it is unset
 # for the reader: PORT is the front's.
 (cd packages/reader && exec env -u PORT node_modules/.bin/ponder start --schema "$SCHEMA" --views-schema reader --hostname 127.0.0.1 --port "$READER_PORT") &
-NABLAZ_READER_URL="http://127.0.0.1:$READER_PORT" node --experimental-strip-types --disable-warning=ExperimentalWarning packages/mcp/src/main.ts --transport http &
+# The reader's PID (the subshell execs into it): the front's GET /live watches the process, not its event loop (R-S194-15).
+NABLAZ_READER_PID=$! NABLAZ_READER_URL="http://127.0.0.1:$READER_PORT" node --experimental-strip-types --disable-warning=ExperimentalWarning packages/mcp/src/main.ts --transport http &
 
 status=0
 wait -n || status=$?

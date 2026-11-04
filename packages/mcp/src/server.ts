@@ -53,7 +53,9 @@ export function readServer(opts: ReadServerOptions = {}): McpServer {
       try {
         res = await get(url);
       } catch (e) {
-        return { isError: true, content: [{ type: "text", text: `the reader at ${base} did not answer: ${String(e)}` }] };
+        // The reader's URL (a loopback address) and the fetch error text are the server's, not the caller's (row K).
+        console.error(`reader unreachable on GET ${url.pathname}: ${String(e)}`);
+        return { isError: true, content: [{ type: "text", text: "the reader did not answer" }] };
       }
       const body = await res.text();
       if (res.status >= 500) logReaderError(res.status, url.pathname, body);
