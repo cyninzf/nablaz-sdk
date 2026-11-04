@@ -76,11 +76,19 @@ describe("read_subject", () => {
     expect(seen).toEqual(["/read/42161/..%2F..%2Fstatus"]);
   });
 
-  it("a reader that does not answer is an error, not a read with nothing indexed", async () => {
-    const client = await connected("http://127.0.0.1:1");
-    const r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
-    expect(r.isError).toBe(true);
-    expect(texts(r)[0]).toMatch(/^the reader at http:\/\/127\.0\.0\.1:1 did not answer/);
+  it("a reader that does not answer is an error, not a read with nothing indexed; the caller sees no URL and no fetch text", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const client = await connected("http://127.0.0.1:1");
+      const r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
+      expect(r.isError).toBe(true);
+      // Row K (S198 deferred): the loopback URL and the fetch error text are the server's, not the caller's.
+      expect(texts(r)).toEqual(["the reader did not answer"]);
+      for (const leak of ["127.0.0.1", "http://", "fetch failed", "ECONNREFUSED"]) expect(JSON.stringify(r)).not.toContain(leak);
+      expect(log.mock.calls.map((c) => String(c[0])).join("\n")).toMatch(/^reader unreachable on GET \/read\/42161\/0x8E65.*: /m);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("a reader 5xx never reaches the caller: a fixed text, the reader's body in the server log only", async () => {
@@ -255,6 +263,33 @@ describe("entry points", () => {
     } finally {
       await http.stop();
       reader.close();
+    }
+  }, 30_000);
+
+  it("GET /live with the reader's PID: 200 while that process runs, even when its HTTP loop never answers; 503 once it exits", async () => {
+    // Row G (R-S194-15): Ponder's event loop can stall on a fat block; deploy health must not restart the machine
+    // for that. A reader that accepts connections and never answers stands in for the stalled loop.
+    const hung = createServer(() => {});
+    await new Promise<void>((r) => hung.listen(0, "127.0.0.1", r));
+    const proc = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    const front = readHttpServer({ readerUrl: `http://127.0.0.1:${(hung.address() as { port: number }).port}`, readerPid: proc.pid! });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
+    const live = async () => {
+      const r = await fetch(`http://127.0.0.1:${(front.address() as { port: number }).port}/live`, { signal: AbortSignal.timeout(5_000) });
+      return [r.status, await r.text()];
+    };
+    try {
+      expect(await live()).toEqual([200, "live\n"]);
+      const exited = new Promise((r) => proc.once("exit", r));
+      proc.kill("SIGKILL");
+      await exited;
+      expect(await live()).toEqual([503, "reader process not running\n"]);
+    } finally {
+      proc.kill("SIGKILL");
+      front.closeAllConnections();
+      hung.closeAllConnections();
+      await new Promise<void>((r) => front.close(() => r()));
+      await new Promise<void>((r) => hung.close(() => r()));
     }
   }, 30_000);
 
