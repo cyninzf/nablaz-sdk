@@ -67,8 +67,10 @@ Restore into an empty database with `pg_restore --no-owner --dbname="$TARGET_DAT
 - Before Ponder starts, `scripts/reader-start.sh` runs `packages/reader/scripts/check-rpc.ts`: each of the four
   RPC variables must answer `eth_chainId` with its chain's id, and `eth_blockNumber`. It tries up to 3 rounds, 5 s
   apart, and logs one line per leg, by variable, chain, role and host (never the path or key). A leg that still
-  fails stops the start with exit 1, naming the leg: `rpc check FAILED: READER_..._URL (<chain> <role>, host
-  <host>): <reason>`. Fly then restarts the machine (see Restart policy).
+  fails is named in a warning, `rpc check FAILED: READER_..._URL (<chain> <role>, host <host>): <reason>` then
+  `rpc check WARNING: <n> of 4 legs failed: <variables>; starting anyway`, and the start goes on (CTO ruling,
+  S200: a boot-blocking check would restart-loop on any vendor outage, the Oct 30 exit-75 class). An ongoing leg
+  failure shows in `/metrics/reader`.
 - Every RPC error the reader logs starts `[rpc <chain> <leg>]`, leg `indexer` (Chainstack) or `grounding`
   (Alchemy) (R-S194-10). URLs inside the error are already `[redacted:indexer]` / `[redacted:grounding]` (R-S197-8).
 - `GET /metrics/reader` on the reader's loopback port (127.0.0.1:42069, beside Ponder's own `/metrics`) serves
@@ -178,7 +180,7 @@ exit 75 from ~12:32Z Oct 30 under flyd policy"; "pipeline frozen on BOTH chains 
 20:46:49Z/21:01:00Z Oct 30; restart unfroze" (one restart by ruling 15:12:29Z Oct 31 unfroze it).
 
 Not from record: exit 75 is Ponder's own exit code; from inside the image it does not say which failure caused
-it. The start-up RPC check above exits 1, so a leg that fails at boot is told apart from it. A restart after a
+it. The start-up RPC check never stops the start; its warning names a leg that failed at boot. A restart after a
 replace (machine update or deploy) took about 13 min of `/ready` 503 on 2026-11-04 (16:05:24Z to 16:18:15Z) while
 Ponder replayed from its cache; `/live` stayed 200.
 
@@ -242,7 +244,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 | Ponder Postgres pool `max` | 30 | Accepted: 2 internal plus 9 each for the read-only, user and sync pools under `ponder start`; 19 sessions read on 2026-11-04 against the limit of 50. |
 | Ponder pool timeouts | read-only: `statement_timeout` 30 s, `work_mem` 512MB, `lock_timeout` 500 ms; user and sync: `statement_timeout` 2 min; internal: 10 min | Accepted: Ponder sets them on its own clients (S198 §6); a `/read` query over 30 s is fixed by an index (S198, #10), not a longer timeout. |
 | Ponder `ordering` | multichain | Set: `omnichain`. |
-| Fly restart policy | not set in `fly.toml` | Accepted with the record above (exit 75 → flyd loop); the RPC check exits 1 to tell its failures apart. |
+| Fly restart policy | not set in `fly.toml` | Accepted with the record above (exit 75 → flyd loop); the start-up RPC check warns and never exits non-zero, so it adds no restart. |
 | Fly `http_service` check | Fly's, not relied on | Set: `GET /live`, 15 s interval, 5 s timeout, 60 s grace. |
 | Fly autostop | Fly's, not relied on | Set: `auto_stop_machines = false`, `min_machines_running = 1`. |
 | Front rate limit | 60 per IP per minute | Set: `DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`. |

@@ -138,13 +138,17 @@ describe("row E: counters in /metrics/reader", () => {
 
 describe("row C: scripts/check-rpc.ts warns and lets the start proceed (CTO ruling, S200)", () => {
   it("a failed leg is named in a warning on stderr; the script exits 0, so reader-start.sh goes on to start Ponder", async () => {
-    const { spawnSync } = await import("node:child_process");
+    // Asynchronous spawn: the stub legs run in this process and must keep answering while the script runs.
+    const { spawn } = await import("node:child_process");
     const script = new URL("../../scripts/check-rpc.ts", import.meta.url).pathname;
-    const r = spawnSync(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", script], {
+    const child = spawn(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", script], {
       env: { PATH: process.env.PATH, READER_CHAINS: "8453", READER_BASE_RPC_URL: `${baseIdx.url}/${KEY}`, READER_BASE_GROUNDING_RPC_URL: "" },
-      encoding: "utf8",
-      timeout: 60_000,
+      stdio: ["ignore", "ignore", "pipe"],
     });
+    let stderr = "";
+    child.stderr!.on("data", (d) => (stderr += d));
+    const status = await new Promise<number | null>((resolve) => child.on("exit", resolve));
+    const r = { status, stderr };
     expect(r.status).toBe(0);
     expect(r.stderr).toMatch(/rpc check WARNING: 1 of 2 legs failed: READER_BASE_GROUNDING_RPC_URL; starting anyway/);
     expect(r.stderr).toMatch(/rpc check ok: READER_BASE_RPC_URL \(base indexer, host 127\.0\.0\.1:\d+\)/);
