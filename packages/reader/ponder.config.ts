@@ -52,7 +52,7 @@ export default createConfig({
   ordering: "omnichain",
   database: process.env.DATABASE_URL ? { kind: "postgres" } : { kind: "pglite", directory: process.env.READER_PGLITE_DIR ?? ".ponder/pglite" },
   chains: Object.fromEntries(
-    chainsOn.map((c) => [c.name, { id: c.chainId, rpc: indexerTransport(rpcUrls(c)), ...(POLLING_MS[c.chainId] ? { pollingInterval: POLLING_MS[c.chainId] } : {}) }]),
+    chainsOn.map((c) => [c.name, { id: c.chainId, rpc: indexerTransport(rpcUrls(c), {}, c.name), ...(POLLING_MS[c.chainId] ? { pollingInterval: POLLING_MS[c.chainId] } : {}) }]),
   ),
   contracts: {
     NablaRecord: {

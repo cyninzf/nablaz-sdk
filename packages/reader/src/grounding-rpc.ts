@@ -93,8 +93,10 @@ export async function bindingAt(client: PublicClient, registry: Address, agentId
     const owner = await client.readContract({ address: registry, abi: ownerOfAbi, functionName: "ownerOf", args: [agentId], blockNumber });
     return { kind: "owner", address: getAddress(owner) };
   } catch (e) {
-    // ERC721NonexistentToken(uint256): selector 0x7e273289.
-    if (/0x7e273289/.test(String((e as { message?: string }).message ?? e)) || /0x7e273289/.test(JSON.stringify(e, Object.getOwnPropertyNames(e as object)))) return { kind: "none" };
+    // ERC721NonexistentToken(uint256): selector 0x7e273289, in the message or any field of the error and its causes.
+    // viem errors carry the call's args (BigInt): serialize them as strings, so any other error is rethrown as is
+    // (row O).
+    if (/0x7e273289/.test(String((e as { message?: string }).message ?? e)) || /0x7e273289/.test(JSON.stringify(e, (k, v) => (typeof v === "bigint" ? v.toString() : v)))) return { kind: "none" };
     throw e;
   }
 }

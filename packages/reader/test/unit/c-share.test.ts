@@ -5,7 +5,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getAddress } from "viem";
-import { cShareOverIndex, formatShare } from "../../src/c-share";
+import { cShareOverIndex, formatShare, loadPgFromPonder, openIndex } from "../../src/c-share";
 
 const T1 = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 const T2 = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
@@ -43,5 +43,37 @@ describe("cShareOverIndex", () => {
   });
   it("says nothing indexed when the range holds no payment fact", async () => {
     expect(formatShare(8453, 30n, 40n, await cShareOverIndex(q, 8453, 30n, 40n, async () => "a"))).toEqual(["chain 8453 blocks 30..40: nothing indexed (no payment fact in the range)"]);
+  });
+});
+
+describe("openIndex (row F: the hosted (c) share, R-S194-9)", () => {
+  it("with DATABASE_URL: queries Postgres through pg, and names the host and database, never the credentials", async () => {
+    const seen: { cfg?: { connectionString: string }; sql: string[]; ended: boolean } = { sql: [], ended: false };
+    class Client {
+      constructor(cfg: { connectionString: string }) {
+        seen.cfg = cfg;
+      }
+      async connect() {}
+      async query(sql: string) {
+        seen.sql.push(sql);
+        return { rows: [{ n: 1 }] };
+      }
+      async end() {
+        seen.ended = true;
+      }
+    }
+    const url = "postgres://schema_admin:S3CRETpw@db.internal.example:5432/reader_db?sslmode=disable";
+    const idx = await openIndex({ DATABASE_URL: url }, () => ({ Client }));
+    expect(await idx.q("SELECT 1 AS n", [])).toEqual([{ n: 1 }]);
+    expect(seen.cfg).toEqual({ connectionString: url });
+    expect(idx.describe).toBe("postgres db.internal.example:5432/reader_db (schema reader)");
+    expect(idx.describe).not.toMatch(/S3CRET|schema_admin/);
+    await idx.close();
+    expect(seen.ended).toBe(true);
+  });
+
+  it("the pg driver loads from Ponder's own install: no dependency of the reader's", () => {
+    const pg = loadPgFromPonder();
+    expect(typeof pg?.Client).toBe("function");
   });
 });

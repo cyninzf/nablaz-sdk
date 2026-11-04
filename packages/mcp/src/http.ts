@@ -1,8 +1,8 @@
 // The HTTP front of one instance with two doors (R-S192-1). POST /mcp: Streamable HTTP onto the same read
 // server, stateless, one fresh server and transport per request, the same single read_subject tool. GET
 // /read/:chainId/:address and GET /ready: relayed to the reader, so the reader itself need not be public; a
-// reader-authored answer unchanged (status, content type, body bytes), a 5xx with a fixed body (relay below). GET /live: 200 when the front is up and the reader process answers its
-// /health, 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
+// reader-authored answer unchanged (status, content type, body bytes), a 5xx with a fixed body (relay below). GET /live: 200 when the front is up and the reader process runs
+// (by PID when readerPid is set, off the reader's event loop; else its /health answers), 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
 // overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint;
 // any other path is 404.
@@ -22,6 +22,12 @@ export type HttpServerOptions = ReadServerOptions & {
   rateLimitPerMin?: number;
   /** A header the proxy in front sets to the client IP, overwriting any the client sent. Unset: the socket peer. */
   clientIpHeader?: string;
+  /**
+   * The reader process's PID (NABLAZ_READER_PID, set by scripts/reader-start.sh). Set: GET /live is 200 while that
+   * process runs, without an HTTP call into it, so a stalled Ponder event loop does not fail deploy health
+   * (R-S194-15). Unset: /live asks the reader's /health.
+   */
+  readerPid?: number;
 };
 
 /** The rate-limit key: the named header's value when one is named and present, else the socket peer. */
@@ -49,6 +55,16 @@ function rateLimiter(perMin: number) {
 
 function plain(res: ServerResponse, status: number, text: string) {
   res.writeHead(status, { "content-type": "text/plain; charset=utf-8" }).end(text);
+}
+
+/** True while process `pid` exists (signal 0 checks, sends nothing). EPERM: it exists under another user. */
+export function processRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
 }
 
 /** 200 when the reader process answers GET /health (it does from start-up, before the index has caught up). */
@@ -86,7 +102,10 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (!allow(clientIp(req, opts.clientIpHeader))) return plain(res, 429, "rate limit exceeded, try again in a minute\n");
     const path = new URL(req.url ?? "/", "http://x").pathname;
-    if (req.method === "GET" && path === "/live") return live(res, opts.readerUrl ?? DEFAULT_READER_URL, opts.fetch ?? fetch);
+    if (req.method === "GET" && path === "/live") {
+      if (opts.readerPid !== undefined) return processRunning(opts.readerPid) ? plain(res, 200, "live\n") : plain(res, 503, "reader process not running\n");
+      return live(res, opts.readerUrl ?? DEFAULT_READER_URL, opts.fetch ?? fetch);
+    }
     if (req.method === "GET" && READER_PATH.test(path)) return relay(res, opts.readerUrl ?? DEFAULT_READER_URL, path, opts.fetch ?? fetch);
     if (path !== MCP_PATH) return plain(res, 404, "not found\n");
     // Stateless: no session, no server-initiated stream, so only POST carries a request.

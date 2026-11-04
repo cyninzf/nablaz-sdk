@@ -2,8 +2,9 @@
 // range of the whole index. Computed from the indexed rows, never estimated. A payment fact is a vault
 // settlement (labelled by its account's NablaZ label) or an external payment (labelled by its permission, (c)
 // when the permission row is not indexed), as GET /read labels them. Used by scripts/c-share.ts and the fork
-// test.
+// test, and the Postgres path for the hosted index (openIndex, row F).
 
+import { createRequire } from "node:module";
 import { getAddress, type Address } from "viem";
 
 /** External payments with their permission's shape: the same join GET /read makes (src/read.ts paymentFacts). */
@@ -61,4 +62,51 @@ export function formatShare(chainId: number, from: bigint, to: bigint, r: Record
       `chain ${chainId} blocks ${from}..${to} token ${token}: (c) ${t.c} of ${t.total} payment facts (${pct(BigInt(t.c), BigInt(t.total))}); (c) value ${t.cValue} of ${t.totalValue} (${pct(t.cValue, t.totalValue)})`,
   );
   return lines.length ? lines : [`chain ${chainId} blocks ${from}..${to}: nothing indexed (no payment fact in the range)`];
+}
+
+
+// Row F (R-S194-9): the index the report reads. With DATABASE_URL (the hosted instance), Postgres, through the pg
+// driver Ponder itself ships (loaded from Ponder's install, so the reader declares no new dependency), reading the
+// views schema "reader" that points at the live deployment. Without it, PGlite at READER_PGLITE_DIR.
+
+export type IndexDb = { q: Query; close: () => Promise<void>; describe: string };
+type PgClient = { connect(): Promise<void>; query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>; end(): Promise<void> };
+type PgModule = { Client: new (cfg: { connectionString: string }) => PgClient };
+
+/** pg, resolved from Ponder's package (packages/reader/node_modules/ponder), as Ponder resolves it. */
+export function loadPgFromPonder(): PgModule | null {
+  try {
+    return createRequire(new URL("../node_modules/ponder/package.json", import.meta.url))("pg") as PgModule;
+  } catch {
+    return null;
+  }
+}
+
+/** "host:port/database": the connection string without user, password or parameters. */
+function pgWhere(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname}`;
+  } catch {
+    return "(unparsed DATABASE_URL)";
+  }
+}
+
+export async function openIndex(env: Record<string, string | undefined> = process.env, loadPg: () => PgModule | null = loadPgFromPonder): Promise<IndexDb> {
+  const url = env.DATABASE_URL;
+  if (url) {
+    const pg = loadPg();
+    if (!pg) throw new Error("DATABASE_URL is set but the pg driver did not load from Ponder's install");
+    const client = new pg.Client({ connectionString: url });
+    await client.connect();
+    return {
+      q: async <T>(sql: string, params: unknown[]) => (await client.query(sql, params)).rows as T[],
+      close: () => client.end(),
+      describe: `postgres ${pgWhere(url)} (schema reader)`,
+    };
+  }
+  const { PGlite } = await import("@electric-sql/pglite");
+  const dir = env.READER_PGLITE_DIR ?? ".ponder/pglite";
+  const db = new PGlite(dir);
+  return { q: async <T>(sql: string, params: unknown[]) => (await db.query<T>(sql, params)).rows, close: () => db.close(), describe: `pglite ${dir} (schema reader)` };
 }

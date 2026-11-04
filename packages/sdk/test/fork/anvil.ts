@@ -33,7 +33,32 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export type Anvil = { url: string; stop: () => Promise<void> };
 
-export async function startAnvil(forkBlock = FORK_BLOCK): Promise<Anvil> {
+export type AnvilOptions = {
+  /**
+   * Move the fork's clock to the wall clock before returning (R-S198-1). For tests whose grants are drawn from
+   * the fork's chain time while the official x402 client and facilitator read the wall clock: without it, every
+   * day past FORK_BLOCK's timestamp shortens the envelope, and the tests fail on a calendar date. Not for tests
+   * that replay live calldata with a fixed expiry (runbook.fork.test.ts).
+   */
+  alignToWallClock?: boolean;
+};
+
+async function rpc(url: string, method: string, params: unknown[]): Promise<unknown> {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const j = (await r.json()) as { result?: unknown; error?: { message: string } };
+  if (j.error) throw new Error(`${method}: ${j.error.message}`);
+  return j.result;
+}
+
+/** Mines one block at the wall clock (never earlier than the fork's latest block + 1); later blocks follow it. */
+async function alignClock(url: string): Promise<void> {
+  const latest = (await rpc(url, "eth_getBlockByNumber", ["latest", false])) as { timestamp: string };
+  const ts = Math.max(Math.floor(Date.now() / 1000), Number(BigInt(latest.timestamp)) + 1);
+  await rpc(url, "evm_setNextBlockTimestamp", [ts]);
+  await rpc(url, "evm_mine", []);
+}
+
+export async function startAnvil(forkBlock = FORK_BLOCK, opts: AnvilOptions = {}): Promise<Anvil> {
   if (!UPSTREAM) throw new Error("READER_ARB_RPC_URL unset");
   const port = await freePort();
   const proc = spawn("anvil", ["--fork-url", UPSTREAM, "--fork-block-number", String(forkBlock), "--port", String(port)], {
@@ -58,7 +83,10 @@ export async function startAnvil(forkBlock = FORK_BLOCK): Promise<Anvil> {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
       });
-      if (r.ok) return { url, stop };
+      if (r.ok) {
+        if (opts.alignToWallClock) await alignClock(url);
+        return { url, stop };
+      }
     } catch {}
     await sleep(500);
   }

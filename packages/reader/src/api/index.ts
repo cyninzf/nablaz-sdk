@@ -28,7 +28,7 @@ import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
-import { groundingClient } from "../rpc";
+import { groundingClient, rpcMetricsText } from "../rpc";
 import {
   FEEDBACK_URI_NOT_READ,
   GROUNDING_SOURCE,
@@ -108,6 +108,10 @@ async function nablaLabelOf(client: PublicClient, chain: EnabledChain & { nabla:
   const mandateCodeHash = mandate ? await codeHash(client, mandate, asOfBlock) : null;
   return nablaLabel({ implementations, mandateCodeHash, camV4CodeHash });
 }
+
+// Row E: the RPC legs' counters (src/rpc.ts), Prometheus text, beside Ponder's own /metrics. The reader listens on
+// 127.0.0.1 only and the front relays /read and /ready alone, so this is never public.
+app.get("/metrics/reader", (c) => c.text(rpcMetricsText(), 200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" }));
 
 app.get("/read/:chainId/:address", async (c) => {
   const chainId = Number(c.req.param("chainId"));
