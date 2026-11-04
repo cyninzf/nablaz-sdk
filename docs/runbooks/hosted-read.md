@@ -309,6 +309,7 @@ Silicon, after `brew install openssl@3`):
 
 ```bash
 # Not run — gated
+mkdir -p ~/Developer/nablaz/secrets/mcp-publisher && cd ~/Developer/nablaz/secrets/mcp-publisher
 MY_DOMAIN="nablaz.io"
 
 # Generate public/private key pair using Ed25519
@@ -317,6 +318,7 @@ openssl genpkey -algorithm Ed25519 -out key.pem
 # Generate TXT record
 PUBLIC_KEY="$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)"
 echo "${MY_DOMAIN}. IN TXT \"v=MCPv1; k=ed25519; p=${PUBLIC_KEY}\""
+chmod 600 key.pem
 ```
 
 DNS: add the TXT record `v=MCPv1; k=ed25519; p=<PUBLIC_KEY>` at the **apex** of `nablaz.io` in GoDaddy (the
@@ -346,7 +348,9 @@ cd ~/Developer/nablaz/secrets/mcp-publisher && mcp-publisher login dns --domain 
 
 The substitution emits the Ed25519 seed as 64 hex characters, the shape `mcp-publisher` 1.8.7 asks for
 (`-private-key <64 hex chars>`): checked S201 on a throwaway key with OpenSSL 3.0.16, where the public key derived
-from the emitted seed equaled `openssl pkey -pubout`'s. Residual disclosure: the expanded key exists briefly in the
+from the emitted seed equaled `openssl pkey -pubout`'s. The TXT derivation (`openssl pkey -pubout -outform DER | tail -c 32 | base64`) was checked S201 on a separate
+throwaway key the same way: it emitted 44 base64 characters ending in `=`, which decode to the key's 32 public-key
+bytes. Residual disclosure: the expanded key exists briefly in the
 login process's argument list on the founder Mac; accepted for a single-use login. A vault-held key
 (`mcp-publisher login dns google-kms` or `azure-key-vault`, in the registry docs) avoids that, at the cost of a
 cloud KMS account.
