@@ -62,3 +62,16 @@ export function formatShare(chainId: number, from: bigint, to: bigint, r: Record
   );
   return lines.length ? lines : [`chain ${chainId} blocks ${from}..${to}: nothing indexed (no payment fact in the range)`];
 }
+
+// Row F stubs (red commit): the Postgres path is not implemented yet.
+export type IndexDb = { q: Query; close: () => Promise<void>; describe: string };
+type PgModule = { Client: new (cfg: { connectionString: string }) => { connect(): Promise<void>; query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>; end(): Promise<void> } };
+export function loadPgFromPonder(): PgModule | null {
+  return null;
+}
+export async function openIndex(env: Record<string, string | undefined> = process.env, _loadPg: () => PgModule | null = loadPgFromPonder): Promise<IndexDb> {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const dir = env.READER_PGLITE_DIR ?? ".ponder/pglite";
+  const db = new PGlite(dir);
+  return { q: async <T>(sql: string, params: unknown[]) => (await db.query<T>(sql, params)).rows, close: () => db.close(), describe: `pglite ${dir}` };
+}
