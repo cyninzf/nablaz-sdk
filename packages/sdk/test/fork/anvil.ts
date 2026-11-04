@@ -43,6 +43,21 @@ export type AnvilOptions = {
   alignToWallClock?: boolean;
 };
 
+async function rpc(url: string, method: string, params: unknown[]): Promise<unknown> {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const j = (await r.json()) as { result?: unknown; error?: { message: string } };
+  if (j.error) throw new Error(`${method}: ${j.error.message}`);
+  return j.result;
+}
+
+/** Mines one block at the wall clock (never earlier than the fork's latest block + 1); later blocks follow it. */
+async function alignClock(url: string): Promise<void> {
+  const latest = (await rpc(url, "eth_getBlockByNumber", ["latest", false])) as { timestamp: string };
+  const ts = Math.max(Math.floor(Date.now() / 1000), Number(BigInt(latest.timestamp)) + 1);
+  await rpc(url, "evm_setNextBlockTimestamp", [ts]);
+  await rpc(url, "evm_mine", []);
+}
+
 export async function startAnvil(forkBlock = FORK_BLOCK, opts: AnvilOptions = {}): Promise<Anvil> {
   if (!UPSTREAM) throw new Error("READER_ARB_RPC_URL unset");
   const port = await freePort();
@@ -68,7 +83,10 @@ export async function startAnvil(forkBlock = FORK_BLOCK, opts: AnvilOptions = {}
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
       });
-      if (r.ok) return { url, stop };
+      if (r.ok) {
+        if (opts.alignToWallClock) await alignClock(url);
+        return { url, stop };
+      }
     } catch {}
     await sleep(500);
   }
