@@ -134,7 +134,7 @@ function localFacilitator(): FacilitatorClient {
 }
 
 beforeAll(async () => {
-  anvil = await startAnvil(FORK_BLOCK);
+  anvil = await startAnvil(FORK_BLOCK, { alignToWallClock: true });
   const transport = http(anvil.url);
   pub = createPublicClient({ chain: arbitrum, transport }) as PublicClient;
   const test = createTestClient({ chain: arbitrum, mode: "anvil", transport });

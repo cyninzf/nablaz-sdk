@@ -33,7 +33,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export type Anvil = { url: string; stop: () => Promise<void> };
 
-export async function startAnvil(forkBlock = FORK_BLOCK): Promise<Anvil> {
+export type AnvilOptions = {
+  /**
+   * Move the fork's clock to the wall clock before returning (R-S198-1). For tests whose grants are drawn from
+   * the fork's chain time while the official x402 client and facilitator read the wall clock: without it, every
+   * day past FORK_BLOCK's timestamp shortens the envelope, and the tests fail on a calendar date. Not for tests
+   * that replay live calldata with a fixed expiry (runbook.fork.test.ts).
+   */
+  alignToWallClock?: boolean;
+};
+
+export async function startAnvil(forkBlock = FORK_BLOCK, opts: AnvilOptions = {}): Promise<Anvil> {
   if (!UPSTREAM) throw new Error("READER_ARB_RPC_URL unset");
   const port = await freePort();
   const proc = spawn("anvil", ["--fork-url", UPSTREAM, "--fork-block-number", String(forkBlock), "--port", String(port)], {

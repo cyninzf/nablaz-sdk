@@ -186,7 +186,7 @@ async function expectRefusedAtVerify(doRequest: () => Promise<Response>) {
 }
 
 beforeAll(async () => {
-  anvil = await startAnvil(FORK_BLOCK);
+  anvil = await startAnvil(FORK_BLOCK, { alignToWallClock: true });
   const transport = http(anvil.url);
   pub = createPublicClient({ chain: arbitrum, transport }) as PublicClient;
   test = createTestClient({ chain: arbitrum, mode: "anvil", transport });
