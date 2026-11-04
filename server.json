@@ -1,0 +1,16 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.nablaz/reader",
+  "description": "Read the NablaZ open record: the payments an account made and the permissions they were made under, with onchain citations. One read tool, keyless.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/cyninzf/nablaz-sdk",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://read.nablaz.io/mcp"
+    }
+  ]
+}

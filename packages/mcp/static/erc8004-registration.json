@@ -1,0 +1,21 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "NablaZ",
+  "description": "NablaZ is the open record for the AI agent economy: the agent puts your money to work; the record it leaves is credit you own. This identity's record is served by the NablaZ open reader: the payments an account made and the permissions they were made under, with onchain citations, readable by anyone over HTTP and MCP. Evidence, not a verdict.",
+  "services": [
+    {
+      "name": "web",
+      "endpoint": "https://nablaz.io/"
+    },
+    {
+      "name": "MCP",
+      "endpoint": "https://read.nablaz.io/mcp"
+    }
+  ],
+  "registrations": [
+    {
+      "agentId": 1650,
+      "agentRegistry": "eip155:42161:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+    }
+  ]
+}
