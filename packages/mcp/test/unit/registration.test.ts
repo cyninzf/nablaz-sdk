@@ -1,5 +1,5 @@
 // The registration surfaces (S201): the ERC-8004 registration file served by the front at
-// GET /.well-known/erc8004-registration.json, byte for byte from packages/mcp/static/, and server.json for the
+// GET /.well-known/agent-registration.json (EIP-8004's own path, R-S201-6), byte for byte from packages/mcp/static/, and server.json for the
 // MCP Registry. Every other /.well-known path stays 404. The registry address is compared with the committed
 // generated file (S186-L1/L2: copied, never typed). The prose fields follow the copy discipline (DoR §10).
 
@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { REGISTRATION_PATH, readHttpServer } from "../../src/http.ts";
 import erc8004 from "../../../reader/src/generated/erc8004.json";
 
-const FILE = readFileSync(new URL("../../static/erc8004-registration.json", import.meta.url));
+const FILE = readFileSync(new URL("../../static/agent-registration.json", import.meta.url));
 const SERVER_JSON = JSON.parse(readFileSync(new URL("../../../../server.json", import.meta.url), "utf8")) as Record<string, unknown>;
 /** The registration-v1 type string, as EIP-8004 states it (fetched from eips.ethereum.org, S201). */
 const EIP_8004_TYPE = "https://eips.ethereum.org/EIPS/eip-8004#registration-v1";
@@ -22,17 +22,17 @@ beforeAll(async () => {
 });
 afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
-describe("GET /.well-known/erc8004-registration.json", () => {
+describe("GET /.well-known/agent-registration.json", () => {
   it("(a) 200, application/json, and the body is the committed file, byte for byte", async () => {
-    expect(REGISTRATION_PATH).toBe("/.well-known/erc8004-registration.json");
-    const r = await fetch(`${base}/.well-known/erc8004-registration.json`);
+    expect(REGISTRATION_PATH).toBe("/.well-known/agent-registration.json");
+    const r = await fetch(`${base}/.well-known/agent-registration.json`);
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toBe("application/json");
     expect(Buffer.from(await r.arrayBuffer()).equals(FILE)).toBe(true);
   });
 
   it("(b) type is the EIP string; registrations[0] binds agentId 1650 to the generated 42161 IdentityRegistry", async () => {
-    const body = (await (await fetch(`${base}/.well-known/erc8004-registration.json`)).json()) as {
+    const body = (await (await fetch(`${base}/.well-known/agent-registration.json`)).json()) as {
       type: string;
       registrations: { agentId: number; agentRegistry: string }[];
     };
@@ -43,13 +43,18 @@ describe("GET /.well-known/erc8004-registration.json", () => {
   });
 
   it("(c) every other /.well-known path is 404", async () => {
-    for (const p of ["/.well-known/", "/.well-known/anything-else", "/.well-known/agent-registration.json", "/.well-known/erc8004-registration.json/x", "/.well-known/ERC8004-REGISTRATION.JSON"]) {
+    for (const p of ["/.well-known/", "/.well-known/anything-else", "/.well-known/agent-registration.json/x", "/.well-known/AGENT-REGISTRATION.JSON"]) {
       expect((await fetch(`${base}${p}`)).status, p).toBe(404);
     }
   });
 
+  it("the superseded path is 404, not a redirect (it was never published)", async () => {
+    const r = await fetch(`${base}/.well-known/erc8004-registration.json`, { redirect: "manual" });
+    expect(r.status).toBe(404);
+  });
+
   it("only GET serves it", async () => {
-    expect((await fetch(`${base}/.well-known/erc8004-registration.json`, { method: "POST" })).status).toBe(404);
+    expect((await fetch(`${base}/.well-known/agent-registration.json`, { method: "POST" })).status).toBe(404);
   });
 });
 

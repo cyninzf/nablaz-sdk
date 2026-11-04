@@ -5,8 +5,8 @@
 // (by PID when readerPid is set, off the reader's event loop; else its /health answers), 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
 // overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint.
-// GET /.well-known/erc8004-registration.json: the ERC-8004 registration file (packages/mcp/static/), the bytes
-// read once at start-up. Any other path, any other /.well-known path included, is 404.
+// GET /.well-known/agent-registration.json: the ERC-8004 registration file at EIP-8004's own path (also its
+// endpoint-domain verification artifact; packages/mcp/static/), the bytes read once at start-up. Any other path, any other /.well-known path included, is 404.
 
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -16,10 +16,10 @@ import { DEFAULT_READER_URL, logReaderError, readServer, type ReadServerOptions 
 export const DEFAULT_PORT = 3042;
 export const DEFAULT_RATE_LIMIT_PER_MIN = 60;
 export const MCP_PATH = "/mcp";
-/** The ERC-8004 registration file's path: the agentURI of agentId 1650 points here. */
-export const REGISTRATION_PATH = "/.well-known/erc8004-registration.json";
+/** The ERC-8004 registration file's path, EIP-8004's conventional name (R-S201-6): the agentURI of agentId 1650 points here. */
+export const REGISTRATION_PATH = "/.well-known/agent-registration.json";
 /** The committed registration file, read once at module load; served as these bytes, never re-read per request. */
-const REGISTRATION_FILE = readFileSync(new URL("../static/erc8004-registration.json", import.meta.url));
+const REGISTRATION_FILE = readFileSync(new URL("../static/agent-registration.json", import.meta.url));
 /** The reader paths the front relays: the read and the readiness probe. Nothing else of the reader is public. */
 const READER_PATH = /^\/read\/[^/]+\/[^/]+$|^\/ready$/;
 
