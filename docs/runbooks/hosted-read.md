@@ -271,3 +271,99 @@ not `reader`, not `ponder_sync` and not a Postgres schema is a replaced deployme
 `DROP SCHEMA "<name>" CASCADE` once the live deployment is ready. Its views in `reader` already point elsewhere, so
 the drop does not touch what is served. Keep the newest replaced schema until the next deployment is live, as a
 fallback. `ponder_sync` (the RPC cache) is never dropped.
+
+## Registration surfaces — publish procedure (GATED: not run; publishes only after /ready 200)
+
+Publish gate (S201): "nothing publishes and no chain tx until /ready 200." Every command in this section is
+**Not run — gated**. The description copy in both files is a draft for the founder's review before publishing.
+
+The two files:
+
+- `packages/mcp/static/erc8004-registration.json`: the EIP-8004 registration file (`type`
+  `https://eips.ethereum.org/EIPS/eip-8004#registration-v1`; `services` entries `name` / `endpoint`;
+  `registrations` entries `agentId` / `agentRegistry`), served by the front at
+  `GET https://read.nablaz.io/.well-known/erc8004-registration.json`. Its registry address comes from
+  `packages/reader/src/generated/erc8004.json` (a unit test compares the two).
+- `server.json` (repo root): the MCP Registry entry `io.nablaz/reader`, schema
+  `https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json`. That schema limits `description`
+  to 100 characters; `mcp-publisher validate` (1.8.7) refused the S201 draft (147 characters) with
+  `expected length <= 100` at `body.description`. Publishing needs a description of 100 characters or fewer.
+
+### 1. agentURI (ERC-8004, agentId 1650)
+
+Not run — gated. The agentURI value is `https://read.nablaz.io/.well-known/erc8004-registration.json`. The owner of
+agentId 1650 sets it with `setAgentURI(uint256 agentId, string calldata newURI)` (EIP-8004) on the Identity
+Registry on eip155:42161 (address in `packages/reader/src/generated/erc8004.json`), arguments
+`1650, "https://read.nablaz.io/.well-known/erc8004-registration.json"`: a founder Ledger transaction from her
+Mac. Before signing, `GET` the URI and confirm it serves the committed file.
+
+### 2. MCP Registry (official)
+
+Not run — gated. From the registry's own docs (modelcontextprotocol/registry: `docs/modelcontextprotocol-io/`
+`quickstart.mdx`, `authentication.mdx`, `remote-servers.mdx`, fetched S201).
+
+Key pair, on the founder Mac only, kept in `~/Developer/nablaz/secrets/mcp-publisher/` (outside every repository).
+The Ed25519 path needs OpenSSL 3 or later; macOS's system `openssl` (LibreSSL) fails with
+`Algorithm Ed25519 not found`, so call OpenSSL 3 explicitly (`/opt/homebrew/opt/openssl@3/bin/openssl` on Apple
+Silicon, after `brew install openssl@3`):
+
+```bash
+# Not run — gated
+MY_DOMAIN="nablaz.io"
+
+# Generate public/private key pair using Ed25519
+openssl genpkey -algorithm Ed25519 -out key.pem
+
+# Generate TXT record
+PUBLIC_KEY="$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)"
+echo "${MY_DOMAIN}. IN TXT \"v=MCPv1; k=ed25519; p=${PUBLIC_KEY}\""
+```
+
+DNS: add the TXT record `v=MCPv1; k=ed25519; p=<PUBLIC_KEY>` at the **apex** of `nablaz.io` in GoDaddy (the
+address bar must show nablaz.io before any DNS edit). Not under a selector such as `_mcp-auth.nablaz.io`: the
+registry looks at the apex only. Check it has propagated:
+
+```bash
+# Not run — gated
+dig TXT nablaz.io +short
+```
+
+Install `mcp-publisher` (one release binary; `brew install mcp-publisher` also works):
+
+```bash
+# Not run — gated
+curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher && sudo mv mcp-publisher /usr/local/bin/
+```
+
+Log in, validate and publish from the repository root (the docs' login passes the private key as an argument:
+run it in the founder's own terminal only, from the key directory above):
+
+```bash
+# Not run — gated
+MY_DOMAIN="nablaz.io"
+PRIVATE_KEY="$(openssl pkey -in key.pem -noout -text | grep -A3 "priv:" | tail -n +2 | tr -d ' :\n')"
+mcp-publisher login dns --domain "${MY_DOMAIN}" --private-key "${PRIVATE_KEY}"
+mcp-publisher validate
+mcp-publisher publish
+```
+
+Verify through the registry API:
+
+```bash
+# Not run — gated
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.nablaz/reader"
+```
+
+The registry does not check that the remote URL is on the authenticated domain, and each remote URL can be used by
+one server name only. If keys are rotated, remove the old TXT record from the apex.
+
+### 3. Secondary directories
+
+Not run — gated. Only after the official listing above is live.
+
+### Note: EIP-8004's own well-known path
+
+EIP-8004's optional endpoint-domain verification uses `https://{endpoint-domain}/.well-known/agent-registration.json`.
+The front serves `/.well-known/erc8004-registration.json` (as dispatched) and 404 for the EIP's name. Per the EIP,
+the check is not needed for `read.nablaz.io`, which serves the file the agentURI names; it would apply to
+`nablaz.io` (the `web` service endpoint), which this repository does not serve.
