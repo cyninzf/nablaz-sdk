@@ -1,17 +1,17 @@
 // pnpm report:c-share <chainId> <fromBlock> <toBlock>
 //
 // R-S190-3: per token, the count and value of payment facts labelled (c) over all payment facts, over the whole
-// index in the block range. Reads the PGlite index directly (READER_PGLITE_DIR, default .ponder/pglite); stop
-// the reader first, PGlite allows one process. Vault payments are labelled by their account's NablaZ label,
+// index in the block range. Reads the hosted Postgres index when DATABASE_URL is set (row F, R-S194-9: the views
+// schema "reader", read while the reader runs), else the PGlite index directly (READER_PGLITE_DIR, default
+// .ponder/pglite; stop the reader first, PGlite allows one process). Vault payments are labelled by their account's NablaZ label,
 // which needs the chain's RPC (READER_ARBITRUM_RPC_URL) for the mandate code hash at <toBlock>. Prints the inputs,
 // the shares and the reproducing queries.
 
-import { PGlite } from "@electric-sql/pglite";
 import { createPublicClient, http, keccak256, type Address, type Hex } from "viem";
 import { NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { CHAINS, hasNabla } from "../src/chains.ts";
 import { nablaLabel } from "../src/labels.ts";
-import { EXTERNAL_PAYMENTS_SQL, VAULT_PAYMENTS_SQL, cShareOverIndex, formatShare } from "../src/c-share.ts";
+import { EXTERNAL_PAYMENTS_SQL, VAULT_PAYMENTS_SQL, cShareOverIndex, formatShare, openIndex } from "../src/c-share.ts";
 
 const [chainArg, fromArg, toArg] = process.argv.slice(2);
 if (!chainArg || !fromArg || !toArg) throw new Error("usage: pnpm report:c-share <chainId> <fromBlock> <toBlock>");
@@ -20,10 +20,8 @@ const from = BigInt(fromArg);
 const to = BigInt(toArg);
 const chain = CHAINS[chainId];
 if (!chain) throw new Error(`chain ${chainId} is not read here`);
-const dir = process.env.READER_PGLITE_DIR ?? ".ponder/pglite";
-
-const db = new PGlite(dir);
-const q = async <T>(sql: string, params: unknown[]) => (await db.query<T>(sql, params)).rows;
+const db = await openIndex();
+const q = db.q;
 
 async function accountShape(account: Address): Promise<string> {
   if (!hasNabla(chain!)) return "c";
@@ -49,7 +47,7 @@ async function accountShape(account: Address): Promise<string> {
 
 try {
   const r = await cShareOverIndex(q, chainId, from, to, accountShape);
-  console.log(`inputs: chainId ${chainId}, blocks ${from}..${to}, index ${dir} (schema reader)`);
+  console.log(`inputs: chainId ${chainId}, blocks ${from}..${to}, index ${db.describe}`);
   for (const line of formatShare(chainId, from, to, r)) console.log(line);
   console.log(`queries ($1 = ${chainId}, $2 = ${from}, $3 = ${to}):\n${EXTERNAL_PAYMENTS_SQL};\n${VAULT_PAYMENTS_SQL};`);
 } finally {
