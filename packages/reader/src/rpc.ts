@@ -116,7 +116,7 @@ export type IndexerTransports = { indexer?: Transport; grounding?: Transport };
  * fallback([indexer capped at CHAINSTACK_LOGS_RANGE, grounding]). `legs` replaces the two http transports (tests);
  * the URL redaction wraps injected legs too.
  */
-export function indexerTransport(urls: RpcUrls, legs: IndexerTransports = {}): Transport {
+export function indexerTransport(urls: RpcUrls, legs: IndexerTransports = {}, _chain = ""): Transport {
   const indexer = redacting(cappedLogs(legs.indexer ?? boundedHttp(urls.indexer), CHAINSTACK_LOGS_RANGE), urls.indexer, "indexer");
   const grounding = redacting(legs.grounding ?? boundedHttp(urls.grounding), urls.grounding, "grounding");
   const head = fallback([indexer, grounding]);
@@ -134,4 +134,10 @@ export function groundingClient(c: Pick<ChainSources, "groundingRpcEnv">, env = 
   const url = env[c.groundingRpcEnv];
   if (!url) throw new Error(`${c.groundingRpcEnv} is not set`);
   return createPublicClient({ transport: redacting(boundedHttp(url), url, "grounding") }) as PublicClient;
+}
+
+// Row E stubs (red commit): no counters yet.
+export function resetRpcCounters(): void {}
+export function rpcMetricsText(): string {
+  return "";
 }
