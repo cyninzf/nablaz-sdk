@@ -335,13 +335,21 @@ Install `mcp-publisher` (one release binary; `brew install mcp-publisher` also w
 curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher && sudo mv mcp-publisher /usr/local/bin/
 ```
 
-Log in: BLOCKED. R-S201-6 (b): a private key value never appears on a command line, and the login uses a
-`--private-key-file` form. `mcp-publisher` 1.8.7 (the latest release, 2026-10-30) has no such flag: `login dns` and
-`login http` take the key only as `-private-key <hex>` (its `--help`), and the docs' commands pass it the same way.
-No login command is written here until the form is ruled. Forms in the docs that keep the key off the command
-line: `mcp-publisher login dns google-kms --domain=... --resource=...` (Google Cloud KMS) and
-`mcp-publisher login dns azure-key-vault --domain=... --vault ... --key ...` (Azure Key Vault), where the key never
-leaves the vault.
+Log in (R-S201-6 (b), amended): the key is passed to `--private-key` by command substitution from `key.pem`, so it
+never renders in the terminal or the shell history. One `&&` chain, in a plain terminal, with OpenSSL 3 as `openssl`
+(see the LibreSSL note above):
+
+```bash
+# Not run — gated
+cd ~/Developer/nablaz/secrets/mcp-publisher && mcp-publisher login dns --domain nablaz.io --private-key "$(openssl pkey -in key.pem -noout -text | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
+```
+
+The substitution emits the Ed25519 seed as 64 hex characters, the shape `mcp-publisher` 1.8.7 asks for
+(`-private-key <64 hex chars>`): checked S201 on a throwaway key with OpenSSL 3.0.16, where the public key derived
+from the emitted seed equaled `openssl pkey -pubout`'s. Residual disclosure: the expanded key exists briefly in the
+login process's argument list on the founder Mac; accepted for a single-use login. A vault-held key
+(`mcp-publisher login dns google-kms` or `azure-key-vault`, in the registry docs) avoids that, at the cost of a
+cloud KMS account.
 
 After login, validate and publish from the repository root:
 
