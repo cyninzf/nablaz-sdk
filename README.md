@@ -159,8 +159,6 @@ remaining disagreements.
 
 ## Hosted read
 
-Not live yet.
-
 `https://read.nablaz.io` runs the reader and the MCP server below as one instance, on both home chains
 (chain IDs 42161 and 8453), with every source indexed from its deployment block. It is keyless and reads
 only. It has two doors:
