@@ -16,6 +16,9 @@ READER_PORT=42069
 ref=${FLY_IMAGE_REF%%@*}
 SCHEMA=$(printf '%s' "${ref##*:}" | tr 'A-Z' 'a-z' | cut -c1-45)
 
+# Row C: every RPC leg answers before Ponder starts; a leg that does not is named in the log and the start stops.
+node --experimental-strip-types --disable-warning=ExperimentalWarning packages/reader/scripts/check-rpc.ts
+
 # A schema per deployment, as Ponder's guide for hosted deploys sets it, so a redeploy indexes beside the running one; the
 # views schema "reader" always points at the live deployment. Ponder reads PORT before --port, so it is unset
 # for the reader: PORT is the front's.

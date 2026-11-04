@@ -319,7 +319,7 @@ describe("entry points", () => {
   it("HTTP sends no CORS headers and serves nothing of the reader but /read and /ready", async () => {
     const http = await overHttp(base);
     try {
-      for (const path of ["/", "/metrics", "/stats", "/status", "/health", "/graphql", "/sql/x", "/read", "/read/42161", `/read/42161/${TEST}/x`, "/read/../metrics"]) {
+      for (const path of ["/", "/metrics", "/metrics/reader", "/stats", "/status", "/health", "/graphql", "/sql/x", "/read", "/read/42161", `/read/42161/${TEST}/x`, "/read/../metrics"]) {
         const r = await fetch(`http://127.0.0.1:${http.port}${path}`, { headers: { origin: "https://example.com" } });
         expect(r.status).toBe(404);
         expect(r.headers.get("access-control-allow-origin")).toBeNull();

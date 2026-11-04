@@ -7,7 +7,6 @@
 
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createPublicClient, type PublicClient } from "viem";
 import { CHAINS, enabledChains } from "../../src/chains";
 import { groundingClient, indexerTransport, resetRpcCounters, rpcMetricsText } from "../../src/rpc";
 import { checkRpcLegs } from "../../src/rpc-check";
@@ -58,14 +57,15 @@ const chains = () => enabledChains(CHAINS, "42161,8453");
 describe("row C: startup RPC check", () => {
   it("all four legs answer: four ok results, one per variable, with host and head", async () => {
     const r = await checkRpcLegs(chains(), env());
+    // enabledChains order (by chain id: Base, then Arbitrum), indexer before grounding.
     expect(r.map((x) => [x.env, x.ok])).toEqual([
-      ["READER_ARBITRUM_RPC_URL", true],
-      ["READER_ARBITRUM_GROUNDING_RPC_URL", true],
       ["READER_BASE_RPC_URL", true],
       ["READER_BASE_GROUNDING_RPC_URL", true],
+      ["READER_ARBITRUM_RPC_URL", true],
+      ["READER_ARBITRUM_GROUNDING_RPC_URL", true],
     ]);
     expect(r.every((x) => x.head === 16n)).toBe(true);
-    expect(r[0]!.host).toBe(new URL(arbIdx.url).host);
+    expect(r[0]!.host).toBe(new URL(baseIdx.url).host);
   });
 
   it("a leg down, one on the wrong chain, one unset: each failure names its variable and host, never the key", async () => {
@@ -74,61 +74,61 @@ describe("row C: startup RPC check", () => {
     const e = { ...env(), READER_BASE_GROUNDING_RPC_URL: "" };
     const r = await checkRpcLegs(chains(), e);
     const bad = r.filter((x) => !x.ok);
-    expect(bad.map((x) => x.env)).toEqual(["READER_ARBITRUM_GROUNDING_RPC_URL", "READER_BASE_RPC_URL", "READER_BASE_GROUNDING_RPC_URL"]);
-    expect(bad[0]!.detail).toMatch(/HTTP 503/);
-    expect(bad[1]!.detail).toBe("eth_chainId is 1, expected 8453");
-    expect(bad[2]!.detail).toBe("is not set");
+    expect(bad.map((x) => x.env)).toEqual(["READER_BASE_RPC_URL", "READER_BASE_GROUNDING_RPC_URL", "READER_ARBITRUM_GROUNDING_RPC_URL"]);
+    expect(bad[0]!.detail).toBe("eth_chainId is 1, expected 8453");
+    expect(bad[1]!.detail).toBe("is not set");
+    expect(bad[2]!.detail).toMatch(/HTTP 503/);
     const printed = JSON.stringify(r, (_, v) => (typeof v === "bigint" ? v.toString() : v));
     expect(printed).not.toContain(KEY);
     expect(printed).not.toContain("/v2/");
   });
 });
 
+/** The transport called the way Ponder calls a custom rpc: chain.rpc({ chain, retryCount: 0, timeout: 10_000 }).request. */
+const asPonder = (t: ReturnType<typeof indexerTransport>) => t({ chain: undefined, retryCount: 0, timeout: 10_000 }).request as (a: { method: string; params?: unknown }) => Promise<unknown>;
+
 describe("row D: leg tagging", () => {
-  const client = (s1: Stub, s2: Stub) => createPublicClient({ transport: indexerTransport({ indexer: s1.url, grounding: s2.url }, {}, "arbitrum") }) as PublicClient;
+  const legs = () => asPonder(indexerTransport({ indexer: arbIdx.url, grounding: arbGnd.url }, {}, "arbitrum"));
 
   it("an error from the grounding leg (backfill) says grounding and the chain", async () => {
     arbGnd.mode = "rpcError";
-    const err = (await client(arbIdx, arbGnd).request({ method: "eth_getLogs", params: [{ fromBlock: "0x1", toBlock: "0x2" } as never] }).catch((e: unknown) => e)) as Error & { shortMessage?: string };
+    const err = (await legs()({ method: "eth_getLogs", params: [{ fromBlock: "0x1", toBlock: "0x2" }] }).catch((e: unknown) => e)) as Error & { shortMessage?: string };
     expect(err.message.startsWith("[rpc arbitrum grounding] ")).toBe(true);
     expect(err.shortMessage!.startsWith("[rpc arbitrum grounding] ")).toBe(true);
   });
 
-  it("an error from the indexer leg says indexer; once both fail, the surfaced error is the grounding leg's", async () => {
+  it("an error from the indexer leg says indexer and is counted; once both fail, the surfaced error is the grounding leg's", async () => {
     arbIdx.mode = "rpcError";
-    const seen: string[] = [];
-    const c = createPublicClient({
-      transport: indexerTransport({ indexer: arbIdx.url, grounding: arbGnd.url }, {}, "arbitrum"),
-    });
+    const req = legs();
     // The indexer leg fails; fallback goes on to the grounding leg, which answers.
-    expect(await c.request({ method: "eth_blockNumber" })).toBe("0x10");
+    expect(await req({ method: "eth_blockNumber" })).toBe("0x10");
     expect(rpcMetricsText()).toMatch(/nablaz_rpc_errors_total\{chain="arbitrum",leg="indexer"\} 1/);
     arbGnd.mode = "rpcError";
-    const err = (await c.request({ method: "eth_blockNumber" }).catch((e: unknown) => e)) as Error;
-    seen.push(err.message);
-    expect(seen[0]!.startsWith("[rpc arbitrum grounding] ")).toBe(true);
+    const err = (await req({ method: "eth_blockNumber" }).catch((e: unknown) => e)) as Error;
+    expect(err.message.startsWith("[rpc arbitrum grounding] ")).toBe(true);
   });
 
   it("the grounding client tags its errors with its chain", async () => {
     baseGnd.mode = "rpcError";
     const g = groundingClient(CHAINS[8453]!, { READER_BASE_GROUNDING_RPC_URL: baseGnd.url });
-    const err = (await g.request({ method: "eth_blockNumber" }).catch((e: unknown) => e)) as Error;
-    expect(err.message.startsWith("[rpc base grounding] ")).toBe(true);
+    const err = (await g.request({ method: "eth_blockNumber" }).catch((e: unknown) => e)) as Error & { cause?: Error };
+    // A viem client wraps the transport's error; the tagged one is its cause.
+    expect([err.message, err.cause?.message].some((m) => m?.startsWith("[rpc base grounding] "))).toBe(true);
   });
 });
 
 describe("row E: counters in /metrics/reader", () => {
   it("counts requests, errors and 429s per chain and leg, with the rate-limit state", async () => {
-    const c = createPublicClient({ transport: indexerTransport({ indexer: baseIdx.url, grounding: baseGnd.url }, {}, "base") });
-    await c.request({ method: "eth_blockNumber" });
-    await c.request({ method: "eth_blockNumber" });
+    const req = asPonder(indexerTransport({ indexer: baseIdx.url, grounding: baseGnd.url }, {}, "base"));
+    await req({ method: "eth_blockNumber" });
+    await req({ method: "eth_blockNumber" });
     baseGnd.mode = "limited";
-    await c.request({ method: "eth_getLogs", params: [{ fromBlock: "0x1", toBlock: "0x2" } as never] }).catch(() => {});
+    await req({ method: "eth_getLogs", params: [{ fromBlock: "0x1", toBlock: "0x2" }] }).catch(() => {});
     const t = rpcMetricsText();
     expect(t).toMatch(/^# TYPE nablaz_rpc_requests_total counter$/m);
     expect(t).toMatch(/^nablaz_rpc_requests_total\{chain="base",leg="indexer"\} 2$/m);
     expect(t).toMatch(/^nablaz_rpc_errors_total\{chain="base",leg="indexer"\} 0$/m);
-    expect(t).toMatch(/^nablaz_rpc_rate_limited_total\{chain="base",leg="grounding"\} [1-9]\d*$/m);
+    expect(t).toMatch(/^nablaz_rpc_rate_limited_total\{chain="base",leg="grounding"\} 1$/m);
     expect(t).toMatch(/^nablaz_rpc_rate_limited_recent\{chain="base",leg="grounding"\} 1$/m);
     expect(t).toMatch(/^nablaz_rpc_rate_limited_recent\{chain="base",leg="indexer"\} 0$/m);
     expect(t).toMatch(/^nablaz_rpc_last_rate_limited_timestamp_seconds\{chain="base",leg="grounding"\} \d{10}$/m);
