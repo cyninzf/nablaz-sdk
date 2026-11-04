@@ -135,3 +135,19 @@ describe("row E: counters in /metrics/reader", () => {
     expect(t).not.toContain("127.0.0.1");
   });
 });
+
+describe("row C: scripts/check-rpc.ts warns and lets the start proceed (CTO ruling, S200)", () => {
+  it("a failed leg is named in a warning on stderr; the script exits 0, so reader-start.sh goes on to start Ponder", async () => {
+    const { spawnSync } = await import("node:child_process");
+    const script = new URL("../../scripts/check-rpc.ts", import.meta.url).pathname;
+    const r = spawnSync(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", script], {
+      env: { PATH: process.env.PATH, READER_CHAINS: "8453", READER_BASE_RPC_URL: `${baseIdx.url}/${KEY}`, READER_BASE_GROUNDING_RPC_URL: "" },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/rpc check WARNING: 1 of 2 legs failed: READER_BASE_GROUNDING_RPC_URL; starting anyway/);
+    expect(r.stderr).toMatch(/rpc check ok: READER_BASE_RPC_URL \(base indexer, host 127\.0\.0\.1:\d+\)/);
+    expect(r.stderr).not.toContain(KEY);
+  }, 60_000);
+});
