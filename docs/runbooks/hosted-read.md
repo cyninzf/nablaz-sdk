@@ -38,6 +38,50 @@ deployment's image tag in `FLY_IMAGE_REF`; the views schema `reader` points at t
 RPC cache (schema `ponder_rpc_cache_1`) is shared, so a redeploy reindexes from the cache rather than from the RPCs. Ponder 0.18 names the RPC cache schema `ponder_rpc_cache_1`; `ponder_sync` is the legacy name (sync-store/schema.ts). Ponder does not drop the schema of a deployment
 that has been replaced; replaced schemas are dropped by hand once the new deployment is live.
 
+The deploy command, exactly as it ran on 2026-11-05 (R-S194-4 form): from the repo root, with `origin/main`
+checked out detached (`132804ab0489f788fc35a60e91beca84ef0f9f23`, tree equal to `origin/main`'s), stdin from
+`/dev/null` so an interactive question fails instead of waiting:
+
+```
+~/.fly/bin/flyctl deploy -a nablaz-reader --ha=false < /dev/null
+```
+
+`fly.toml` as is: the root `Dockerfile`, the default remote builder (Depot), the `/live` check with its 60 s grace,
+no other flags. It ran 14:00:34Z to 14:02:21Z, exit 0, no prompt, and produced
+`registry.fly.io/nablaz-reader:deployment-01M6P05TWT15F0PB31GR64T2P3`; still one machine (`850dd3a4113e78`),
+`/live` 200 and `/ready` 503 at 14:02:26Z.
+
+Timings on record (`/ready` 503 until the index is ready):
+- Same image, same schema (a `machine update` or restart, Ponder replays from its own schema): about 13 min
+  (2026-11-04, 16:05:24Z to 16:18:15Z).
+- New image, new schema (a full index from the RPC cache): about 7 h (2026-11-05, from 14:02Z). It is bound by
+  the indexing handlers, not by the RPCs.
+
+### Resuming a schema (R-S202-4, S202)
+
+When the new image computes the same Ponder build id as a deployment whose schema exists, the deploy can resume
+that schema instead of indexing a new one. Ponder 0.18.1 derives the build id at `build/index.ts:567` from three
+hashes: the evaluated config (`ordering`, `contracts`, `accounts`, `blocks`: addresses, ABIs, filters and start
+blocks, so the `READER_*` variables and the ABIs from `packages/sdk` count; RPC URLs and the database do not),
+the raw text of `ponder.schema.ts`, and the raw text of every `src/**/*.{js,mjs,ts,mts}` file. `src/api/**`
+and `*.test.*`/`*.spec.*` are excluded, so an API-only or front-only change keeps the id, and any other change
+under `packages/reader/src/` (imported by a handler or not) moves it. To check: between the live image's commit and
+the next one, nothing changed in `packages/reader/ponder.config.ts`, `packages/reader/ponder.schema.ts`,
+`packages/reader/src/` outside `src/api/`, or the ABIs and addresses in `packages/sdk`, and the `READER_*`
+variables are unchanged. The id Ponder recorded is in the schema's `_ponder_meta` row (`key = 'app'`, field
+`build_id`), read from an ephemeral console as above. If the id is unchanged, deploy with the override:
+
+```
+~/.fly/bin/flyctl deploy -a nablaz-reader --ha=false --env READER_SCHEMA=<schema> < /dev/null
+```
+
+`scripts/reader-start.sh` then starts Ponder on `<schema>` instead of the image tag. Ponder rolls the tables back
+to the safe checkpoint (it drops the schema's indexes and reverts rows written after it, with `is_ready` back to
+0), re-indexes the gap to the head, rebuilds the indexes, re-points the `reader` views and sets `is_ready`; `/read`
+answers 503 `{"ready":false}` until then (below). A mismatched build id crash-loops at start ("Schema … was
+previously used by a different Ponder app") and nothing is dropped: redeploy without the override, which indexes
+into the new image's own schema.
+
 ## Health: /live and /ready
 
 - `GET /live` is deploy health, and Fly's check (`fly.toml`, 60 s grace). It answers 200 when the front is up
@@ -47,6 +91,19 @@ that has been replaced; replaced schemas are dropped by hand once the new deploy
   asks the reader's `/health`.
 - `GET /ready` is index readiness, the public signal: 503 until the index has caught up, 200 after. `/ready`
   503 during backfill is expected, not an incident.
+
+## /read
+
+- Readiness gate (R-S202-4): `GET /read/:chainId/:address` and the MCP `read_subject` tool answer 503
+  `{"ready":false}` (the tool: an error result carrying `{"ready":false}`), and read nothing, whenever the index is
+  not ready, in the same vocabulary as `/ready` (R-S193-13). Both doors use one check in the front
+  (`readerReadiness`, `packages/mcp/src/server.ts`): the reader's own `/ready`, which Ponder answers from the
+  running app's `is_ready`. An empty record from an unready schema is absence, not a record (R-S189-6). Evidence:
+  the S202 public probe at 15:48Z, on an image whose `/ready` was 503, returned `facts: []` with
+  `asOfBlock` 445102197 in 66 to 71 s, and an intermittent 500.
+- Open row: serve reads through the reader views. `/read` reads Ponder's `db` from `ponder:api`, which is the
+  running deployment's own schema, not the `reader` views that point at the live one; until it does, a new
+  deployment has nothing to serve before it is ready, and the gate above answers `{"ready":false}`.
 
 ## Database backup (off-platform)
 

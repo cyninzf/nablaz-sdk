@@ -1,5 +1,5 @@
 // The MCP read server against a local HTTP stub of GET /read: pass-through, reads only, a 4xx as-is and a 5xx as a fixed text,
-// the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP front's GET /read relay (below 500 unchanged, /ready not-ready as {"ready":false}, no reader 5xx body), the /mcp catch-all, the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
+// the readiness gate on both doors (R-S202-4: {"ready":false} until the reader's /ready is 200), the stdio and Streamable HTTP entry points (same result, byte for byte), the HTTP front's GET /read relay (below 500 unchanged, /ready not-ready as {"ready":false}, no reader 5xx body), the /mcp catch-all, the HTTP rate limit, and the wording rules (no score, verdict, ranking, trust, reputation or credit-bureau
 // wording; "nothing indexed", not "none").
 
 import { spawn } from "node:child_process";
@@ -28,11 +28,16 @@ const NODE_ARGS = ["--experimental-strip-types", "--disable-warning=Experimental
 let stub: Server;
 let base: string;
 const seen: string[] = [];
+/** The stub's /ready: Ponder's is_ready of the running app, 1 or 0 (200, or 503 with Ponder's text). */
+let isReady = 1;
 
 beforeAll(async () => {
   stub = createServer((req, res) => {
     seen.push(req.url!);
-    if (req.url === "/ready") return res.writeHead(503, { "content-type": "text/plain; charset=UTF-8" }).end("Historical indexing is not complete.");
+    if (req.url === "/ready") {
+      if (isReady === 1) return res.writeHead(200, { "content-type": "text/plain; charset=UTF-8" }).end("");
+      return res.writeHead(503, { "content-type": "text/plain; charset=UTF-8" }).end("Historical indexing is not complete.");
+    }
     const m = req.url!.match(/^\/read\/(\d+)\/(.+)$/);
     if (!m) return res.writeHead(404).end();
     if (m[1] !== "42161") return res.writeHead(404, { "content-type": "application/json" }).end(NOT_READ);
@@ -57,7 +62,7 @@ describe("read_subject", () => {
     const client = await connected();
     seen.length = 0;
     const r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
-    expect(seen).toEqual([`/read/42161/${TEST}`]);
+    expect(seen).toEqual(["/ready", `/read/42161/${TEST}`]);
     expect(r.isError).toBeFalsy();
     expect(texts(r)).toEqual(["chain 42161, as of block 518782876", BODY]);
   });
@@ -73,7 +78,7 @@ describe("read_subject", () => {
     const client = await connected();
     seen.length = 0;
     await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: "../../status" } });
-    expect(seen).toEqual(["/read/42161/..%2F..%2Fstatus"]);
+    expect(seen).toEqual(["/ready", "/read/42161/..%2F..%2Fstatus"]);
   });
 
   it("a reader that does not answer is an error, not a read with nothing indexed; the caller sees no URL and no fetch text", async () => {
@@ -85,14 +90,15 @@ describe("read_subject", () => {
       // Row K (S198 deferred): the loopback URL and the fetch error text are the server's, not the caller's.
       expect(texts(r)).toEqual(["the reader did not answer"]);
       for (const leak of ["127.0.0.1", "http://", "fetch failed", "ECONNREFUSED"]) expect(JSON.stringify(r)).not.toContain(leak);
-      expect(log.mock.calls.map((c) => String(c[0])).join("\n")).toMatch(/^reader unreachable on GET \/read\/42161\/0x8E65.*: /m);
+      // The readiness check is the first call, so it is the one that finds the reader gone.
+      expect(log.mock.calls.map((c) => String(c[0])).join("\n")).toMatch(/^reader unreachable on GET \/ready: /m);
     } finally {
       log.mockRestore();
     }
   });
 
   it("a reader 5xx never reaches the caller: a fixed text, the reader's body in the server log only", async () => {
-    const reader = createServer((_, res) => res.writeHead(500, { "content-type": "text/plain" }).end(UPSTREAM_500));
+    const reader = createServer((req, res) => (req.url === "/ready" ? res.writeHead(200).end() : res.writeHead(500, { "content-type": "text/plain" }).end(UPSTREAM_500)));
     await new Promise<void>((r) => reader.listen(0, "127.0.0.1", r));
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -105,6 +111,86 @@ describe("read_subject", () => {
     } finally {
       log.mockRestore();
       await new Promise<void>((r) => reader.close(() => r()));
+    }
+  });
+});
+
+describe("readiness gate (R-S202-4)", () => {
+  // The S202 public probe: an unready schema served facts [] with an asOfBlock, an empty record that is absence (R-S189-6).
+  const EMPTY = `{"subject":"${TEST}","chainId":42161,"asOfBlock":"445102197","facts":[],"selfDealing":null,"exposure":null,"notes":[]}`;
+  let reader: Server;
+  let readerUrl: string;
+  let ready = 0;
+  const hits: string[] = [];
+  beforeAll(async () => {
+    reader = createServer((req, res) => {
+      hits.push(req.url!);
+      if (req.url === "/ready") return ready === 1 ? res.writeHead(200).end() : res.writeHead(503, { "content-type": "text/plain; charset=UTF-8" }).end("Historical indexing is not complete.");
+      res.writeHead(200, { "content-type": "application/json" }).end(EMPTY);
+    });
+    await new Promise<void>((r) => reader.listen(0, "127.0.0.1", r));
+    readerUrl = `http://127.0.0.1:${(reader.address() as { port: number }).port}`;
+  });
+  afterAll(() => new Promise<void>((r) => reader.close(() => r())));
+
+  it("GET /read: 503 {\"ready\":false} and no record while is_ready = 0; the reader's /read is never called. 200 once is_ready = 1", async () => {
+    const front = readHttpServer({ readerUrl });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
+    const url = `http://127.0.0.1:${(front.address() as { port: number }).port}/read/42161/${TEST}`;
+    try {
+      ready = 0;
+      hits.length = 0;
+      let r = await fetch(url);
+      let body = await r.text();
+      expect([r.status, r.headers.get("content-type"), body]).toEqual([503, "application/json", `{"ready":false}`]);
+      for (const leak of ["facts", "asOfBlock", "Historical"]) expect(body).not.toContain(leak);
+      expect(hits).toEqual(["/ready"]);
+      ready = 1;
+      hits.length = 0;
+      r = await fetch(url);
+      body = await r.text();
+      expect([r.status, body]).toEqual([200, EMPTY]);
+      expect(hits).toEqual(["/ready", `/read/42161/${TEST}`]);
+    } finally {
+      await new Promise<void>((r) => front.close(() => r()));
+    }
+  });
+
+  it("read_subject: {\"ready\":false} as an error result, never an empty record, while is_ready = 0; the record once is_ready = 1", async () => {
+    const client = await connected(readerUrl);
+    ready = 0;
+    hits.length = 0;
+    let r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
+    expect(r.isError).toBe(true);
+    expect(texts(r)).toEqual([`GET /read/42161/${TEST}: HTTP 503`, `{"ready":false}`]);
+    for (const leak of ["facts", "asOfBlock", "as of block", "Historical"]) expect(JSON.stringify(r)).not.toContain(leak);
+    expect(hits).toEqual(["/ready"]);
+    ready = 1;
+    hits.length = 0;
+    r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
+    expect(r.isError).toBeFalsy();
+    expect(texts(r)).toEqual(["chain 42161, as of block 445102197", EMPTY]);
+    expect(hits).toEqual(["/ready", `/read/42161/${TEST}`]);
+  });
+
+  it("a 5xx on /ready is not ready: {\"ready\":false} at both doors, the reader's body in the server log only", async () => {
+    const broken = createServer((req, res) => (req.url === "/ready" ? res.writeHead(500, { "content-type": "text/plain" }).end(UPSTREAM_500) : res.writeHead(200, { "content-type": "application/json" }).end(EMPTY)));
+    await new Promise<void>((r) => broken.listen(0, "127.0.0.1", r));
+    const brokenUrl = `http://127.0.0.1:${(broken.address() as { port: number }).port}`;
+    const front = readHttpServer({ readerUrl: brokenUrl });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const h = await fetch(`http://127.0.0.1:${(front.address() as { port: number }).port}/read/42161/${TEST}`);
+      expect([h.status, await h.text()]).toEqual([503, `{"ready":false}`]);
+      const m = await (await connected(brokenUrl)).callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
+      expect(texts(m)).toEqual([`GET /read/42161/${TEST}: HTTP 503`, `{"ready":false}`]);
+      for (const leak of ["/app/", "pg-pool", "statement timeout"]) expect(JSON.stringify(m)).not.toContain(leak);
+      expect(log).toHaveBeenCalledWith(`reader 500 on GET /ready: ${UPSTREAM_500}`);
+    } finally {
+      log.mockRestore();
+      await new Promise<void>((r) => front.close(() => r()));
+      await new Promise<void>((r) => broken.close(() => r()));
     }
   });
 });
@@ -207,7 +293,8 @@ describe("entry points", () => {
   }, 30_000);
 
   it("HTTP GET /ready not ready: 503 with the front's own {\"ready\":false}, never the reader's body or an error", async () => {
-    // The stub answers /ready with 503 "Historical indexing is not complete." (Ponder's text).
+    // With is_ready 0 the stub answers /ready with 503 "Historical indexing is not complete." (Ponder's text).
+    isReady = 0;
     const http = await overHttp(base);
     try {
       const r = await fetch(`http://127.0.0.1:${http.port}/ready`);
@@ -216,13 +303,14 @@ describe("entry points", () => {
       expect(body).not.toContain("Historical");
       expect(body).not.toContain("error");
     } finally {
+      isReady = 1;
       await http.stop();
     }
   }, 30_000);
 
   it("HTTP never relays a reader 5xx body: a filesystem path and the driver text stay in the server log", async () => {
     const UPSTREAM = UPSTREAM_500;
-    const reader = createServer((_, res) => res.writeHead(500, { "content-type": "text/plain" }).end(UPSTREAM));
+    const reader = createServer((req, res) => (req.url === "/ready" ? res.writeHead(200).end() : res.writeHead(500, { "content-type": "text/plain" }).end(UPSTREAM)));
     await new Promise<void>((r) => reader.listen(0, "127.0.0.1", r));
     const front = readHttpServer({ readerUrl: `http://127.0.0.1:${(reader.address() as { port: number }).port}` });
     await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
