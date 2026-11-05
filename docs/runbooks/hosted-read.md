@@ -35,7 +35,7 @@ Chainstack URL.
 `reader`. One machine (`min_machines_running = 1`, `auto_stop_machines = false`): the rate limit is held in
 process, and one indexer writes the database. Each deployment indexes into its own schema, named from the
 deployment's image tag in `FLY_IMAGE_REF`; the views schema `reader` points at the deployment that is live. The
-RPC cache (schema `ponder_sync`) is shared, so a redeploy reindexes from the cache rather than from the RPCs. Ponder does not drop the schema of a deployment
+RPC cache (schema `ponder_rpc_cache_1`) is shared, so a redeploy reindexes from the cache rather than from the RPCs. Ponder 0.18 names the RPC cache schema `ponder_rpc_cache_1`; `ponder_sync` is the legacy name (sync-store/schema.ts). Ponder does not drop the schema of a deployment
 that has been replaced; replaced schemas are dropped by hand once the new deployment is live.
 
 ## Health: /live and /ready
@@ -60,7 +60,7 @@ must be at least the server's.
 ```
 
 Restore into an empty database with `pg_restore --no-owner --dbname="$TARGET_DATABASE_URL" <dump>`; it holds
-`ponder_sync` and every deployment schema present when the dump was taken.
+`ponder_rpc_cache_1` and every deployment schema present when the dump was taken.
 
 ## Start-up RPC check, leg tags and RPC counters
 
@@ -164,9 +164,18 @@ cannot see other sessions' `state` in `pg_stat_activity` (S197-L5). On 2026-11-0
 ### The hosted (c) share (R-S194-9, R-S190-3)
 
 `scripts/c-share.ts` reads the hosted Postgres index when `DATABASE_URL` is set (the views schema `reader`, while
-the reader runs). Not from record, not yet run: from an ephemeral console as above, with `x.sh` holding
+the reader runs). From an ephemeral console as above, with `x.sh` holding
 `cd /app/packages/reader && node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/c-share.ts <chainId> <fromBlock> <toBlock>`.
 For a vault payment's label it reads the chain's RPC (`READER_ARBITRUM_RPC_URL`), present on the console machine.
+
+Population (2026-11-05): Arbitrum 42161 from block 283144909 = min(SpendPermissionManager 283144909,
+DelegationManager 320575464, NablaZ 516635193), per `startBlockOf` in `src/chains.ts`; Base 8453 from block
+23499060. The TEST account `0x8E65…b11c` is cited to `README.md` and the reader tests.
+
+The first hosted run (2026-11-05) failed on the loader: exit 1 on both chains, `loadPgFromPonder` returned null.
+Under plain node, `createRequire` on the pnpm link `node_modules/ponder` searched the link's parents, where pg is
+absent; the loader now resolves Ponder's real directory first (s202-c-share-loader), and a unit test runs it under
+plain node without `NODE_PATH`.
 
 ### Logs
 
@@ -267,10 +276,11 @@ Old schemas: Ponder never drops a replaced deployment's schema. Not from record 
 list them, and read which one the views point at, from an ephemeral console as above:
 `select schema_name from information_schema.schemata` and
 `select definition from pg_views where schemaname = 'reader' limit 1`. Every schema that is not the live one,
-not `reader`, not `ponder_sync` and not a Postgres schema is a replaced deployment's, and is dropped with
+not `reader`, not `ponder_rpc_cache_1` and not a Postgres schema is a replaced deployment's, and is dropped with
 `DROP SCHEMA "<name>" CASCADE` once the live deployment is ready. Its views in `reader` already point elsewhere, so
 the drop does not touch what is served. Keep the newest replaced schema until the next deployment is live, as a
-fallback. `ponder_sync` (the RPC cache) is never dropped.
+fallback. Before a drop, every `reader` view must reference only the live schema, and no view outside the
+targets may reference them. `ponder_rpc_cache_1` (the RPC cache) is never dropped.
 
 ## Registration surfaces — publish procedure (GATED: not run; publishes only after /ready 200)
 
