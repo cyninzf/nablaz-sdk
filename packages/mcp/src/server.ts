@@ -1,6 +1,7 @@
 // The MCP server core over the reader's GET /read, shared by the stdio and Streamable HTTP doors (R-S192-1). Reads
 // only: one tool, no write, no signing, no key. The reader's JSON is returned byte for byte, after one line naming
 // the chain and the as-of block; a reader 4xx body as-is; a reader 5xx as a fixed text, its body logged only.
+// Until the index is ready (the reader's /ready, R-S202-4) the tool answers {"ready":false} and reads nothing.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -26,6 +27,30 @@ export function logReaderError(status: number, path: string, body: string): void
   console.error(`reader ${status} on GET ${path}: ${body.slice(0, LOGGED_BODY_MAX)}`);
 }
 
+/** The not-ready answer of both doors (R-S202-4), in /ready's vocabulary (R-S193-13): no record, never an empty one. */
+export const NOT_READY_BODY = `{"ready":false}`;
+
+export type Readiness = "ready" | "not ready" | "unreachable";
+
+/**
+ * The one readiness check of both doors (R-S202-4): the reader's GET /ready, which Ponder answers from the running
+ * app's own is_ready (200 when 1). An unready schema's tables are partial, so a read from one is absence, not a
+ * record (R-S189-6). Any answer but 200 is not ready; a 5xx on /ready is logged, its body never relayed.
+ */
+export async function readerReadiness(base: string, get: typeof fetch): Promise<Readiness> {
+  let r: Response;
+  try {
+    r = await get(new URL("/ready", base));
+  } catch (e) {
+    console.error(`reader unreachable on GET /ready: ${String(e)}`);
+    return "unreachable";
+  }
+  const body = await r.text();
+  if (r.status === 200) return "ready";
+  if (r.status >= 500 && r.status !== 503) logReaderError(r.status, "/ready", body);
+  return "not ready";
+}
+
 export type ReadServerOptions = {
   /** Reader base URL. Default DEFAULT_READER_URL. */
   readerUrl?: string;
@@ -49,6 +74,10 @@ export function readServer(opts: ReadServerOptions = {}): McpServer {
     },
     async ({ chainId, address }) => {
       const url = new URL(`/read/${chainId}/${encodeURIComponent(address)}`, base);
+      const readiness = await readerReadiness(base, get);
+      if (readiness === "unreachable") return { isError: true, content: [{ type: "text", text: "the reader did not answer" }] };
+      // R-S202-4: not ready is the same {"ready":false} as /read's 503, never an empty record.
+      if (readiness === "not ready") return { isError: true, content: [{ type: "text", text: `GET ${url.pathname}: HTTP 503` }, { type: "text", text: NOT_READY_BODY }] };
       let res: Response;
       try {
         res = await get(url);

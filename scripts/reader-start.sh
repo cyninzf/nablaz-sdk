@@ -14,7 +14,8 @@ export PONDER_TELEMETRY_DISABLED=true
 READER_PORT=42069
 # The deployment's image tag (registry.fly.io/<app>:deployment-<id>), one per deploy; Ponder allows 45 characters.
 ref=${FLY_IMAGE_REF%%@*}
-SCHEMA=$(printf '%s' "${ref##*:}" | tr 'A-Z' 'a-z' | cut -c1-45)
+SCHEMA=${READER_SCHEMA:-$(printf '%s' "${ref##*:}" | tr 'A-Z' 'a-z' | cut -c1-45)}
+# READER_SCHEMA resumes an existing schema; Ponder refuses it unless the build id matches (R-S202-4, S202)
 
 # Row C: every RPC leg is checked before Ponder starts; a leg that does not answer is named in a warning, and the start goes on.
 node --experimental-strip-types --disable-warning=ExperimentalWarning packages/reader/scripts/check-rpc.ts

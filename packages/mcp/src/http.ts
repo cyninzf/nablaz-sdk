@@ -1,7 +1,8 @@
 // The HTTP front of one instance with two doors (R-S192-1). POST /mcp: Streamable HTTP onto the same read
 // server, stateless, one fresh server and transport per request, the same single read_subject tool. GET
 // /read/:chainId/:address and GET /ready: relayed to the reader, so the reader itself need not be public; a
-// reader-authored answer unchanged (status, content type, body bytes), a 5xx with a fixed body (relay below). GET /live: 200 when the front is up and the reader process runs
+// reader-authored answer unchanged (status, content type, body bytes), a 5xx with a fixed body (relay below). GET /read
+// answers 503 {"ready":false} with no record until the reader's /ready is 200 (R-S202-4, the check shared with the MCP tool). GET /live: 200 when the front is up and the reader process runs
 // (by PID when readerPid is set, off the reader's event loop; else its /health answers), 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
 // overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint.
@@ -11,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { DEFAULT_READER_URL, logReaderError, readServer, type ReadServerOptions } from "./server.ts";
+import { DEFAULT_READER_URL, logReaderError, NOT_READY_BODY, readerReadiness, readServer, type ReadServerOptions } from "./server.ts";
 
 export const DEFAULT_PORT = 3042;
 export const DEFAULT_RATE_LIMIT_PER_MIN = 60;
@@ -20,8 +21,8 @@ export const MCP_PATH = "/mcp";
 export const REGISTRATION_PATH = "/.well-known/agent-registration.json";
 /** The committed registration file, read once at module load; served as these bytes, never re-read per request. */
 const REGISTRATION_FILE = readFileSync(new URL("../static/agent-registration.json", import.meta.url));
-/** The reader paths the front relays: the read and the readiness probe. Nothing else of the reader is public. */
-const READER_PATH = /^\/read\/[^/]+\/[^/]+$|^\/ready$/;
+/** The reader paths the front relays: the read (READ_PATH) and the readiness probe /ready. Nothing else of the reader is public. */
+const READ_PATH = /^\/read\/[^/]+\/[^/]+$/;
 
 export type HttpServerOptions = ReadServerOptions & {
   /** Requests per IP per minute. Default DEFAULT_RATE_LIMIT_PER_MIN. */
@@ -83,6 +84,18 @@ async function live(res: ServerResponse, readerUrl: string, get: typeof fetch) {
 }
 
 const json = (res: ServerResponse, status: number, body: unknown) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
+const notReady = (res: ServerResponse) => res.writeHead(503, { "content-type": "application/json" }).end(NOT_READY_BODY);
+
+/**
+ * GET /read/* behind the readiness gate (R-S202-4): the shared readerReadiness check first, the read relayed only
+ * when the index is ready; otherwise 503 {"ready":false} and no record.
+ */
+async function gatedRead(res: ServerResponse, readerUrl: string, path: string, get: typeof fetch) {
+  const readiness = await readerReadiness(readerUrl, get);
+  if (readiness === "unreachable") return plain(res, 502, "reader unreachable\n");
+  if (readiness === "not ready") return notReady(res);
+  return relay(res, readerUrl, path, get);
+}
 
 /**
  * GET `path` on the reader (R-S198-3/4). Below 500 the answer is reader-authored and goes back unchanged (status,
@@ -98,7 +111,7 @@ async function relay(res: ServerResponse, readerUrl: string, path: string, get: 
   }
   const body = Buffer.from(await r.arrayBuffer());
   if (r.status < 500) return res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/octet-stream" }).end(body);
-  if (path === "/ready" && r.status === 503) return json(res, 503, { ready: false });
+  if (path === "/ready" && r.status === 503) return notReady(res);
   logReaderError(r.status, path, body.toString("utf8"));
   json(res, r.status, { error: "internal error" });
 }
@@ -113,7 +126,8 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
       return live(res, opts.readerUrl ?? DEFAULT_READER_URL, opts.fetch ?? fetch);
     }
     if (req.method === "GET" && path === REGISTRATION_PATH) return res.writeHead(200, { "content-type": "application/json" }).end(REGISTRATION_FILE);
-    if (req.method === "GET" && READER_PATH.test(path)) return relay(res, opts.readerUrl ?? DEFAULT_READER_URL, path, opts.fetch ?? fetch);
+    if (req.method === "GET" && READ_PATH.test(path)) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, path, opts.fetch ?? fetch);
+    if (req.method === "GET" && path === "/ready") return relay(res, opts.readerUrl ?? DEFAULT_READER_URL, path, opts.fetch ?? fetch);
     if (path !== MCP_PATH) return plain(res, 404, "not found\n");
     // Stateless: no session, no server-initiated stream, so only POST carries a request.
     if (req.method !== "POST") return res.writeHead(405, { allow: "POST", "content-type": "text/plain; charset=utf-8" }).end("method not allowed\n");
