@@ -3,6 +3,11 @@
 // is missing; vault payments take their account's shape; values are never summed across tokens.
 
 import { PGlite } from "@electric-sql/pglite";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getAddress } from "viem";
 import { cShareOverIndex, formatShare, loadPgFromPonder, openIndex } from "../../src/c-share";
@@ -76,4 +81,23 @@ describe("openIndex (row F: the hosted (c) share, R-S194-9)", () => {
     const pg = loadPgFromPonder();
     expect(typeof pg?.Client).toBe("function");
   });
+
+  // The hosted console runs scripts/c-share.ts under plain node with no NODE_PATH. pnpm's vitest shim exports a
+  // NODE_PATH that holds pnpm's hoisted pg, which hides a loader that searches beside the link instead of
+  // Ponder's real directory, so the child runs without it.
+  it("the pg driver loads under plain node --experimental-strip-types, the hosted console's loader", () => {
+    const dir = mkdtempSync(join(tmpdir(), "c-share-loader-"));
+    try {
+      const entry = join(dir, "entry.ts");
+      const src = pathToFileURL(new URL("../../src/c-share.ts", import.meta.url).pathname).href;
+      writeFileSync(entry, `import { loadPgFromPonder } from ${JSON.stringify(src)};\nconst pg = loadPgFromPonder();\nconsole.log(pg === null ? "null" : typeof pg.Client);\n`);
+      const out = execFileSync(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", entry], {
+        encoding: "utf8",
+        env: { ...process.env, NODE_PATH: undefined },
+      });
+      expect(out.trim()).toBe("function");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

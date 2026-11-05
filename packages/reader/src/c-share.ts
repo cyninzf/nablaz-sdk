@@ -4,7 +4,10 @@
 // when the permission row is not indexed), as GET /read labels them. Used by scripts/c-share.ts and the fork
 // test, and the Postgres path for the hosted index (openIndex, row F).
 
+import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
+import { basename, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getAddress, type Address } from "viem";
 
 /** External payments with their permission's shape: the same join GET /read makes (src/read.ts paymentFacts). */
@@ -73,10 +76,23 @@ export type IndexDb = { q: Query; close: () => Promise<void>; describe: string }
 type PgClient = { connect(): Promise<void>; query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>; end(): Promise<void> };
 type PgModule = { Client: new (cfg: { connectionString: string }) => PgClient };
 
-/** pg, resolved from Ponder's package (packages/reader/node_modules/ponder), as Ponder resolves it. */
-export function loadPgFromPonder(): PgModule | null {
+/** Ponder's real install directory: pnpm links packages/reader/node_modules/ponder to the store, and pg sits
+ * beside Ponder's real directory, not beside the link. null when Ponder is not installed. */
+export function ponderRealDir(): string | null {
   try {
-    return createRequire(new URL("../node_modules/ponder/package.json", import.meta.url))("pg") as PgModule;
+    return realpathSync(fileURLToPath(new URL("../node_modules/ponder", import.meta.url)));
+  } catch {
+    return null;
+  }
+}
+
+/** pg, resolved from Ponder's real directory, as Ponder resolves it. Under plain node (the hosted console),
+ * createRequire on the link path searches the link's parents and misses pg; the real path finds it. */
+export function loadPgFromPonder(): PgModule | null {
+  const dir = ponderRealDir();
+  if (dir === null) return null;
+  try {
+    return createRequire(join(dir, "package.json"))("pg") as PgModule;
   } catch {
     return null;
   }
@@ -96,7 +112,10 @@ export async function openIndex(env: Record<string, string | undefined> = proces
   const url = env.DATABASE_URL;
   if (url) {
     const pg = loadPg();
-    if (!pg) throw new Error("DATABASE_URL is set but the pg driver did not load from Ponder's install");
+    if (!pg) {
+      const dir = ponderRealDir();
+      throw new Error(`DATABASE_URL is set but "pg" did not load beside Ponder's install (${dir === null ? "ponder not found" : basename(dir)})`);
+    }
     const client = new pg.Client({ connectionString: url });
     await client.connect();
     return {
