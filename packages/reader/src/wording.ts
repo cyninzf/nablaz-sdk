@@ -4,8 +4,9 @@
 
 export const BANNED = /score|verdict|rank|trust|reputation|credit bureau/i;
 
-/** R-S190-7: exact contract names, starting with ERC-8004's "Reputation Registry" only. */
-export const ALLOWED_NAMES = ["Reputation Registry"] as const;
+/** Exact contract names (R-S190-7: ERC-8004's "Reputation Registry") and ruled strings (R-S205-3: the last sentence
+ * of the R-S201-6 description), each removed exactly and case-sensitively before the scan. */
+export const ALLOWED_NAMES = ["Reputation Registry", "Evidence, not a verdict."] as const;
 
 /** Every banned match left after removing the exact allowlisted names. */
 export function bannedHits(text: string): string[] {
