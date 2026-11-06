@@ -172,8 +172,8 @@ then grep `^ponder_sync_block|^ponder_sync_is_realtime` locally):
 ~/.fly/bin/flyctl ssh console -a nablaz-reader -C "node -e \"fetch('http://127.0.0.1:42069/metrics').then(r=>r.text()).then(console.log)\"" > metrics.txt
 ```
 
-`/metrics/reader` (above) is read the same way, with that path. Not from record: it is new in this PR and has not
-yet been read on the hosted instance.
+`/metrics/reader` (above) is read the same way, with that path. First read on the hosted instance in S204: four
+RPC legs, 0 errors.
 
 ### Memory per process (check 8, amended S199)
 

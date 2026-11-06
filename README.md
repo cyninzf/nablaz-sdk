@@ -168,8 +168,9 @@ only. It has two doors:
   `read_subject`. For an MCP client that takes a URL: `{ "type": "http", "url": "https://read.nablaz.io/mcp" }`.
 
 Both doors are rate-limited per client IP; a request over the limit gets 429 with a plain-text body. Beside
-them, `GET /live` (the process is up) and `GET /ready` (the index has caught up) answer with a status code and
-a short text; nothing else is served: no status, metrics or counts endpoint. Reads are taken at the indexed
+them, `GET /live` (the process is up) answers with a status code and a short text, and `GET /ready` (the index
+has caught up) answers HTTP 200 with an empty body when ready, and 503 with `{"ready":false}` when not; nothing
+else is served: no status, metrics or counts endpoint. Reads are taken at the indexed
 block and cite the contracts' own logs and state, so each fact can be checked with its one-liner against an
 RPC of your own. The deployment is `fly.toml`, the `Dockerfile` and `scripts/reader-start.sh`;
 `docs/runbooks/hosted-read.md` lists the variables it reads, the two health paths and the database backup

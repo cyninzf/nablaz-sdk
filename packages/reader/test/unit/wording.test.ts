@@ -6,9 +6,11 @@ import { ALLOWED_NAMES, bannedHits } from "../../src/wording";
 import { DIRECT_TRANSFER, FEEDBACK_URI_NOT_READ, IDENTITY_DID_NOT_EXIST, NATIVE_NOT_READ, NO_TRANSFER, emptySourceNotes, groundingFact, groundingTransfers, rangeNote } from "../../src/read";
 
 describe("guard", () => {
-  it("allows only the exact name Reputation Registry", () => {
-    expect(ALLOWED_NAMES).toEqual(["Reputation Registry"]);
+  it("allows only the exact name Reputation Registry and the exact ruled sentence (R-S205-3)", () => {
+    expect(ALLOWED_NAMES).toEqual(["Reputation Registry", "Evidence, not a verdict."]);
     expect(bannedHits('the ERC-8004 "Reputation Registry" emits NewFeedback')).toEqual([]);
+    expect(bannedHits("Evidence, not a verdict.")).toEqual([]);
+    expect(bannedHits("the verdict was")).toEqual(["verdict"]);
   });
   it("red fixtures still fail", () => {
     expect(bannedHits("a trust score for the address")).toEqual(["trust", "score"]);
