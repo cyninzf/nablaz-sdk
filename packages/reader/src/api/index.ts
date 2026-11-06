@@ -27,6 +27,7 @@ import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, typ
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
+import { withUtc } from "./utc";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
 import { groundingClient, rpcMetricsText } from "../rpc";
 import {
@@ -396,7 +397,7 @@ app.get("/read/:chainId/:address", async (c) => {
 
   // R-S190-3: per token, the payment facts in this read labelled (c), over all payment facts.
   const cShareOut = { chainId, asOfBlock: asOfBlock.toString(), byToken: cShare(facts) };
-  return c.body(json({ subject, chainId, asOfBlock, facts, selfDealing: selfDealingOut, exposure: exposureOut, cShare: cShareOut, notes }), 200, {
+  return c.body(json({ subject, chainId, asOfBlock, facts: withUtc(facts), selfDealing: selfDealingOut, exposure: exposureOut, cShare: cShareOut, notes }), 200, {
     "content-type": "application/json",
   });
 });

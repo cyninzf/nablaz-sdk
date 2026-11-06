@@ -12,6 +12,7 @@ import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from 
 import { groundingFact, groundingTransfers, paymentFacts, type LabelledPayment } from "../../src/read";
 import { CHAINS, CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src/chains";
 import { render } from "../../src/oneliners";
+import { EPOCH_KEYS, utcOf } from "../../src/api/utc";
 import { UPSTREAM, UPSTREAM_BASE, indexOnce, redact, stopAndDump, type Served, type Tables } from "./harness";
 
 if (!UPSTREAM) throw new Error("READER_ARBITRUM_RPC_URL is not set: the fork tests run on both chains and do not skip");
@@ -231,6 +232,27 @@ describe("GET /read", () => {
     const pay = r.facts.filter((f: any) => f.source === "coinbase:spend_permission_payment");
     expect(pay.length).toBeGreaterThan(0);
     for (const f of pay) expect(f.label).toBe("(a) allowance, per period");
+  });
+});
+
+describe("GET /read: <field>Utc beside every epoch (R-S205-5)", () => {
+  it("each epoch-second field in the served facts carries its Utc sibling, computed by the reader", () => {
+    let seen = 0;
+    const walk = (o: unknown, spm: boolean): void => {
+      if (Array.isArray(o)) return o.forEach((x) => walk(x, false));
+      if (o === null || typeof o !== "object") return;
+      const r = o as Record<string, unknown>;
+      if (typeof r.source === "string" && r.terms && typeof r.terms === "object") return walk(r.terms, r.source === "coinbase:spend_permission");
+      for (const [k, v] of Object.entries(r)) {
+        if ((EPOCH_KEYS as readonly string[]).includes(k) || (spm && (k === "start" || k === "end"))) {
+          expect(r, k).toHaveProperty(`${k}Utc`, utcOf(v));
+          seen++;
+        }
+        walk(v, false);
+      }
+    };
+    for (const r of Object.values(reads)) walk(r.facts, false);
+    console.log(`R-S205-5: ${seen} epoch fields checked in the served /read facts`);
   });
 });
 

@@ -11,6 +11,9 @@ export const DEFAULT_READER_URL = "http://localhost:42069";
 
 export const READ_TOOL = "read_subject";
 
+/** The tool's display title: top level and annotations.title carry the same string (directory portals read the latter). */
+export const READ_TOOL_TITLE = "Read indexed facts about an address";
+
 /** Two sentences: the source-and-label model and what a nothing-indexed note means. */
 export const READ_TOOL_DESCRIPTION =
   "Returns every fact the reader has indexed about an address on one chain, as GET /read/:chainId/:address JSON: each fact names its source, carries a permission label of shape (a) to (e), and cites the block, transaction and log index with a command that returns the same log from any RPC. " +
@@ -64,13 +67,13 @@ export function readServer(opts: ReadServerOptions = {}): McpServer {
   server.registerTool(
     READ_TOOL,
     {
-      title: "Read indexed facts about an address",
+      title: READ_TOOL_TITLE,
       description: READ_TOOL_DESCRIPTION,
       inputSchema: {
         chainId: z.number().int().positive().describe("EVM chain id, for example 42161 (Arbitrum One) or 8453 (Base)"),
         address: z.string().describe("The subject address, 0x-prefixed"),
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { title: READ_TOOL_TITLE, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ chainId, address }) => {
       const url = new URL(`/read/${chainId}/${encodeURIComponent(address)}`, base);
