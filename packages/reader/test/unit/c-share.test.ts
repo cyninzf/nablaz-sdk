@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { getAddress } from "viem";
 import { cShareOverIndex, formatShare, loadPgFromPonder, openIndex } from "../../src/c-share";
 
@@ -75,6 +75,45 @@ describe("openIndex (row F: the hosted (c) share, R-S194-9)", () => {
     expect(idx.describe).not.toMatch(/S3CRET|schema_admin/);
     await idx.close();
     expect(seen.ended).toBe(true);
+  });
+
+  it("with DATABASE_URL: sets a serial plan on its own session once, before the first query (R-S204-2)", async () => {
+    const calls: string[] = [];
+    class Client {
+      async connect() {
+        calls.push("connect");
+      }
+      async query(sql: string) {
+        calls.push(sql);
+        return { rows: [] };
+      }
+      async end() {}
+    }
+    const idx = await openIndex({ DATABASE_URL: "postgres://u:p@db.internal.example:5432/reader_db" }, () => ({ Client }));
+    await idx.q("SELECT 1", []);
+    await idx.q("SELECT 2", []);
+    expect(calls).toEqual(["connect", "SET max_parallel_workers_per_gather = 0", "SELECT 1", "SELECT 2"]);
+    await idx.close();
+  });
+
+  it("without DATABASE_URL (PGlite): no pg, no SET", async () => {
+    // Pass-through spies: PGlite issues its own setup statements (search_path, type lookups); openIndex adds none.
+    const query = vi.spyOn(PGlite.prototype, "query");
+    const exec = vi.spyOn(PGlite.prototype, "exec");
+    const loadPg = vi.fn(() => null);
+    let sql: string[];
+    try {
+      const idx = await openIndex({ READER_PGLITE_DIR: "memory://" }, loadPg);
+      expect(await idx.q("SELECT 1 AS n", [])).toEqual([{ n: 1 }]);
+      await idx.close();
+    } finally {
+      sql = [...query.mock.calls, ...exec.mock.calls].map((c) => String(c[0]));
+      query.mockRestore();
+      exec.mockRestore();
+    }
+    expect(loadPg).not.toHaveBeenCalled();
+    expect(sql).toContain("SELECT 1 AS n");
+    expect(sql.filter((s) => /max_parallel_workers/i.test(s))).toEqual([]);
   });
 
   it("the pg driver loads from Ponder's own install: no dependency of the reader's", () => {
