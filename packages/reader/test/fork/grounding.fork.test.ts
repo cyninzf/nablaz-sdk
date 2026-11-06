@@ -38,6 +38,7 @@ import { ARBITRUM_ONE } from "@nablaz/sdk/addresses";
 import { NablaAccountFactoryPermanentAbi, NablaAccountV3_1Abi, NablaRecordAbi } from "@nablaz/sdk/abis";
 import { TRANSFER_WITH_AUTHORIZATION_TYPES, granteeVaultSigner } from "@nablaz/sdk";
 import { CHAINS } from "../../src/chains";
+import { utcOf } from "../../src/api/utc";
 import { indexOnce, startAnvil, type Anvil, type Served } from "./harness";
 
 const C = ARBITRUM_ONE.contracts;
@@ -211,6 +212,10 @@ describe("feedback grounding on an Arbitrum fork (R-S191-11, R-S191-12, R-S191-1
     expect(f.terms.payment.payer.toLowerCase()).toBe(S.A.toLowerCase());
     expect(f.terms.payment.label).toBe("(a) within mandate by construction");
     expect(f.terms.payment.terms.authorization.grantIdFromLogs.toLowerCase()).toBe(S.grantId.toLowerCase());
+    // R-S205-5, through the served route: the nested vault payment's envelopeExpiry has its reader-computed Utc sibling.
+    const auth = f.terms.payment.terms.authorization;
+    expect(auth).toHaveProperty("envelopeExpiryUtc", utcOf(auth.envelopeExpiry));
+    if (auth.envelopeExpiry !== null) expect(auth.envelopeExpiryUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     expect(f.terms.walletAtFeedback).toBe(`wallet at feedback: ${agentOwner.address}`);
   });
 
