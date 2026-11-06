@@ -91,6 +91,9 @@ into the new image's own schema.
   asks the reader's `/health`.
 - `GET /ready` is index readiness, the public signal: 503 until the index has caught up, 200 after. `/ready`
   503 during backfill is expected, not an incident.
+- The `/ready` body (S204): `/ready` answers HTTP 200 with an EMPTY body when ready (the front's `relay()` passes
+  Ponder's answer through below 500); `{"ready":false}` exists only on the 503 branch; nothing in the code serves
+  `{"ready":true}`. Readiness is the status code.
 
 ## /read
 
@@ -190,6 +193,9 @@ shared-cpu-1x --vm-memory 1024 --file-local /tmp/x.sh=x.sh -C "bash /tmp/x.sh"; 
 /app/node_modules/.pnpm/pg@*/node_modules/pg; the image has no curl/top — node fetch and /proc; console
 self-destroys; verify exactly ONE machine after."
 
+S204-L5 (verbatim):
+"The ephemeral console (R-S194-7) is a separate machine that shares only the database; anything on the reader's localhost is reached via flyctl ssh console on the live machine."
+
 The proven form (S200) ships both files, `x.sh` and the `.mjs` it runs, with two `--file-local` flags:
 
 ```bash
@@ -224,6 +230,15 @@ cannot see other sessions' `state` in `pg_stat_activity` (S197-L5). On 2026-11-0
 the reader runs). From an ephemeral console as above, with `x.sh` holding
 `cd /app/packages/reader && node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/c-share.ts <chainId> <fromBlock> <toBlock>`.
 For a vault payment's label it reads the chain's RPC (`READER_ARBITRUM_RPC_URL`), present on the console machine.
+
+`<toBlock>` is each chain's current `ponder_sync_block`, read just before the run over `flyctl ssh console` on the
+LIVE machine (Step S above), never in the ephemeral console: Ponder's `127.0.0.1:42069` exists only on that
+machine (S204-L5).
+
+On hosts whose `/dev/shm` rejects parallel workers (Fly Managed Postgres, ERROR 53100 "could not resize shared
+memory segment", S204), run with `PGOPTIONS="-c max_parallel_workers_per_gather=0"`. R-S204-2: the report sets this
+on its own Postgres session; the database's configuration is never changed to fit a reporting script. The durable
+in-script fix landed in `openIndex` with #16, so a report from an image built after #16 needs no `PGOPTIONS`.
 
 Population (2026-11-05): Arbitrum 42161 from block 283144909 = min(SpendPermissionManager 283144909,
 DelegationManager 320575464, NablaZ 516635193), per `startBlockOf` in `src/chains.ts`; Base 8453 from block
@@ -339,10 +354,18 @@ the drop does not touch what is served. Keep the newest replaced schema until th
 fallback. Before a drop, every `reader` view must reference only the live schema, and no view outside the
 targets may reference them. `ponder_rpc_cache_1` (the RPC cache) is never dropped.
 
-## Registration surfaces — publish procedure (GATED: not run; publishes only after /ready 200)
+## Registration surfaces — publish procedure (EXECUTED S204)
 
-Publish gate (S201): "nothing publishes and no chain tx until /ready 200." Every command in this section is
-**Not run — gated**. The description copy in both files is a draft for the founder's review before publishing.
+Publish gate (S201): "nothing publishes and no chain tx until /ready 200." The gate opened at S204 (`/ready` 200)
+and the procedure below was run in the founder publish sitting. Record:
+
+```text
+setAgentURI(1650 → https://read.nablaz.io/.well-known/agent-registration.json): tx 0x37803fb7146ffe683dc2e8ccac52c3ff19f78684132e4e46e1848e45cb1a64d7, Arbitrum One block 521814975
+vault sweep (1.99 USDC): tx 0x1b88a09c0d83385a67c37919e67d5118917710b9f9d74561d37e969e1bb3e2a3, block 521815869
+MCP Registry: io.nablaz/reader v0.1.0, publishedAt 2026-11-06T14:35:58.64909Z, status active
+```
+
+The steps below are kept as the procedure for a re-publish or a key rotation.
 
 The two files:
 
@@ -358,7 +381,7 @@ The two files:
 
 ### 1. agentURI (ERC-8004, agentId 1650)
 
-Not run — gated. The agentURI value is `https://read.nablaz.io/.well-known/agent-registration.json`. The owner of
+Executed S204 (record above). The agentURI value is `https://read.nablaz.io/.well-known/agent-registration.json`. The owner of
 agentId 1650 sets it with `setAgentURI(uint256 agentId, string calldata newURI)` (EIP-8004) on the Identity
 Registry on eip155:42161 (address in `packages/reader/src/generated/erc8004.json`), arguments
 `1650, "https://read.nablaz.io/.well-known/agent-registration.json"`: a founder Ledger transaction from her
@@ -366,7 +389,7 @@ Mac. Before signing, `GET` the URI and confirm it serves the committed file.
 
 ### 2. MCP Registry (official)
 
-Not run — gated. From the registry's own docs (modelcontextprotocol/registry: `docs/modelcontextprotocol-io/`
+Executed S204 (record above). From the registry's own docs (modelcontextprotocol/registry: `docs/modelcontextprotocol-io/`
 `quickstart.mdx`, `authentication.mdx`, `remote-servers.mdx`, fetched S201).
 
 Key pair, on the founder Mac only, kept in `~/Developer/nablaz/secrets/mcp-publisher/` (outside every repository).
@@ -375,7 +398,6 @@ The Ed25519 path needs OpenSSL 3 or later; macOS's system `openssl` (LibreSSL) f
 Silicon, after `brew install openssl@3`):
 
 ```bash
-# Not run — gated
 mkdir -p ~/Developer/nablaz/secrets/mcp-publisher && cd ~/Developer/nablaz/secrets/mcp-publisher
 MY_DOMAIN="nablaz.io"
 
@@ -393,14 +415,12 @@ address bar must show nablaz.io before any DNS edit). Not under a selector such 
 registry looks at the apex only. Check it has propagated:
 
 ```bash
-# Not run — gated
 dig TXT nablaz.io +short
 ```
 
 Install `mcp-publisher` (one release binary; `brew install mcp-publisher` also works):
 
 ```bash
-# Not run — gated
 curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher && sudo mv mcp-publisher /usr/local/bin/
 ```
 
@@ -409,7 +429,6 @@ never renders in the terminal or the shell history. One `&&` chain, in a plain t
 (see the LibreSSL note above):
 
 ```bash
-# Not run — gated
 cd ~/Developer/nablaz/secrets/mcp-publisher && mcp-publisher login dns --domain nablaz.io --private-key "$(openssl pkey -in key.pem -noout -text | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
 ```
 
@@ -425,7 +444,6 @@ cloud KMS account.
 After login, validate and publish from the repository root:
 
 ```bash
-# Not run — gated
 mcp-publisher validate
 mcp-publisher publish
 ```
@@ -433,16 +451,20 @@ mcp-publisher publish
 Verify through the registry API:
 
 ```bash
-# Not run — gated
 curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.nablaz/reader"
 ```
 
 The registry does not check that the remote URL is on the authenticated domain, and each remote URL can be used by
 one server name only. If keys are rotated, remove the old TXT record from the apex.
 
-### 3. Secondary directories
+### 3. Secondary directories (the executed plan, S204)
 
-Not run — gated. Only after the official listing above is live.
+- A — aggregator verify-only: PulseMCP, API Tracker and other registry-fed lists; checked a few days after publish.
+- D — Anthropic Claude Connectors Directory submission (the README's "Using the hosted reader from Claude" section);
+  OpenAI org verification in parallel.
+- B — founder-typed GitHub-OAuth claims: Glama, mcp.so, MCP Market, cursor.directory, smithery.ai.
+- C — awesome-mcp-servers and Cline Marketplace PRs (Docker MCP Catalog skipped: containerized servers only).
+- E — OpenShell catalog and the plugin/skill shelf, each process confirmed before submission.
 
 ### Note: endpoint-domain verification
 

@@ -175,6 +175,38 @@ RPC of your own. The deployment is `fly.toml`, the `Dockerfile` and `scripts/rea
 `docs/runbooks/hosted-read.md` lists the variables it reads, the two health paths and the database backup
 schedule.
 
+### Using the hosted reader from Claude
+
+Read NablaZ's open record: agent actions under permission, cited onchain. Evidence, not a verdict.
+
+**Setup.** In Claude, Settings → Connectors → Add custom connector → `https://read.nablaz.io/mcp` → No sign-in
+(the server is keyless). The same read is available over plain HTTP:
+`GET https://read.nablaz.io/read/{chainId}/{address}`.
+
+**Examples.**
+
+Example 1 — read a subject's record.
+Prompt: "Using NablaZ Reader, what's on the record for 0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c on chain 42161?"
+What happens: `read_subject` calls `GET /read/42161/<address>` and returns the indexed facts for that account;
+every fact carries its own block number and transaction citation, and a payment cites both halves — the
+authorization entry and the settlement transaction.
+
+Example 2 — the permission behind each payment.
+Prompt: "What permission was each of those payments made under?"
+What happens: each payment fact carries a permission label by the shape of its terms (exact execution, allowance,
+no limit, not determinable, or third-party attestation) and a source label naming the permission system it came
+from.
+
+Example 3 — a subject with nothing on record.
+Prompt: "What's on the record for 0x0000000000000000000000000000000000051900 on chain 42161?"
+What happens: the reader answers "nothing indexed" together with the block range it has covered — an empty read
+states its coverage; it never asserts absence.
+
+**Privacy.** The reader is keyless and holds no user accounts; it serves public onchain data and logs only what
+operating the service requires. Full policy: https://nablaz.io/privacy
+
+**Support.** GitHub issues on this repository, or support@nablaz.io.
+
 ## Running it locally
 
 Everything below runs on your machine: the reader, the MCP server and the skill. Requires Node 22.12+ and
