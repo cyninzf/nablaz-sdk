@@ -25,7 +25,22 @@ const FIXTURE = new URL("../fixtures/afg/erc8004-base-grounded-feedback-2026-10-
 const RESULT = new URL("../../../../docs/reader/afg-agreement-2026-10-20.csv", import.meta.url);
 const BASE = CHAINS[8453]!.external;
 const ZERO = "0x0000000000000000000000000000000000000000";
-const client = createPublicClient({ transport: http(UPSTREAM_BASE) }) as PublicClient;
+/**
+ * This test's RPC path only (never production code): an HTTP 429 from the upstream (a compute-units-per-second
+ * limit; it failed this test in S200 and on the post-merge run of #17) is retried after 250, 500, 1000 and 2000 ms
+ * (+ up to 50 % jitter), at most about 5.6 s added per request. A 429 that persists past the last retry is
+ * returned as it came, so viem raises and the test fails.
+ */
+const RETRY_429_DELAYS_MS = [250, 500, 1000, 2000];
+async function fetchRetrying429(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(input, init);
+    if (res.status !== 429 || attempt >= RETRY_429_DELAYS_MS.length) return res;
+    await res.body?.cancel();
+    await new Promise((r) => setTimeout(r, RETRY_429_DELAYS_MS[attempt]! * (1 + Math.random() * 0.5)));
+  }
+}
+const client = createPublicClient({ transport: http(UPSTREAM_BASE, { fetchFn: fetchRetrying429 }) }) as PublicClient;
 /** The Identity Registry's first block with code on Base: no agentWallet, so no grounding transfer, is older. */
 const IDENTITY_START = BigInt(BASE.startBlocks.IdentityRegistry);
 

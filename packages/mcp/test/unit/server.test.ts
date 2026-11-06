@@ -201,6 +201,8 @@ describe("reads only", () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([READ_TOOL]);
     expect(tools[0]!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect(tools[0]!.title).toBe("Read indexed facts about an address");
+    expect(tools[0]!.annotations?.title).toBe(tools[0]!.title);
     expect(Object.keys(tools[0]!.inputSchema.properties ?? {}).sort()).toEqual(["address", "chainId"]);
     const caps = client.getServerCapabilities()!;
     expect(caps.prompts).toBeUndefined();

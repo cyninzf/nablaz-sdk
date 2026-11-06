@@ -7,7 +7,8 @@
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
 // overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint.
 // GET /.well-known/agent-registration.json: the ERC-8004 registration file at EIP-8004's own path (also its
-// endpoint-domain verification artifact; packages/mcp/static/), the bytes read once at start-up. Any other path, any other /.well-known path included, is 404.
+// endpoint-domain verification artifact; packages/mcp/static/), the bytes read once at start-up. GET /favicon.ico: the
+// committed NablaZ icon (R-S205-6), image/png, cached as immutable. Any other path, any other /.well-known path included, is 404.
 
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -21,6 +22,10 @@ export const MCP_PATH = "/mcp";
 export const REGISTRATION_PATH = "/.well-known/agent-registration.json";
 /** The committed registration file, read once at module load; served as these bytes, never re-read per request. */
 const REGISTRATION_FILE = readFileSync(new URL("../static/agent-registration.json", import.meta.url));
+/** R-S205-6: the favicon path and the committed icon (nablaz.io/press-kit/nablaz-icon-256.png, sha256 31af057a…8e97,
+ * checked before commit), read once at module load like the registration file. */
+export const FAVICON_PATH = "/favicon.ico";
+const FAVICON_PNG = readFileSync(new URL("../static/nablaz-icon-256.png", import.meta.url));
 /** The reader paths the front relays: the read (READ_PATH) and the readiness probe /ready. Nothing else of the reader is public. */
 const READ_PATH = /^\/read\/[^/]+\/[^/]+$/;
 
@@ -126,6 +131,7 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
       return live(res, opts.readerUrl ?? DEFAULT_READER_URL, opts.fetch ?? fetch);
     }
     if (req.method === "GET" && path === REGISTRATION_PATH) return res.writeHead(200, { "content-type": "application/json" }).end(REGISTRATION_FILE);
+    if (req.method === "GET" && path === FAVICON_PATH) return res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=31536000, immutable" }).end(FAVICON_PNG);
     if (req.method === "GET" && READ_PATH.test(path)) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, path, opts.fetch ?? fetch);
     if (req.method === "GET" && path === "/ready") return relay(res, opts.readerUrl ?? DEFAULT_READER_URL, path, opts.fetch ?? fetch);
     if (path !== MCP_PATH) return plain(res, 404, "not found\n");
