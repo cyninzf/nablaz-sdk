@@ -14,7 +14,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DEFAULT_READER_URL, READ_TOOL, READ_TOOL_DESCRIPTION, readServer } from "../../src/server.ts";
 import { MCP_PATH, readHttpServer } from "../../src/http.ts";
-import { bannedHits } from "../../../reader/src/wording.ts";
+import { bannedHits } from "../../../reader/lib/wording.ts";
 
 const TEST = "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c";
 // Not the reader's formatting on purpose: the body must come back byte for byte, not re-serialized.

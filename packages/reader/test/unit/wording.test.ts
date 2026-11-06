@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ALLOWED_NAMES, bannedHits } from "../../src/wording";
+import { ALLOWED_NAMES, bannedHits } from "../../lib/wording";
 import { DIRECT_TRANSFER, FEEDBACK_URI_NOT_READ, IDENTITY_DID_NOT_EXIST, NATIVE_NOT_READ, NO_TRANSFER, emptySourceNotes, groundingFact, groundingTransfers, rangeNote } from "../../src/read";
 
 describe("guard", () => {

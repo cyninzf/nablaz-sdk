@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { createPublicClient, getAddress, http, parseAbi, type Address, type Hex, type PublicClient } from "viem";
-import { cShareOverIndex, formatShare } from "../../src/c-share";
+import { cShareOverIndex, formatShare } from "../../lib/c-share";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
 import { groundingFact, groundingTransfers, paymentFacts, type LabelledPayment } from "../../src/read";
 import { CHAINS, CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src/chains";
