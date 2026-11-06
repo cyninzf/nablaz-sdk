@@ -11,7 +11,7 @@ import { createPublicClient, http, keccak256, type Address, type Hex } from "vie
 import { NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { CHAINS, hasNabla } from "../src/chains.ts";
 import { nablaLabel } from "../src/labels.ts";
-import { EXTERNAL_PAYMENTS_SQL, VAULT_PAYMENTS_SQL, cShareOverIndex, formatShare, openIndex } from "../src/c-share.ts";
+import { EXTERNAL_PAYMENTS_SQL, VAULT_PAYMENTS_SQL, cShareOverIndex, formatShare, openIndex } from "../lib/c-share.ts";
 
 const [chainArg, fromArg, toArg] = process.argv.slice(2);
 if (!chainArg || !fromArg || !toArg) throw new Error("usage: pnpm report:c-share <chainId> <fromBlock> <toBlock>");

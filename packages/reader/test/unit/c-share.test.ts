@@ -1,4 +1,4 @@
-// R-S190-3: the whole-index (c) share (src/c-share.ts, used by `pnpm report:c-share`) on an in-memory PGlite
+// R-S190-3: the whole-index (c) share (lib/c-share.ts, used by `pnpm report:c-share`) on an in-memory PGlite
 // with the reader's column names: external payments take their permission's shape, (c) when the permission row
 // is missing; vault payments take their account's shape; values are never summed across tokens.
 
@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { getAddress } from "viem";
-import { cShareOverIndex, formatShare, loadPgFromPonder, openIndex } from "../../src/c-share";
+import { cShareOverIndex, formatShare, loadPgFromPonder, openIndex } from "../../lib/c-share";
 
 const T1 = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 const T2 = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
@@ -128,7 +128,7 @@ describe("openIndex (row F: the hosted (c) share, R-S194-9)", () => {
     const dir = mkdtempSync(join(tmpdir(), "c-share-loader-"));
     try {
       const entry = join(dir, "entry.ts");
-      const src = pathToFileURL(new URL("../../src/c-share.ts", import.meta.url).pathname).href;
+      const src = pathToFileURL(new URL("../../lib/c-share.ts", import.meta.url).pathname).href;
       writeFileSync(entry, `import { loadPgFromPonder } from ${JSON.stringify(src)};\nconst pg = loadPgFromPonder();\nconsole.log(pg === null ? "null" : typeof pg.Client);\n`);
       const out = execFileSync(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", entry], {
         encoding: "utf8",

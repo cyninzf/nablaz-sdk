@@ -82,6 +82,22 @@ answers 503 `{"ready":false}` until then (below). A mismatched build id crash-lo
 previously used by a different Ponder app") and nothing is dropped: redeploy without the override, which indexes
 into the new image's own schema.
 
+Computing the id (S206): `packages/reader/scripts/bid.mjs <rev>...` (usage in its header) reproduces Ponder's id at
+any revision. Two findings it encodes:
+
+- The id hashes the FILE SET of `src/` (outside `src/api/` and tests), not only file contents: moving a file out of
+  `src/` moves the id exactly as editing it does. Relocating `src/c-share.ts` and `src/wording.ts` to `lib/`
+  (R-S206-3) moved it from `77bb04f918` to `a1cb6b1278`; no destination for a counted file keeps the id.
+- The S202 version of the method (kept only in a session transcript) took the file list from the working tree and
+  each revision's contents into it, which is wrong for any revision with a different file set. The committed
+  script extracts each revision with `git archive` and globs it as Ponder does.
+
+Recorded ids (`_ponder_meta`, `key = 'app'`, read S206):
+
+- `deployment-01m6p05twt15f0pb31gr64t2p3` (live until the R-S206-3 reindex): `77bb04f918`, indexed by `4088e055`
+  (S203 deploy).
+- `deployment-01m6kzw3gbywjjj45zej11n81k` (fallback): `f5d3ef1e89`, indexed by `ea1461ce` (S201 deploy).
+
 ## Health: /live and /ready
 
 - `GET /live` is deploy health, and Fly's check (`fly.toml`, 60 s grace). It answers 200 when the front is up
