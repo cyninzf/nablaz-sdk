@@ -118,6 +118,8 @@ export async function openIndex(env: Record<string, string | undefined> = proces
     }
     const client = new pg.Client({ connectionString: url });
     await client.connect();
+    // The hosted index scan exceeds Fly Managed Postgres /dev/shm with parallel workers; serial plan, identical result (R-S204-2).
+    await client.query("SET max_parallel_workers_per_gather = 0", []);
     return {
       q: async <T>(sql: string, params: unknown[]) => (await client.query(sql, params)).rows as T[],
       close: () => client.end(),
