@@ -54,8 +54,9 @@ no other flags. It ran 14:00:34Z to 14:02:21Z, exit 0, no prompt, and produced
 Timings on record (`/ready` 503 until the index is ready):
 - Same image, same schema (a `machine update` or restart, Ponder replays from its own schema): about 13 min
   (2026-11-04, 16:05:24Z to 16:18:15Z).
-- New image, new schema (a full index from the RPC cache): about 7 h (2026-11-05, from 14:02Z). It is bound by
-  the indexing handlers, not by the RPCs.
+- New image, new schema (a full index from the RPC cache): no duration is carried (R-S208-1). It is computed at
+  dispatch, per chain, from that chain's head gap (blocks) × its observed indexing time per block; `/ready` flips
+  at the maximum across chains. It is bound by the indexing handlers, not by the RPCs.
 
 ### Resuming a schema (R-S202-4, S202)
 
@@ -369,6 +370,18 @@ not `reader`, not `ponder_rpc_cache_1` and not a Postgres schema is a replaced d
 the drop does not touch what is served. Keep the newest replaced schema until the next deployment is live, as a
 fallback. Before a drop, every `reader` view must reference only the live schema, and no view outside the
 targets may reference them. `ponder_rpc_cache_1` (the RPC cache) is never dropped.
+
+### Rollback and schema drops (R-S208-1)
+
+- Rollback depends on the schemas kept. After the S208 schema drops, no fallback schema remains: only the live
+  deployment's schema exists. Rolling back to any image that is not the live one is a full reindex into that
+  image's own schema (its duration computed as under Deploys, never a carried figure). The recovery posture is
+  fix-forward: correct the fault in a new commit and deploy it.
+- Two gates are MANDATORY before every schema drop, and a drop does not proceed unless both hold:
+  - G1: every view in `reader` references only the live schema (`pg_views`, `schemaname = 'reader'`, every
+    definition read, not a sample).
+  - G2: the schemas to be dropped have no external dependents: no view, function or other object outside them
+    references them.
 
 ## Registration surfaces — publish procedure (EXECUTED S204)
 

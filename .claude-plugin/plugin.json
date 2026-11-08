@@ -1,0 +1,9 @@
+{
+  "name": "nablaz",
+  "version": "0.1.0",
+  "description": "NablaZ is the open record for the AI agent economy: your agent acts under the permission you gave it; the record it leaves is credit you own.",
+  "author": {
+    "name": "NablaZ Labs"
+  },
+  "icon": "./.claude-plugin/icon.png"
+}
