@@ -9,5 +9,6 @@
 .github
 docs
 plugins
+skills
 **/.ponder
 packages/*/test
