@@ -41,6 +41,11 @@ jobs:
           node-version: "22"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The official validator, pinned; it reads only the files and needs no login or secret. Exit 1 on an error.
+      - name: plugin and marketplace manifests validate
+        env:
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+        run: npx --yes @anthropic-ai/claude-code@2.1.319 plugin validate .
       - name: no Solidity source in this repo
         run: |
           if git ls-files | grep -iE '\.sol$'; then echo "Solidity source found"; exit 1; fi

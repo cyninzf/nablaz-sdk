@@ -1,0 +1,13 @@
+{
+  "name": "nablaz",
+  "owner": {
+    "name": "cyninzf"
+  },
+  "plugins": [
+    {
+      "name": "nablaz",
+      "source": "./",
+      "description": "Read NablaZ's open record: agent actions under permission, cited onchain. Evidence, not a verdict."
+    }
+  ]
+}
