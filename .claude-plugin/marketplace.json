@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "nablaz",
-      "source": "./",
+      "source": "./plugins/nablaz",
       "description": "Read NablaZ's open record: agent actions under permission, cited onchain. Evidence, not a verdict."
     }
   ]

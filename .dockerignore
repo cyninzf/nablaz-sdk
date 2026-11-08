@@ -8,6 +8,6 @@
 .devcontainer
 .github
 docs
-skills
+plugins
 **/.ponder
 packages/*/test

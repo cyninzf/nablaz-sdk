@@ -45,7 +45,7 @@ jobs:
       - name: plugin and marketplace manifests validate
         env:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
-        run: npx --yes @anthropic-ai/claude-code@2.1.319 plugin validate .
+        run: npx --yes @anthropic-ai/claude-code@2.1.319 plugin validate . && npx --yes @anthropic-ai/claude-code@2.1.319 plugin validate --profile directory plugins/nablaz
       - name: no Solidity source in this repo
         run: |
           if git ls-files | grep -iE '\.sol$'; then echo "Solidity source found"; exit 1; fi

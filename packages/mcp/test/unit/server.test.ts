@@ -478,7 +478,7 @@ describe("HTTP rate limit", () => {
 });
 
 describe("wording", () => {
-  const skill = readFileSync(new URL("../../../../skills/read-record/SKILL.md", import.meta.url), "utf8");
+  const skill = readFileSync(new URL("../../../../plugins/nablaz/skills/read-record/SKILL.md", import.meta.url), "utf8");
   it("the tool description is at most two sentences and uses none of the banned words", () => {
     expect(bannedHits(READ_TOOL_DESCRIPTION)).toEqual([]);
     expect(READ_TOOL_DESCRIPTION.split(/\.\s/).length).toBeLessThanOrEqual(2);
