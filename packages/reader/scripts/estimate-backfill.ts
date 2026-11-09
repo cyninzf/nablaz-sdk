@@ -2,7 +2,7 @@
 //
 // Prices a full-history backfill (R-S192-1: every source from its deployment block, both chains) and the
 // steady state at head, in eth_getLogs calls and Alchemy compute units. Reads only the current head and a
-// block-time sample from each chain's RPC (READER_ARBITRUM_RPC_URL, READER_BASE_RPC_URL); nothing else is fetched.
+// block-time sample from each chain's RPC (its rpcEnv, src/chains.ts); nothing else is fetched.
 // Prints numbers, writes nothing: the numbers are not committed (S190-L4), this script is.
 //
 // CU per method, from the Alchemy compute-unit cost table (looked up Oct 28 2026):

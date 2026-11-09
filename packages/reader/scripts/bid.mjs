@@ -22,9 +22,8 @@
 // unchanged.
 //
 // Usage, from packages/reader, with DATABASE_URL unset and the RPC variables set to any URL (they are not hashed):
-//   env -u DATABASE_URL READER_ARBITRUM_RPC_URL=http://127.0.0.1:1 READER_BASE_RPC_URL=http://127.0.0.1:1 \
-//     READER_ARBITRUM_GROUNDING_RPC_URL=http://127.0.0.1:1 READER_BASE_GROUNDING_RPC_URL=http://127.0.0.1:1 \
-//     node scripts/bid.mjs <rev>...
+// (bash brace expansion gives the four names of src/chains.ts):
+//   env -u DATABASE_URL READER_{ARBITRUM,BASE}{,_GROUNDING}_RPC_URL=http://127.0.0.1:1 node scripts/bid.mjs <rev>...
 // Compare with the id Ponder recorded: `select value->>'build_id' from "<schema>"._ponder_meta where key = 'app'`.
 
 import { createHash } from "node:crypto";

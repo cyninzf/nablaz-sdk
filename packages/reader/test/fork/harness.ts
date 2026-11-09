@@ -8,11 +8,18 @@ import { join } from "node:path";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import { PGlite } from "@electric-sql/pglite";
+import { CHAINS } from "../../src/chains";
 
-export const UPSTREAM = process.env.READER_ARBITRUM_RPC_URL;
-export const UPSTREAM_BASE = process.env.READER_BASE_RPC_URL;
-export const UPSTREAM_GROUNDING = process.env.READER_ARBITRUM_GROUNDING_RPC_URL;
-export const UPSTREAM_BASE_GROUNDING = process.env.READER_BASE_GROUNDING_RPC_URL;
+// The reader's four RPC env names come from their one home, src/chains.ts (CI's env-names guard).
+const ARB_RPC_ENV = CHAINS[42161]!.rpcEnv;
+const ARB_GROUNDING_ENV = CHAINS[42161]!.groundingRpcEnv;
+const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
+const BASE_GROUNDING_ENV = CHAINS[8453]!.groundingRpcEnv;
+
+export const UPSTREAM = process.env[ARB_RPC_ENV];
+export const UPSTREAM_BASE = process.env[BASE_RPC_ENV];
+export const UPSTREAM_GROUNDING = process.env[ARB_GROUNDING_ENV];
+export const UPSTREAM_BASE_GROUNDING = process.env[BASE_GROUNDING_ENV];
 
 export const TABLES = [
   "record_entries",
@@ -40,10 +47,10 @@ export type Tables = Record<(typeof TABLES)[number] | (typeof EXTERNAL_TABLES)[n
 export function redact(s: string): string {
   let out = s;
   for (const [url, name] of [
-    [UPSTREAM, "<READER_ARBITRUM_RPC_URL>"],
-    [UPSTREAM_BASE, "<READER_BASE_RPC_URL>"],
-    [UPSTREAM_GROUNDING, "<READER_ARBITRUM_GROUNDING_RPC_URL>"],
-    [UPSTREAM_BASE_GROUNDING, "<READER_BASE_GROUNDING_RPC_URL>"],
+    [UPSTREAM, `<${ARB_RPC_ENV}>`],
+    [UPSTREAM_BASE, `<${BASE_RPC_ENV}>`],
+    [UPSTREAM_GROUNDING, `<${ARB_GROUNDING_ENV}>`],
+    [UPSTREAM_BASE_GROUNDING, `<${BASE_GROUNDING_ENV}>`],
   ] as const) {
     if (!url) continue;
     out = out.split(url).join(name);
@@ -89,7 +96,7 @@ async function stop(c: Child) {
 export type Anvil = { url: string; stop: () => Promise<void> };
 
 export async function startAnvil(forkBlock: number): Promise<Anvil> {
-  if (!UPSTREAM) throw new Error("READER_ARBITRUM_RPC_URL unset");
+  if (!UPSTREAM) throw new Error(`${ARB_RPC_ENV} unset`);
   const port = await freePort();
   const c = run("anvil", ["--fork-url", UPSTREAM, "--fork-block-number", String(forkBlock), "--port", String(port)], process.env);
   const url = `http://127.0.0.1:${port}`;
@@ -148,9 +155,9 @@ export async function indexOnce(opts: IndexOpts): Promise<IndexRun | Served> {
     READER_SOURCES: opts.sources ?? "nabla",
     PONDER_TELEMETRY_DISABLED: "true",
   };
-  if (opts.rpcUrl) env.READER_ARBITRUM_RPC_URL = env.READER_ARBITRUM_GROUNDING_RPC_URL = opts.rpcUrl;
-  if (opts.baseRpcUrl) env.READER_BASE_RPC_URL = env.READER_BASE_GROUNDING_RPC_URL = opts.baseRpcUrl;
-  if (opts.baseGroundingRpcUrl) env.READER_BASE_GROUNDING_RPC_URL = opts.baseGroundingRpcUrl;
+  if (opts.rpcUrl) env[ARB_RPC_ENV] = env[ARB_GROUNDING_ENV] = opts.rpcUrl;
+  if (opts.baseRpcUrl) env[BASE_RPC_ENV] = env[BASE_GROUNDING_ENV] = opts.baseRpcUrl;
+  if (opts.baseGroundingRpcUrl) env[BASE_GROUNDING_ENV] = opts.baseGroundingRpcUrl;
   if (opts.endBlock !== undefined) env.READER_END_BLOCK = String(opts.endBlock);
   else delete env.READER_END_BLOCK;
   if (opts.startBlock !== undefined) env.READER_START_BLOCK = String(opts.startBlock);

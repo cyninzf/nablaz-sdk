@@ -11,6 +11,11 @@ import { CHAINS, enabledChains } from "../../src/chains";
 import { groundingClient, indexerTransport, resetRpcCounters, rpcMetricsText } from "../../src/rpc";
 import { checkRpcLegs } from "../../src/rpc-check";
 
+// The reader's four RPC env names come from their one home, src/chains.ts (CI's env-names guard).
+const ARB_RPC_ENV = CHAINS[42161]!.rpcEnv;
+const ARB_GROUNDING_ENV = CHAINS[42161]!.groundingRpcEnv;
+const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
+const BASE_GROUNDING_ENV = CHAINS[8453]!.groundingRpcEnv;
 type Mode = "ok" | "down" | "limited" | "wrongChain" | "rpcError";
 type Stub = { url: string; mode: Mode; chainId: number; server: Server };
 
@@ -47,10 +52,10 @@ beforeEach(() => {
 
 /** The four legs' variables, each URL with a key-shaped path that must never be printed. */
 const env = () => ({
-  READER_ARBITRUM_RPC_URL: `${arbIdx.url}/${KEY}`,
-  READER_ARBITRUM_GROUNDING_RPC_URL: `${arbGnd.url}/v2/${KEY}`,
-  READER_BASE_RPC_URL: `${baseIdx.url}/${KEY}`,
-  READER_BASE_GROUNDING_RPC_URL: `${baseGnd.url}/v2/${KEY}`,
+  [ARB_RPC_ENV]: `${arbIdx.url}/${KEY}`,
+  [ARB_GROUNDING_ENV]: `${arbGnd.url}/v2/${KEY}`,
+  [BASE_RPC_ENV]: `${baseIdx.url}/${KEY}`,
+  [BASE_GROUNDING_ENV]: `${baseGnd.url}/v2/${KEY}`,
 });
 const chains = () => enabledChains(CHAINS, "42161,8453");
 
@@ -59,10 +64,10 @@ describe("row C: startup RPC check", () => {
     const r = await checkRpcLegs(chains(), env());
     // enabledChains order (by chain id: Base, then Arbitrum), indexer before grounding.
     expect(r.map((x) => [x.env, x.ok])).toEqual([
-      ["READER_BASE_RPC_URL", true],
-      ["READER_BASE_GROUNDING_RPC_URL", true],
-      ["READER_ARBITRUM_RPC_URL", true],
-      ["READER_ARBITRUM_GROUNDING_RPC_URL", true],
+      [BASE_RPC_ENV, true],
+      [BASE_GROUNDING_ENV, true],
+      [ARB_RPC_ENV, true],
+      [ARB_GROUNDING_ENV, true],
     ]);
     expect(r.every((x) => x.head === 16n)).toBe(true);
     expect(r[0]!.host).toBe(new URL(baseIdx.url).host);
@@ -71,10 +76,10 @@ describe("row C: startup RPC check", () => {
   it("a leg down, one on the wrong chain, one unset: each failure names its variable and host, never the key", async () => {
     arbGnd.mode = "down";
     baseIdx.mode = "wrongChain";
-    const e = { ...env(), READER_BASE_GROUNDING_RPC_URL: "" };
+    const e = { ...env(), [BASE_GROUNDING_ENV]: "" };
     const r = await checkRpcLegs(chains(), e);
     const bad = r.filter((x) => !x.ok);
-    expect(bad.map((x) => x.env)).toEqual(["READER_BASE_RPC_URL", "READER_BASE_GROUNDING_RPC_URL", "READER_ARBITRUM_GROUNDING_RPC_URL"]);
+    expect(bad.map((x) => x.env)).toEqual([BASE_RPC_ENV, BASE_GROUNDING_ENV, ARB_GROUNDING_ENV]);
     expect(bad[0]!.detail).toBe("eth_chainId is 1, expected 8453");
     expect(bad[1]!.detail).toBe("is not set");
     expect(bad[2]!.detail).toMatch(/HTTP 503/);
@@ -110,7 +115,7 @@ describe("row D: leg tagging", () => {
 
   it("the grounding client tags its errors with its chain", async () => {
     baseGnd.mode = "rpcError";
-    const g = groundingClient(CHAINS[8453]!, { READER_BASE_GROUNDING_RPC_URL: baseGnd.url });
+    const g = groundingClient(CHAINS[8453]!, { [BASE_GROUNDING_ENV]: baseGnd.url });
     const err = (await g.request({ method: "eth_blockNumber" }).catch((e: unknown) => e)) as Error & { cause?: Error };
     // A viem client wraps the transport's error; the tagged one is its cause.
     expect([err.message, err.cause?.message].some((m) => m?.startsWith("[rpc base grounding] "))).toBe(true);
@@ -142,7 +147,7 @@ describe("row C: scripts/check-rpc.ts warns and lets the start proceed (CTO ruli
     const { spawn } = await import("node:child_process");
     const script = new URL("../../scripts/check-rpc.ts", import.meta.url).pathname;
     const child = spawn(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", script], {
-      env: { PATH: process.env.PATH, READER_CHAINS: "8453", READER_BASE_RPC_URL: `${baseIdx.url}/${KEY}`, READER_BASE_GROUNDING_RPC_URL: "" },
+      env: { PATH: process.env.PATH, READER_CHAINS: "8453", [BASE_RPC_ENV]: `${baseIdx.url}/${KEY}`, [BASE_GROUNDING_ENV]: "" },
       stdio: ["ignore", "ignore", "pipe"],
     });
     let stderr = "";
@@ -150,8 +155,8 @@ describe("row C: scripts/check-rpc.ts warns and lets the start proceed (CTO ruli
     const status = await new Promise<number | null>((resolve) => child.on("exit", resolve));
     const r = { status, stderr };
     expect(r.status).toBe(0);
-    expect(r.stderr).toMatch(/rpc check WARNING: 1 of 2 legs failed: READER_BASE_GROUNDING_RPC_URL; starting anyway/);
-    expect(r.stderr).toMatch(/rpc check ok: READER_BASE_RPC_URL \(base indexer, host 127\.0\.0\.1:\d+\)/);
+    expect(r.stderr).toMatch(new RegExp(`rpc check WARNING: 1 of 2 legs failed: ${BASE_GROUNDING_ENV}; starting anyway`));
+    expect(r.stderr).toMatch(new RegExp(`rpc check ok: ${BASE_RPC_ENV} \\(base indexer, host 127\\.0\\.0\\.1:\\d+\\)`));
     expect(r.stderr).not.toContain(KEY);
   }, 60_000);
 });

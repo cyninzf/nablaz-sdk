@@ -1,6 +1,6 @@
 // B4 part 1 step 0: P0-3 (RedeemedDelegation decodes), P0-4 (SpendPermissionManager), P0-6 (Agent Credit
 // Lines topic scan) on Arbitrum One and Base. Writes JSON to the path given; docs/reader/b4-part1.md is
-// the committed record of one run. RPC URLs come from READER_ARBITRUM_RPC_URL / READER_BASE_RPC_URL and are
+// the committed record of one run. RPC URLs come from each chain's rpcEnv (src/chains.ts) and are
 // never printed.
 //
 //   node --experimental-strip-types scripts/premises.ts <out.json>
@@ -16,13 +16,14 @@ import {
 } from "../src/delegation.ts";
 import { shapeOfDelegation } from "../src/labels.ts";
 import { CREDIT_LINE_EVENTS, SpendPermissionManagerAbi } from "../src/external-abis.ts";
+import { CHAINS as READER_CHAINS } from "../src/chains.ts";
 
 const out = process.argv[2];
 if (!out) throw new Error("usage: premises.ts <out.json>");
 
 const CHAINS = [
-  { chainId: 42161, rpcEnv: "READER_ARBITRUM_RPC_URL" },
-  { chainId: 8453, rpcEnv: "READER_BASE_RPC_URL" },
+  { chainId: 42161, rpcEnv: READER_CHAINS[42161]!.rpcEnv },
+  { chainId: 8453, rpcEnv: READER_CHAINS[8453]!.rpcEnv },
 ] as const;
 const DM: Address = "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
 const SPM: Address = "0xf85210B21cC50302F477BA56686d2019dC9b67Ad";
