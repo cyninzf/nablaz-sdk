@@ -13,12 +13,13 @@ import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPublicClient, getAddress, http } from "viem";
 import { CHAINS } from "../../src/chains";
+import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
+import { groundingClient, isRangeGetLogs } from "../../src/rpc";
+import { UPSTREAM_BASE, UPSTREAM_BASE_GROUNDING, countingProxy, indexOnce, type CountingProxy, type RpcCall, type Served } from "./harness";
 
 // The reader's four RPC env names come from their one home, src/chains.ts (CI's env-names guard).
 const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
-const BASE_GROUNDING_ENV = CHAINS[8453]!.groundingRpcEnv;import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
-import { groundingClient, isRangeGetLogs } from "../../src/rpc";
-import { UPSTREAM_BASE, UPSTREAM_BASE_GROUNDING, countingProxy, indexOnce, type CountingProxy, type RpcCall, type Served } from "./harness";
+const BASE_GROUNDING_ENV = CHAINS[8453]!.groundingRpcEnv;
 
 if (!UPSTREAM_BASE) throw new Error(`${BASE_RPC_ENV} is not set: the fork tests do not skip`);
 const GROUNDING_UPSTREAM = UPSTREAM_BASE_GROUNDING ?? UPSTREAM_BASE;

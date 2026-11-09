@@ -11,12 +11,13 @@ import { cShareOverIndex, formatShare } from "../../lib/c-share";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
 import { groundingFact, groundingTransfers, paymentFacts, type LabelledPayment } from "../../src/read";
 import { CHAINS, CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src/chains";
+import { render } from "../../src/oneliners";
+import { EPOCH_KEYS, utcOf } from "../../src/api/utc";
+import { UPSTREAM, UPSTREAM_BASE, indexOnce, redact, stopAndDump, type Served, type Tables } from "./harness";
 
 // The reader's four RPC env names come from their one home, src/chains.ts (CI's env-names guard).
 const ARB_RPC_ENV = CHAINS[42161]!.rpcEnv;
 const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
-import { EPOCH_KEYS, utcOf } from "../../src/api/utc";
-import { UPSTREAM, UPSTREAM_BASE, indexOnce, redact, stopAndDump, type Served, type Tables } from "./harness";
 
 if (!UPSTREAM) throw new Error(`${ARB_RPC_ENV} is not set: the fork tests run on both chains and do not skip`);
 if (!UPSTREAM_BASE) throw new Error(`${BASE_RPC_ENV} is not set: the fork tests run on both chains and do not skip`);

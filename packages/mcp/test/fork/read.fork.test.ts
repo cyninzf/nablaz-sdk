@@ -9,6 +9,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UPSTREAM_BASE, indexOnce, type Served } from "../../../reader/test/fork/harness.ts";
 import { READ_TOOL } from "../../src/server.ts";
 import { CHAINS } from "../../../reader/src/chains.ts";
+
 // The Base indexer RPC env name, from its one home in the reader (CI's env-names guard).
 const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
 

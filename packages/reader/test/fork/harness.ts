@@ -15,6 +15,7 @@ const ARB_RPC_ENV = CHAINS[42161]!.rpcEnv;
 const ARB_GROUNDING_ENV = CHAINS[42161]!.groundingRpcEnv;
 const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
 const BASE_GROUNDING_ENV = CHAINS[8453]!.groundingRpcEnv;
+
 export const UPSTREAM = process.env[ARB_RPC_ENV];
 export const UPSTREAM_BASE = process.env[BASE_RPC_ENV];
 export const UPSTREAM_GROUNDING = process.env[ARB_GROUNDING_ENV];

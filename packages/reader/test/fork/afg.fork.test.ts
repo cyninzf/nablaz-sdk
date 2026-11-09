@@ -12,14 +12,15 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createPublicClient, decodeEventLog, getAddress, http, type Address, type Hex, type Log, type PublicClient } from "viem";
 import { CHAINS } from "../../src/chains";
-
-// The reader's four RPC env names come from their one home, src/chains.ts (CI's env-names guard).
-const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
+import { decodeRedeemedDelegation, delegationHash, erc20TransfersFrom, type Delegation, type ReceiptLogLike } from "../../src/delegation";
 import { ReputationRegistryAbi, SpendPermissionManagerAbi } from "../../src/external-abis";
 import { bindingAt, bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
 import { SPM_LABEL, shapeOfDelegation } from "../../src/labels";
 import { groundingFact, groundingTransfers, paymentFacts, type GroundingPayment, type LabelledPayment, type RaterTransfer } from "../../src/read";
 import { UPSTREAM_BASE } from "./harness";
+
+// The reader's four RPC env names come from their one home, src/chains.ts (CI's env-names guard).
+const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
 
 if (!UPSTREAM_BASE) throw new Error(`${BASE_RPC_ENV} is not set: the fork tests do not skip`);
 
