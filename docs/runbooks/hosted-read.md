@@ -324,9 +324,10 @@ from inside (50 calls), then read the tick on the Alchemy dashboard for that app
 ~/.fly/bin/flyctl ssh console -a nablaz-reader -C "node -e \"(async()=>{console.log('start=' + new Date().toISOString()); for (const k of ['READER_ARBITRUM_GROUNDING_RPC_URL','READER_BASE_GROUNDING_RPC_URL']) { const u = process.env[k]; const h = new URL(u).host; let ok = 0, bad = 0, codes = {}, last = 0; for (let i = 0; i < 25; i++) { try { const r = await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:i,method:'eth_blockNumber',params:[]})}); const j = await r.json().catch(()=>({})); codes[r.status] = (codes[r.status]||0) + 1; if (r.status === 200 && j.result) { ok++; last = parseInt(j.result,16) } else bad++ } catch (e) { bad++; codes[e.name] = (codes[e.name]||0) + 1 } } console.log(k, h, 'ok=' + ok, 'fail=' + bad, 'codes=' + JSON.stringify(codes), 'lastHead=' + last) } console.log('end=' + new Date().toISOString())})()\""
 ```
 
-The GitHub Actions secrets `READER_ARB_RPC_URL` and `READER_BASE_RPC_URL` (the fork tests) carry an RPC URL too.
-On 2026-11-04 they still carried the rotated key: every fork call answered HTTP 401 "Must be authenticated!".
-A rotation updates them as well.
+The GitHub Actions secrets `READER_LAB_ARB_RPC_URL` and `READER_LAB_BASE_RPC_URL` (the fork tests) carry an RPC URL
+too: a lab key, never the production reader's. ci.yml maps each into the env names the fork suites read. On
+2026-11-04 the fork tests' secrets of that time still carried the rotated key: every fork call answered HTTP 401
+"Must be authenticated!". A rotation of the lab key updates them.
 
 ## Defaults (S198-L3)
 

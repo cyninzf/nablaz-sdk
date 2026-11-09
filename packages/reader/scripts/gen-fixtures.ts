@@ -4,10 +4,11 @@
 //
 //   node --experimental-strip-types scripts/gen-fixtures.ts
 //
-// Needs READER_ARBITRUM_RPC_URL and READER_BASE_RPC_URL (never printed).
+// Needs each chain's rpcEnv (src/chains.ts) set (never printed).
 
 import { writeFileSync } from "node:fs";
 import { createPublicClient, http, type Hex, type PublicClient } from "viem";
+import { CHAINS } from "../src/chains.ts";
 
 const DM = "0xdb9b1e94b5b69df7e401ddbede43491141047db3";
 const SPM = "0xf85210b21cc50302f477ba56686d2019dc9b67ad";
@@ -60,8 +61,8 @@ const SPM_LOGS: Ref[] = [
 ];
 
 const clients: Record<number, PublicClient> = {
-  42161: createPublicClient({ transport: http(process.env.READER_ARBITRUM_RPC_URL!, { retryCount: 5 }) }) as PublicClient,
-  8453: createPublicClient({ transport: http(process.env.READER_BASE_RPC_URL!, { retryCount: 5 }) }) as PublicClient,
+  42161: createPublicClient({ transport: http(process.env[CHAINS[42161]!.rpcEnv]!, { retryCount: 5 }) }) as PublicClient,
+  8453: createPublicClient({ transport: http(process.env[CHAINS[8453]!.rpcEnv]!, { retryCount: 5 }) }) as PublicClient,
 };
 
 const raw = (l: { address: string; topics: readonly Hex[]; data: Hex; logIndex: number }) => ({

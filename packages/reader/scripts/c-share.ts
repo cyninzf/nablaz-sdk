@@ -4,7 +4,7 @@
 // index in the block range. Reads the hosted Postgres index when DATABASE_URL is set (row F, R-S194-9: the views
 // schema "reader", read while the reader runs), else the PGlite index directly (READER_PGLITE_DIR, default
 // .ponder/pglite; stop the reader first, PGlite allows one process). Vault payments are labelled by their account's NablaZ label,
-// which needs the chain's RPC (READER_ARBITRUM_RPC_URL) for the mandate code hash at <toBlock>. Prints the inputs,
+// which needs the chain's RPC (its rpcEnv, src/chains.ts) for the mandate code hash at <toBlock>. Prints the inputs,
 // the shares and the reproducing queries.
 
 import { createPublicClient, http, keccak256, type Address, type Hex } from "viem";

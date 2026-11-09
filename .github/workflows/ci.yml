@@ -46,6 +46,9 @@ jobs:
         env:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         run: npx --yes @anthropic-ai/claude-code@2.1.319 plugin validate . && npx --yes @anthropic-ai/claude-code@2.1.319 plugin validate --profile directory plugins/nablaz
+      # The reader's four RPC env names live in packages/reader/src/chains.ts; a literal anywhere else fails.
+      - name: reader env-names guard
+        run: scripts/check-env-names.sh --self-test && scripts/check-env-names.sh
       - name: no Solidity source in this repo
         run: |
           if git ls-files | grep -iE '\.sol$'; then echo "Solidity source found"; exit 1; fi
@@ -61,21 +64,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: check
     timeout-minutes: 45
-    # One secret per chain serves both RPC roles here (src/rpc.ts); the roles test tells them apart by proxy.
-    # READER_ARB_RPC_URL is packages/sdk's name for the Arbitrum One RPC.
+    # Two lab Actions secrets, one per chain, map into the five env names the fork suites read: both reader RPC
+    # roles per chain (src/rpc.ts; the roles test tells them apart by proxy), and the env variable READER_ARB_RPC_URL,
+    # which packages/sdk reads for the Arbitrum One RPC. The secrets are lab-only, never the production reader's.
     env:
-      READER_ARB_RPC_URL: ${{ secrets.READER_ARB_RPC_URL }}
-      READER_ARBITRUM_RPC_URL: ${{ secrets.READER_ARB_RPC_URL }}
-      READER_ARBITRUM_GROUNDING_RPC_URL: ${{ secrets.READER_ARB_RPC_URL }}
-      READER_BASE_RPC_URL: ${{ secrets.READER_BASE_RPC_URL }}
-      READER_BASE_GROUNDING_RPC_URL: ${{ secrets.READER_BASE_RPC_URL }}
+      READER_ARB_RPC_URL: ${{ secrets.READER_LAB_ARB_RPC_URL }}
+      READER_ARBITRUM_RPC_URL: ${{ secrets.READER_LAB_ARB_RPC_URL }}
+      READER_ARBITRUM_GROUNDING_RPC_URL: ${{ secrets.READER_LAB_ARB_RPC_URL }}
+      READER_BASE_RPC_URL: ${{ secrets.READER_LAB_BASE_RPC_URL }}
+      READER_BASE_GROUNDING_RPC_URL: ${{ secrets.READER_LAB_BASE_RPC_URL }}
     steps:
       # The fork tests run on Arbitrum One and Base (R-S189-1). A missing secret fails the job; it never skips.
       - name: require the RPC secrets
         run: |
           missing=""
-          [ -z "$READER_ARB_RPC_URL" ] && missing="$missing READER_ARB_RPC_URL"
-          [ -z "$READER_BASE_RPC_URL" ] && missing="$missing READER_BASE_RPC_URL"
+          [ -z "$READER_ARB_RPC_URL" ] && missing="$missing READER_LAB_ARB_RPC_URL"
+          [ -z "$READER_BASE_RPC_URL" ] && missing="$missing READER_LAB_BASE_RPC_URL"
           if [ -n "$missing" ]; then
             if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
               echo "::notice::fork tests skipped: secrets are not available to pull requests from forks"

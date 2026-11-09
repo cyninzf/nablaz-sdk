@@ -8,8 +8,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { UPSTREAM_BASE, indexOnce, type Served } from "../../../reader/test/fork/harness.ts";
 import { READ_TOOL } from "../../src/server.ts";
+import { CHAINS } from "../../../reader/src/chains.ts";
+// The Base indexer RPC env name, from its one home in the reader (CI's env-names guard).
+const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
 
-if (!UPSTREAM_BASE) throw new Error("READER_BASE_RPC_URL is not set: the fork tests do not skip");
+if (!UPSTREAM_BASE) throw new Error(`${BASE_RPC_ENV} is not set: the fork tests do not skip`);
 
 const READER_DIR = fileURLToPath(new URL("../../../reader/", import.meta.url));
 // The Base delegator external.fork.test.ts reads in the same window.

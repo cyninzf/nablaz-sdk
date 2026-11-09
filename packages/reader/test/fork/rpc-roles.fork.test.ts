@@ -13,11 +13,14 @@ import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPublicClient, getAddress, http } from "viem";
 import { CHAINS } from "../../src/chains";
-import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
+
+// The reader's four RPC env names come from their one home, src/chains.ts (CI's env-names guard).
+const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
+const BASE_GROUNDING_ENV = CHAINS[8453]!.groundingRpcEnv;import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
 import { groundingClient, isRangeGetLogs } from "../../src/rpc";
 import { UPSTREAM_BASE, UPSTREAM_BASE_GROUNDING, countingProxy, indexOnce, type CountingProxy, type RpcCall, type Served } from "./harness";
 
-if (!UPSTREAM_BASE) throw new Error("READER_BASE_RPC_URL is not set: the fork tests do not skip");
+if (!UPSTREAM_BASE) throw new Error(`${BASE_RPC_ENV} is not set: the fork tests do not skip`);
 const GROUNDING_UPSTREAM = UPSTREAM_BASE_GROUNDING ?? UPSTREAM_BASE;
 
 const BASE = CHAINS[8453]!;
@@ -36,7 +39,7 @@ describe("grounding read", () => {
     const grounding = await countingProxy(GROUNDING_UPSTREAM);
     try {
       // Both variables set, as on the hosted instance; the client is the one GET /read builds.
-      const client = groundingClient(BASE, { READER_BASE_RPC_URL: indexer.url, READER_BASE_GROUNDING_RPC_URL: grounding.url });
+      const client = groundingClient(BASE, { [BASE_RPC_ENV]: indexer.url, [BASE_GROUNDING_ENV]: grounding.url });
       const agentId = BigInt(ROW.agent_id!);
       const block = BigInt(ROW.feedback_block!);
       const from = BigInt(BASE.external.startBlocks.IdentityRegistry);

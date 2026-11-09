@@ -13,6 +13,11 @@ import { createPublicClient, custom, http, ResponseBodyTooLargeError, RpcRequest
 import { CHAINS } from "../../src/chains";
 import { CHAINSTACK_LOGS_RANGE, READER_MAX_RESPONSE_BYTES, cappedLogs, groundingClient, indexerTransport, rpcUrls } from "../../src/rpc";
 
+// The reader's four RPC env names come from their one home, src/chains.ts (CI's env-names guard).
+const ARB_RPC_ENV = CHAINS[42161]!.rpcEnv;
+const ARB_GROUNDING_ENV = CHAINS[42161]!.groundingRpcEnv;
+const BASE_RPC_ENV = CHAINS[8453]!.rpcEnv;
+const BASE_GROUNDING_ENV = CHAINS[8453]!.groundingRpcEnv;
 /** Largest observed Base full-transaction block body: block 51,354,171 (S197 measurement). */
 const LARGEST_BASE_BLOCK_BYTES = 10_502_144;
 
@@ -125,18 +130,18 @@ describe("Chainstack leg", () => {
 
 describe("grounding client", () => {
   it("is built from the grounding variable only, and sends nothing to the indexer URL", async () => {
-    const env = { READER_BASE_RPC_URL: chainstack.url, READER_BASE_GROUNDING_RPC_URL: alchemy.url };
+    const env = { [BASE_RPC_ENV]: chainstack.url, [BASE_GROUNDING_ENV]: alchemy.url };
     const g = groundingClient(CHAINS[8453]!, env);
     await g.request({ method: "eth_getLogs", params: [{ fromBlock: hex(1), toBlock: hex(5_000_000) } as never] });
     await g.request({ method: "eth_call", params: [{ to: "0x0000000000000000000000000000000000000001", data: "0x" }, "0x10"] as never });
     expect(alchemy.calls).toEqual(["eth_getLogs", "eth_call"]);
     expect(chainstack.calls).toEqual([]);
-    expect(() => groundingClient(CHAINS[8453]!, { READER_BASE_RPC_URL: chainstack.url })).toThrow("READER_BASE_GROUNDING_RPC_URL is not set");
+    expect(() => groundingClient(CHAINS[8453]!, { [BASE_RPC_ENV]: chainstack.url })).toThrow(`${BASE_GROUNDING_ENV} is not set`);
   });
 
   it("both variables are required per chain, by name", () => {
-    expect(() => rpcUrls(CHAINS[42161]!, { READER_ARBITRUM_GROUNDING_RPC_URL: "x" })).toThrow("READER_ARBITRUM_RPC_URL is not set");
-    expect(() => rpcUrls(CHAINS[42161]!, { READER_ARBITRUM_RPC_URL: "x" })).toThrow("READER_ARBITRUM_GROUNDING_RPC_URL is not set");
+    expect(() => rpcUrls(CHAINS[42161]!, { [ARB_GROUNDING_ENV]: "x" })).toThrow(`${ARB_RPC_ENV} is not set`);
+    expect(() => rpcUrls(CHAINS[42161]!, { [ARB_RPC_ENV]: "x" })).toThrow(`${ARB_GROUNDING_ENV} is not set`);
   });
 });
 
@@ -173,7 +178,7 @@ describe("response ceiling (R-S197-7)", () => {
 
   it("grounding client takes that size", async () => {
     alchemy.fat = true;
-    const g = groundingClient(CHAINS[8453]!, { READER_BASE_GROUNDING_RPC_URL: alchemy.url });
+    const g = groundingClient(CHAINS[8453]!, { [BASE_GROUNDING_ENV]: alchemy.url });
     expect(len(await g.request({ method: "eth_getBlockByNumber", params: ["latest", true] }))).toBe(alchemy.served[0]);
   });
 });
@@ -211,7 +216,7 @@ describe("transport URL redaction (R-S197-8)", () => {
 
   it("the grounding client's HTTP error carries no URL or key", async () => {
     alchemy.down = true;
-    const g = groundingClient(CHAINS[8453]!, { READER_BASE_GROUNDING_RPC_URL: `${alchemy.url}/v2/FAKEKEY789` });
+    const g = groundingClient(CHAINS[8453]!, { [BASE_GROUNDING_ENV]: `${alchemy.url}/v2/FAKEKEY789` });
     const err = (await g.request({ method: "eth_blockNumber" }).catch((e: unknown) => e)) as Error & { url?: string };
     expect(err).toBeInstanceOf(Error);
     expect([err.message, err.url, err.stack].join("\n")).not.toMatch(/127\.0\.0\.1|FAKEKEY/);
