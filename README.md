@@ -330,7 +330,7 @@ Arbitrum One are labelled through their account, which needs `READER_ARBITRUM_RP
 ### Skills
 
 `plugins/nablaz/skills/read-record/SKILL.md` explains how to call the tool or `GET /read`, how to read each source and
-label shape, and what the reader never says. `plugins/nablaz/skills/pay-inside-grant/SKILL.md` covers paying from a
+label shape, and what the reader never says. `skills/pay-inside-grant/SKILL.md` covers paying from a
 grantee vault.
 
 ## Tests
