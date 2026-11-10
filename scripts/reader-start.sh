@@ -18,6 +18,7 @@ SCHEMA=${READER_SCHEMA:-$(printf '%s' "${ref##*:}" | tr 'A-Z' 'a-z' | cut -c1-45
 # READER_SCHEMA resumes an existing schema; Ponder refuses it unless the build id matches (R-S202-4, S202)
 
 # Row C: every RPC leg is checked before Ponder starts; a leg that does not answer is named in a warning, and the start goes on.
+# R-S211-1: a leg refused on credentials (HTTP 401/403) exits the check 78 instead, and set -e ends the start here.
 node --experimental-strip-types --disable-warning=ExperimentalWarning packages/reader/scripts/check-rpc.ts
 
 # A schema per deployment, as Ponder's guide for hosted deploys sets it, so a redeploy indexes beside the running one; the
