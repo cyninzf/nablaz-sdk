@@ -22,12 +22,13 @@ import {
   vaultPayments,
   vaults,
 } from "ponder:schema";
-import { and, asc, eq, inArray, isNotNull, or } from "ponder";
+import { and, asc, eq, inArray, isNotNull, or, sql } from "ponder";
 import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, type PublicClient } from "viem";
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
 import { withUtc } from "./utc";
+import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
 import { groundingClient, rpcMetricsText } from "../rpc";
 import {
@@ -57,6 +58,13 @@ import {
 } from "../read";
 
 const app = new Hono();
+
+// Exit, not idle, on database loss (src/api/db-watchdog.ts). Postgres only: PGlite (no DATABASE_URL) is in-process.
+if (process.env.DATABASE_URL) {
+  const schema = (globalThis as { PONDER_NAMESPACE_BUILD?: { schema: string } }).PONDER_NAMESPACE_BUILD!.schema;
+  const check = dbWatchdog(() => db.execute(sql.raw(heartbeatSql(schema))).then((r) => Number((r.rows[0] as { h?: unknown } | undefined)?.h)));
+  setInterval(check, PROBE_MS).unref();
+}
 
 const groundingClients = new Map<number, PublicClient>();
 const groundingOf = (chain: EnabledChain) => {

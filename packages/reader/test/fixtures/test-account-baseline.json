@@ -1,0 +1,16 @@
+{
+  "subject": "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c",
+  "chainId": 42161,
+  "verified": "2026-11-10 (S211): every row's tx receipt read from Arbitrum One (block, status 1, the emitting contract and topics at logIndex), and GET /read on the hosted reader at asOfBlock 523022565 returned exactly these five facts",
+  "liveCheck2": {
+    "payAuthorizedTx": "0x6f5abcb1ab381d5adfcabd8385eb134a80bbdd3e2b5f8175969f6cc8b9e57602",
+    "settlementTx": "0x0ce09b201fd76ec8b439a23ef71b2204996c6ec57381d64495d77d7afb643ee0"
+  },
+  "facts": [
+    { "source": "nablaz:record", "kindName": "ACCOUNT_OPENED", "block": "517860375", "tx": "0xa19707042ac0618cf675f29f200db116f24db0809d3ed60df9453f31e4c1609e", "logIndex": 9 },
+    { "source": "nablaz:record", "kindName": "GRANT_SET", "block": "518233095", "tx": "0xadb3b33420ece48b4c53705d8e468ecdd9c6e01446aed92ef87434bd7cb68a4c", "logIndex": 1 },
+    { "source": "nablaz:record", "kindName": "PAY_AUTHORIZED", "block": "518233895", "tx": "0x6f5abcb1ab381d5adfcabd8385eb134a80bbdd3e2b5f8175969f6cc8b9e57602", "logIndex": 6 },
+    { "source": "nablaz:vault_payment", "kindName": null, "block": "518234369", "tx": "0x0ce09b201fd76ec8b439a23ef71b2204996c6ec57381d64495d77d7afb643ee0", "logIndex": 0 },
+    { "source": "nablaz:record", "kindName": "VAULT_SWEPT", "block": "521815869", "tx": "0x1b88a09c0d83385a67c37919e67d5118917710b9f9d74561d37e969e1bb3e2a3", "logIndex": 30 }
+  ]
+}
