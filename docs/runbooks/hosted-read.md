@@ -139,6 +139,31 @@ must be at least the server's.
 Restore into an empty database with `pg_restore --no-owner --dbname="$TARGET_DATABASE_URL" <dump>`; it holds
 `ponder_rpc_cache_1` and every deployment schema present when the dump was taken.
 
+### Post-incident rider (S211)
+
+After any reader incident, two checks before the incident is closed.
+
+TEST-account read, against the baseline pinned in `packages/reader/test/fixtures/test-account-baseline.json`
+(its five facts by source, block, logIndex and tx, and the two live check 2 txs). From the repo root:
+
+```
+curl -s https://read.nablaz.io/read/42161/0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c > /tmp/test-read.json
+cd packages/reader && BASELINE_READ=/tmp/test-read.json npx vitest run --project unit test/unit/test-account-baseline.test.ts
+```
+
+The test passes only when the read's facts equal the baseline exactly. Without `BASELINE_READ` that case is skipped.
+
+Resume-deploy form, to redeploy without a full reindex:
+
+```
+~/.fly/bin/flyctl deploy -a nablaz-reader --ha=false --env READER_SCHEMA=<live schema> < /dev/null
+```
+
+This form is legitimate only when `bid.mjs` at the commit being deployed equals the live schema's build id
+(`_ponder_meta`, `key = 'app'`, `build_id`). Recompute both at deploy time, never from a carried figure. A plain
+deploy without `READER_SCHEMA` still indexes into the new image's own schema, a full reindex behind the 503 gate,
+whatever the build id.
+
 ## Start-up RPC check, leg tags and RPC counters
 
 - Before Ponder starts, `scripts/reader-start.sh` runs `packages/reader/scripts/check-rpc.ts`: each of the four
@@ -148,6 +173,17 @@ Restore into an empty database with `pg_restore --no-owner --dbname="$TARGET_DAT
   `rpc check WARNING: <n> of 4 legs failed: <variables>; starting anyway`, and the start goes on (CTO ruling,
   S200: a boot-blocking check would restart-loop on any vendor outage, the Oct 30 exit-75 class). An ongoing leg
   failure shows in `/metrics/reader`.
+- Exception (R-S211-1, amends R-S200-2 narrowly): a leg that still answers HTTP 401 or 403 after the last round
+  fails the start. The check prints `rpc check FATAL (R-S211-1): <n> leg(s) refused authentication: <variable>
+  (<chain> <role>, host <host>): HTTP <status>; …` and exits 78, so `set -e` ends `scripts/reader-start.sh`
+  (`packages/reader/lib/rpc-auth.ts`). An unauthenticated leg can never heal by waiting. Each failed start takes
+  roughly 10–20 s (3 rounds, 5 s apart; inferred, not yet observed on Fly), so 10 of them fit in Fly's 5-minute
+  window (on-failure, max_retries 10) and the machine stops; Fly Proxy starts it again on the
+  next request (`auto_start_machines = true`), and the start fails again until the key is fixed.
+- Database loss (S211): `packages/reader/src/api/db-watchdog.ts` reads Ponder's own heartbeat
+  (`_ponder_meta`, `key = 'app'`, `heartbeat_at`, written every 10 s) every 15 s. When the newest heartbeat seen
+  is older than 120 s (a read that fails, hangs or returns an old value), it logs `db watchdog FATAL: …` and the
+  reader exits 75, so the machine restarts instead of staying up and idle. Postgres only.
 - Every RPC error the reader logs starts `[rpc <chain> <leg>]`, leg `indexer` (Chainstack) or `grounding`
   (Alchemy) (R-S194-10). URLs inside the error are already `[redacted:indexer]` / `[redacted:grounding]` (R-S197-8).
 - `GET /metrics/reader` on the reader's loopback port (127.0.0.1:42069, beside Ponder's own `/metrics`) serves
@@ -278,7 +314,9 @@ exit 75 from ~12:32Z Oct 30 under flyd policy"; "pipeline frozen on BOTH chains 
 20:46:49Z/21:01:00Z Oct 30; restart unfroze" (one restart by ruling 15:12:29Z Oct 31 unfroze it).
 
 Not from record: exit 75 is Ponder's own exit code; from inside the image it does not say which failure caused
-it. The start-up RPC check never stops the start; its warning names a leg that failed at boot. A restart after a
+it (since S211 the DB watchdog also exits 75, after its `db watchdog FATAL` line). The start-up RPC check stops the
+start only on an HTTP 401/403 leg (exit 78, R-S211-1); any other failing leg is named in a warning and the start
+goes on. A restart after a
 replace (machine update or deploy) took about 13 min of `/ready` 503 on 2026-11-04 (16:05:24Z to 16:18:15Z) while
 Ponder replayed from its cache; `/live` stayed 200.
 
