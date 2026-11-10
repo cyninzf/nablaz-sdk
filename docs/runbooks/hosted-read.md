@@ -62,7 +62,8 @@ Timings on record (`/ready` 503 until the index is ready):
 
 When the new image computes the same Ponder build id as a deployment whose schema exists, the deploy can resume
 that schema instead of indexing a new one. Ponder 0.18.1 derives the build id at `build/index.ts:567` from three
-hashes: the evaluated config (`ordering`, `contracts`, `accounts`, `blocks`: addresses, ABIs, filters and start
+hashes (checked against 0.18.6 for R-S212-4: `build/index.ts` is byte-identical in the two versions, with
+`BUILD_ID_VERSION = "2"`, and the `_ponder_meta` version is `"6"` in both, so the upgrade alone keeps the id): the evaluated config (`ordering`, `contracts`, `accounts`, `blocks`: addresses, ABIs, filters and start
 blocks, so the `READER_*` variables and the ABIs from `packages/sdk` count; RPC URLs and the database do not),
 the raw text of `ponder.schema.ts`, and the raw text of every `src/**/*.{js,mjs,ts,mts}` file. `src/api/**`
 and `*.test.*`/`*.spec.*` are excluded, so an API-only or front-only change keeps the id, and any other change
@@ -108,6 +109,8 @@ Recorded ids (`_ponder_meta`, `key = 'app'`, read S206):
   asks the reader's `/health`.
 - `GET /ready` is index readiness, the public signal: 503 until the index has caught up, 200 after. `/ready`
   503 during backfill is expected, not an incident.
+- A Sentry uptime monitor watches `https://read.nablaz.io/ready` every 60 s and fires after 3 failures, so every
+  deploy with a 503 window (a resume included) raises an expected alert.
 - The `/ready` body (S204): `/ready` answers HTTP 200 with an EMPTY body when ready (the front's `relay()` passes
   Ponder's answer through below 500); `{"ready":false}` exists only on the 503 branch; nothing in the code serves
   `{"ready":true}`. Readiness is the status code.
@@ -163,6 +166,28 @@ This form is legitimate only when `bid.mjs` at the commit being deployed equals 
 (`_ponder_meta`, `key = 'app'`, `build_id`). Recompute both at deploy time, never from a carried figure. A plain
 deploy without `READER_SCHEMA` still indexes into the new image's own schema, a full reindex behind the 503 gate,
 whatever the build id.
+
+A resume is not free: Ponder's crash recovery drops every user index of the schema and rebuilds them once it has
+caught up, behind the 503 gate. Measured on Nov 10 2026 (S211 resume of `dfbc509e`, 102MB `maintenance_work_mem`
+and 2 parallel maintenance workers, the server's settings then): `/ready` answered 503 for 13m33s, of which
+`Created database indexes count=20` took 13m26s. With the session settings below (32MB, no workers) the rebuild
+is expected to take longer; it has not been measured.
+
+### Session memory settings (R-S212-4)
+
+On Postgres, every connection the reader's Ponder opens sets `maintenance_work_mem=32MB`,
+`max_parallel_maintenance_workers=0` and `work_mem=16MB` for its own session: the startup parameter
+`database.poolConfig.options` in `packages/reader/ponder.config.ts`, which Ponder passes to all four of its pools.
+The cluster's configuration is untouched (R-S204-2). They exist for the index rebuild, where the 1 GB database ran
+out of memory in S211; whether they stop that is unproven until the database memory graph is watched during a
+rebuild. Notes:
+
+- A startup parameter needs the direct host, as `DATABASE_URL` is; a PgBouncer pool refuses it (S194).
+- Ponder's readonly pool (the API's `/read` queries) runs `SET work_mem = '512MB'` after connecting, which
+  overrides the `work_mem` here for that pool. The other three pools keep 16MB.
+- The database config is not part of the build id (above), so changing these settings keeps it.
+- Check on a session: `select current_setting('maintenance_work_mem')` from a connection opened with the same
+  `options` reads `32MB` (read on the direct host, Nov 10 2026).
 
 ## Start-up RPC check, leg tags and RPC counters
 

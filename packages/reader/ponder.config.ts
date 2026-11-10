@@ -13,7 +13,12 @@ import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi }
 // READER_EXTERNAL_FROM (src/chains.ts).
 // RPC: two URLs per chain, routed by src/rpc.ts (R-S192-8). Base polls every 2 s; Arbitrum keeps Ponder's 1 s
 // default, since Ponder fetches every new block individually there and a longer interval saves no calls.
-// Database: Postgres when DATABASE_URL is set (the hosted instance), else PGlite.
+// Database: Postgres when DATABASE_URL is set (the hosted instance), else PGlite. On Postgres, every connection
+// Ponder opens sets its own session memory at startup (R-S212-4), never the cluster's configuration (R-S204-2):
+// the index rebuild a resume runs is where the 1 GB database ran out of memory (S211). The startup parameter
+// needs the direct host (DATABASE_URL); a PgBouncer pool refuses it. Ponder's readonly pool (the API) sets its
+// own work_mem after connecting, which overrides the one here. Not in the build id: Ponder hashes only the
+// config's ordering, contracts, accounts and blocks.
 // USDC Transfer is not indexed wholesale: the redemption handler reads the tx receipt (R-S189-5).
 
 const UpgradedAbi = parseAbi(["event Upgraded(address indexed implementation)"]);
@@ -50,7 +55,9 @@ function perChain<T extends object>(build: (c: NablaChain) => T) {
 
 export default createConfig({
   ordering: "omnichain",
-  database: process.env.DATABASE_URL ? { kind: "postgres" } : { kind: "pglite", directory: process.env.READER_PGLITE_DIR ?? ".ponder/pglite" },
+  database: process.env.DATABASE_URL
+    ? { kind: "postgres", poolConfig: { options: "-c maintenance_work_mem=32MB -c max_parallel_maintenance_workers=0 -c work_mem=16MB" } }
+    : { kind: "pglite", directory: process.env.READER_PGLITE_DIR ?? ".ponder/pglite" },
   chains: Object.fromEntries(
     chainsOn.map((c) => [c.name, { id: c.chainId, rpc: indexerTransport(rpcUrls(c), {}, c.name), ...(POLLING_MS[c.chainId] ? { pollingInterval: POLLING_MS[c.chainId] } : {}) }]),
   ),
