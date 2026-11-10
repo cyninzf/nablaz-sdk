@@ -43,8 +43,8 @@ importers:
         specifier: 4.13.13
         version: 4.13.13
       ponder:
-        specifier: 0.18.1
-        version: 0.18.1(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76)
+        specifier: 0.18.6
+        version: 0.18.6(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76)
       viem:
         specifier: 2.57.4
         version: 2.57.4(typescript@5.9.3)(zod@3.25.76)
@@ -276,8 +276,8 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@ponder/utils@0.3.0':
-    resolution: {integrity: sha512-7FmIHAKG1mfHA9ptaqN0h9bfYRnqBGAFDfEgXsXS4rxAg513gVR8hGsp1AZon+OPUtIpNRrmhx7bsEk8auiqow==}
+  '@ponder/utils@0.3.1':
+    resolution: {integrity: sha512-2rhmxF3x6huFuiMPxqboaqnkrl3gbWI6fcjxnbhoKTYcou10wHP5z0fSlTh5P2dJ1GXailqJqWl+hUFgco/TjA==}
     peerDependencies:
       typescript: '>=5.4.0'
       viem: '>=2.35'
@@ -1936,8 +1936,8 @@ packages:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
 
-  ponder@0.18.1:
-    resolution: {integrity: sha512-qwtNJd5dPv4XC9yVUh3by5nKTZnh/tUuTtGjRjbiVZBuRzGZW4S19U1sJlP8+z7Ic1Ggweb24hhLE4G8WxxqgQ==}
+  ponder@0.18.6:
+    resolution: {integrity: sha512-zkELPQ9k0rfiWmKJdaqLtqLBRS9YAvXnABlY3sHX1M80DVu0gUHB9tXOp0owgeTZxX81fgC/XQYVxiF0CvUsHw==}
     engines: {node: '>=22.12'}
     hasBin: true
     peerDependencies:
@@ -2560,7 +2560,7 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@ponder/utils@0.3.0(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))':
+  '@ponder/utils@0.3.1(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))':
     dependencies:
       viem: 2.57.4(typescript@5.9.3)(zod@3.25.76)
     optionalDependencies:
@@ -4145,7 +4145,7 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  ponder@0.18.1(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76):
+  ponder@0.18.6(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76):
     dependencies:
       '@babel/code-frame': 7.29.7
       '@commander-js/extra-typings': 12.1.0(commander@12.1.0)
@@ -4154,7 +4154,7 @@ snapshots:
       '@escape.tech/graphql-armor-max-depth': 2.4.2
       '@escape.tech/graphql-armor-max-tokens': 2.5.1
       '@hono/node-server': 1.19.5(hono@4.13.13)
-      '@ponder/utils': 0.3.0(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))
+      '@ponder/utils': 0.3.1(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))
       abitype: 0.10.3(typescript@5.9.3)(zod@3.25.76)
       ansi-escapes: 7.3.0
       commander: 12.1.0
