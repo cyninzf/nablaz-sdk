@@ -22,6 +22,9 @@
       "qs": "6.16.0",
       "on-finished": "2.4.1",
       "ip-address": "10.7.4"
+    },
+    "patchedDependencies": {
+      "ponder@0.18.6": "patches/ponder@0.18.6.patch"
     }
   }
 }

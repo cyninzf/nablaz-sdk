@@ -1,7 +1,7 @@
 // The MCP server core over the reader's GET /read, shared by the stdio and Streamable HTTP doors (R-S192-1). Reads
 // only: one tool, no write, no signing, no key. The reader's JSON is returned byte for byte, after one line naming
 // the chain and the as-of block; a reader 4xx body as-is; a reader 5xx as a fixed text, its body logged only.
-// Until the index is ready (the reader's /ready, R-S202-4) the tool answers {"ready":false} and reads nothing.
+// Until the index is ready (the reader's /ready/head, R-S202-4, S213 B1) the tool answers {"ready":false} and reads nothing.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -36,21 +36,28 @@ export const NOT_READY_BODY = `{"ready":false}`;
 export type Readiness = "ready" | "not ready" | "unreachable";
 
 /**
- * The one readiness check of both doors (R-S202-4): the reader's GET /ready, which Ponder answers from the running
- * app's own is_ready (200 when 1). An unready schema's tables are partial, so a read from one is absence, not a
- * record (R-S189-6). Any answer but 200 is not ready; a 5xx on /ready is logged, its body never relayed.
+ * The reader's readiness with the head gate (S213 B1, packages/reader/src/api/head.ts): 200 only when Ponder's own
+ * /ready is 200 (the running app's is_ready) AND every chain's indexed block is current with its chain head, read
+ * from a cached head, never per request. The public GET /ready relays this path.
+ */
+export const READER_READY_PATH = "/ready/head";
+
+/**
+ * The one readiness check of every door (R-S202-4): the reader's READER_READY_PATH. An unready schema's tables are
+ * partial, and an index behind the head is not the record yet, so a read from either is absence, not a record
+ * (R-S189-6). Any answer but 200 is not ready; a 5xx other than 503 is logged, its body never relayed.
  */
 export async function readerReadiness(base: string, get: typeof fetch): Promise<Readiness> {
   let r: Response;
   try {
-    r = await get(new URL("/ready", base));
+    r = await get(new URL(READER_READY_PATH, base));
   } catch (e) {
-    console.error(`reader unreachable on GET /ready: ${String(e)}`);
+    console.error(`reader unreachable on GET ${READER_READY_PATH}: ${String(e)}`);
     return "unreachable";
   }
   const body = await r.text();
   if (r.status === 200) return "ready";
-  if (r.status >= 500 && r.status !== 503) logReaderError(r.status, "/ready", body);
+  if (r.status >= 500 && r.status !== 503) logReaderError(r.status, READER_READY_PATH, body);
   return "not ready";
 }
 

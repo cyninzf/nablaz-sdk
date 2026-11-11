@@ -2,11 +2,18 @@
 // check 2 txs (the PAY_AUTHORIZED reservation and its settlement). A post-incident check is mechanical:
 //   curl -s https://read.nablaz.io/read/42161/0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c > /tmp/test-read.json
 //   cd packages/reader && BASELINE_READ=/tmp/test-read.json npx vitest run --project unit test/unit/test-account-baseline.test.ts
-// Without BASELINE_READ only the fixture's own invariants run. Test-only: nothing here is in Ponder's build id.
+// Without BASELINE_READ the case reads test/fixtures/test-account-read.json, a GET /read of the TEST account captured
+// from https://read.nablaz.io on 2026-11-11 (S213 A3, asOfBlock 523296543): the guard always runs, in a Codespace and
+// in CI, and never skips. BASELINE_READ names a fresh capture instead (the post-incident rider); a path that cannot
+// be read fails the case. Test-only: nothing here is in Ponder's build id.
 
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import baseline from "../fixtures/test-account-baseline.json";
+
+/** The committed capture (S213 A3): the hosted reader's GET /read of the TEST account, byte for byte. */
+const CAPTURED_READ = fileURLToPath(new URL("../fixtures/test-account-read.json", import.meta.url));
 
 type Row = { source: string; kindName: string | null; block: string; tx: string; logIndex: number };
 type ReadFact = { source: string; terms: { kindName?: string }; cite: { chainId: number; block: string; tx: string; logIndex: number } };
@@ -42,8 +49,8 @@ describe("TEST account baseline fixture", () => {
     for (const r of facts) expect(r.tx).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
-  it.skipIf(!process.env.BASELINE_READ)("a captured GET /read of the TEST account matches the baseline exactly", () => {
-    const read = JSON.parse(readFileSync(process.env.BASELINE_READ!, "utf8"));
+  it("a captured GET /read of the TEST account matches the baseline exactly (BASELINE_READ, else the committed capture)", () => {
+    const read = JSON.parse(readFileSync(process.env.BASELINE_READ || CAPTURED_READ, "utf8"));
     expect(read.chainId).toBe(baseline.chainId);
     expect(read.subject.toLowerCase()).toBe(baseline.subject.toLowerCase());
     expect(rowsOf(read)).toEqual(facts);

@@ -9,6 +9,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/reader/package.json packages/reader/
 COPY packages/mcp/package.json packages/mcp/
+# pnpm applies patches/ (package.json pnpm.patchedDependencies, S213 B3) during the install, so they come with the manifests.
+COPY patches/ patches/
 RUN pnpm install --frozen-lockfile
 COPY . .
 # No package has a build step today (TypeScript runs as source); kept so one added later runs here.

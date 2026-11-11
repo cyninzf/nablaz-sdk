@@ -54,6 +54,11 @@ no other flags. It ran 14:00:34Z to 14:02:21Z, exit 0, no prompt, and produced
 Timings on record (`/ready` 503 until the index is ready):
 - Same image, same schema (a `machine update` or restart, Ponder replays from its own schema): about 13 min
   (2026-11-04, 16:05:24Z to 16:18:15Z).
+- Resume deploy (new image, `READER_SCHEMA` = the live schema): still about 13 min of `/ready` 503. A resume is
+  not a quick restart: Ponder's crash recovery drops and rebuilds every user index of the schema (below). About
+  13 min not-ready was measured three times (2026-11-04, and two resumes on 2026-11-10).
+- Per-chain finality is read from the `Indexed` lines of the reader's log (`Indexed block chain=<name>
+  number=<block>`), one chain per line.
 - New image, new schema (a full index from the RPC cache): no duration is carried (R-S208-1). It is computed at
   dispatch, per chain, from that chain's head gap (blocks) × its observed indexing time per block; `/ready` flips
   at the maximum across chains. It is bound by the indexing handlers, not by the RPCs.
@@ -77,10 +82,11 @@ variables are unchanged. The id Ponder recorded is in the schema's `_ponder_meta
 ~/.fly/bin/flyctl deploy -a nablaz-reader --ha=false --env READER_SCHEMA=<schema> < /dev/null
 ```
 
-`scripts/reader-start.sh` then starts Ponder on `<schema>` instead of the image tag. Ponder rolls the tables back
-to the safe checkpoint (it drops the schema's indexes and reverts rows written after it, with `is_ready` back to
-0), re-indexes the gap to the head, rebuilds the indexes, re-points the `reader` views and sets `is_ready`; `/read`
-answers 503 `{"ready":false}` until then (below). A mismatched build id crash-loops at start ("Schema … was
+`scripts/reader-start.sh` then starts Ponder on `<schema>` instead of the image tag. A resume deploy still drops and
+rebuilds ALL user indexes of the schema: about 13 min not-ready, measured three times. It keeps the rows, not the
+indexes. Ponder rolls the tables back to the safe checkpoint (it drops the schema's indexes and reverts rows
+written after it, with `is_ready` back to 0), re-indexes the gap to the head, rebuilds the indexes, re-points the
+`reader` views and sets `is_ready`; `/read` answers 503 `{"ready":false}` until then (below). A mismatched build id crash-loops at start ("Schema … was
 previously used by a different Ponder app") and nothing is dropped: redeploy without the override, which indexes
 into the new image's own schema.
 
@@ -107,7 +113,12 @@ Recorded ids (`_ponder_meta`, `key = 'app'`, read S206):
   reader's PID as `NABLAZ_READER_PID`, so the front checks the process (`kill(pid, 0)`) and never calls into
   Ponder's event loop: a long block in Ponder does not fail Fly's check (R-S194-15). Without the PID, `/live`
   asks the reader's `/health`.
-- `GET /ready` is index readiness, the public signal: 503 until the index has caught up, 200 after. `/ready`
+- `GET /ready` is index readiness, the public signal: 503 until the index has caught up, 200 after. Since S213
+  (B1) the front relays the reader's `GET /ready/head` (`packages/reader/src/api/head.ts`): 200 only when Ponder's
+  own `/ready` is 200 AND each chain's indexed block is within 15 s of chain time of that chain's head. The heads are
+  read with `eth_getBlockByNumber("latest")` on the indexer transport, cached per chain and refreshed at most every
+  10 s, never per request. It closes the S211 row where `/ready` turned 200 about 4.5 min before the index reached
+  the chain head. The not-ready answer is unchanged: 503 `{"ready":false}`. `/ready`
   503 during backfill is expected, not an incident.
 - A Sentry uptime monitor watches `https://read.nablaz.io/ready` every 60 s and fires after 3 failures, so every
   deploy with a 503 window (a resume included) raises an expected alert.
@@ -120,7 +131,7 @@ Recorded ids (`_ponder_meta`, `key = 'app'`, read S206):
 - Readiness gate (R-S202-4): `GET /read/:chainId/:address` and the MCP `read_subject` tool answer 503
   `{"ready":false}` (the tool: an error result carrying `{"ready":false}`), and read nothing, whenever the index is
   not ready, in the same vocabulary as `/ready` (R-S193-13). Both doors use one check in the front
-  (`readerReadiness`, `packages/mcp/src/server.ts`): the reader's own `/ready`, which Ponder answers from the
+  (`readerReadiness`, `packages/mcp/src/server.ts`): the reader's `/ready/head` (above; before S213, its own `/ready`), which Ponder answers from the
   running app's `is_ready`. An empty record from an unready schema is absence, not a record (R-S189-6). Evidence:
   the S202 public probe at 15:48Z, on an image whose `/ready` was 503, returned `facts: []` with
   `asOfBlock` 445102197 in 66 to 71 s, and an intermittent 500.
@@ -154,7 +165,9 @@ curl -s https://read.nablaz.io/read/42161/0x8E65fa412e14c1859a9a278fdEFDE89A3c15
 cd packages/reader && BASELINE_READ=/tmp/test-read.json npx vitest run --project unit test/unit/test-account-baseline.test.ts
 ```
 
-The test passes only when the read's facts equal the baseline exactly. Without `BASELINE_READ` that case is skipped.
+The test passes only when the read's facts equal the baseline exactly. Without `BASELINE_READ` that case reads the
+committed capture `packages/reader/test/fixtures/test-account-read.json` (S213 A3), so it runs in every `pnpm test`
+and never skips.
 
 Resume-deploy form, to redeploy without a full reindex:
 
@@ -167,11 +180,12 @@ This form is legitimate only when `bid.mjs` at the commit being deployed equals 
 deploy without `READER_SCHEMA` still indexes into the new image's own schema, a full reindex behind the 503 gate,
 whatever the build id.
 
-A resume is not free: Ponder's crash recovery drops every user index of the schema and rebuilds them once it has
-caught up, behind the 503 gate. Measured on Nov 10 2026 (S211 resume of `dfbc509e`, 102MB `maintenance_work_mem`
+A resume is not free: a resume deploy still drops and rebuilds every user index of the schema (about 13 min
+not-ready, measured three times), once Ponder has caught up, behind the 503 gate. Measured on Nov 10 2026 (S211 resume of `dfbc509e`, 102MB `maintenance_work_mem`
 and 2 parallel maintenance workers, the server's settings then): `/ready` answered 503 for 13m33s, of which
 `Created database indexes count=20` took 13m26s. With the session settings below (32MB, no workers) the rebuild
-is expected to take longer; it has not been measured.
+was measured once (S212): the Nov 10 resume deploy rebuilt 20 indexes in 13m08s with database memory flat at
+570–585 MB. Demonstrated once, not yet proven permanent.
 
 ### Session memory settings (R-S212-4)
 
@@ -183,8 +197,10 @@ out of memory in S211; whether they stop that is unproven until the database mem
 rebuild. Notes:
 
 - A startup parameter needs the direct host, as `DATABASE_URL` is; a PgBouncer pool refuses it (S194).
-- Ponder's readonly pool (the API's `/read` queries) runs `SET work_mem = '512MB'` after connecting, which
-  overrides the `work_mem` here for that pool. The other three pools keep 16MB.
+- Ponder's readonly pool (the API's `/read` and `/feed` queries) runs `SET work_mem = '512MB'` after connecting,
+  which overrode the `work_mem` here for that pool. Since S213 (B3) `patches/ponder@0.18.6.patch` (pnpm
+  `patchedDependencies`) sets it to `16MB`, so all four pools use 16MB. The patch is pinned to ponder 0.18.6 and
+  must be re-proven on any Ponder upgrade; `test/unit/pg-session.test.ts` fails on any other version.
 - The database config is not part of the build id (above), so changing these settings keeps it.
 - Check on a session: `select current_setting('maintenance_work_mem')` from a connection opened with the same
   `options` reads `32MB` (read on the direct host, Nov 10 2026).
@@ -404,7 +420,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 | viem `maxResponseBodySize` | 10,485,760 | Set to 32 MiB on every leg (R-S197-7). |
 | viem client retries on the grounding client | 3, exponential from 150 ms | Accepted: grounding reads are served per request; a retry costs one more call, not a wrong answer. |
 | Ponder Postgres pool `max` | 30 | Accepted: 2 internal plus 9 each for the read-only, user and sync pools under `ponder start`; 19 sessions read on 2026-11-04 against the limit of 50. |
-| Ponder pool timeouts | read-only: `statement_timeout` 30 s, `work_mem` 512MB, `lock_timeout` 500 ms; user and sync: `statement_timeout` 2 min; internal: 10 min | Accepted: Ponder sets them on its own clients (S198 §6); a `/read` query over 30 s is fixed by an index (S198, #10), not a longer timeout. |
+| Ponder pool timeouts | read-only: `statement_timeout` 30 s, `work_mem` 16MB (512MB unpatched; `patches/ponder@0.18.6.patch`, S213), `lock_timeout` 500 ms; user and sync: `statement_timeout` 2 min; internal: 10 min | Accepted: Ponder sets them on its own clients (S198 §6); a `/read` query over 30 s is fixed by an index (S198, #10), not a longer timeout. |
 | Ponder `ordering` | multichain | Set: `omnichain`. |
 | Fly restart policy | not set in `fly.toml` | Accepted with the record above (exit 75 → flyd loop); the start-up RPC check warns and never exits non-zero, so it adds no restart. |
 | Fly `http_service` check | Fly's, not relied on | Set: `GET /live`, 15 s interval, 5 s timeout, 60 s grace. |

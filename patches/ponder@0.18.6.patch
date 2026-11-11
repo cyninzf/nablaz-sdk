@@ -1,0 +1,66 @@
+diff --git a/dist/esm/utils/pg.js b/dist/esm/utils/pg.js
+index 56264be4809ac48b142b30980d494c127fd63171..c1afc58908221d9c0745f726a51641867c05412b 100644
+--- a/dist/esm/utils/pg.js
++++ b/dist/esm/utils/pg.js
+@@ -108,6 +108,10 @@ export function createPool(config, logger) {
+     });
+     return pool;
+ }
++// NablaZ patch (R-S212-4, S213 B3): the readonly pool's work_mem is the reader's session value, 16MB, not
++// Ponder's 512MB (packages/reader/ponder.config.ts, docs/runbooks/hosted-read.md). Pinned to ponder@0.18.6
++// (patches/ponder@0.18.6.patch): on any Ponder upgrade, re-prove the patch before it applies (the line still
++// exists, nothing else in the pool changed, and a readonly session reads work_mem 16MB).
+ export function createReadonlyPool(config, logger, namespace) {
+     class ReadonlyClient extends pg.Client {
+         // @ts-expect-error
+@@ -119,7 +123,7 @@ export function createReadonlyPool(config, logger, namespace) {
+                     this.query(`
+           SET search_path = "${namespace}";
+           SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
+-          SET work_mem = '512MB';
++          SET work_mem = '16MB';
+           SET lock_timeout = '500ms';`, callback);
+                 });
+             }
+@@ -127,7 +131,7 @@ export function createReadonlyPool(config, logger, namespace) {
+                 return super.connect().then(() => this.query(`
+           SET search_path = "${namespace}";
+           SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
+-          SET work_mem = '512MB';
++          SET work_mem = '16MB';
+           SET lock_timeout = '500ms';`).then(() => { }));
+             }
+         }
+diff --git a/src/utils/pg.ts b/src/utils/pg.ts
+index 1995677fc789dbde4dbd38b48f00c8f79cbbf512..3d9f92e348ad420bacc228cc62f3124033f77abe 100644
+--- a/src/utils/pg.ts
++++ b/src/utils/pg.ts
+@@ -140,6 +140,10 @@ export function createPool(config: PoolConfig, logger: Logger) {
+   return pool;
+ }
+ 
++// NablaZ patch (R-S212-4, S213 B3): the readonly pool's work_mem is the reader's session value, 16MB, not
++// Ponder's 512MB (packages/reader/ponder.config.ts, docs/runbooks/hosted-read.md). Pinned to ponder@0.18.6
++// (patches/ponder@0.18.6.patch): on any Ponder upgrade, re-prove the patch before it applies (the line still
++// exists, nothing else in the pool changed, and a readonly session reads work_mem 16MB).
+ export function createReadonlyPool(
+   config: PoolConfig,
+   logger: Logger,
+@@ -157,7 +161,7 @@ export function createReadonlyPool(
+             `
+           SET search_path = "${namespace}";
+           SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
+-          SET work_mem = '512MB';
++          SET work_mem = '16MB';
+           SET lock_timeout = '500ms';`,
+             callback,
+           );
+@@ -168,7 +172,7 @@ export function createReadonlyPool(
+             `
+           SET search_path = "${namespace}";
+           SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
+-          SET work_mem = '512MB';
++          SET work_mem = '16MB';
+           SET lock_timeout = '500ms';`,
+           ).then(() => {}),
+         );

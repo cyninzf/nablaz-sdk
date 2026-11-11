@@ -86,6 +86,8 @@ public endpoint cannot be relied on for this field. Everything else rebuilds fro
 `GET /read/:chainId/:address` returns every indexed fact about an address. No key is needed: the endpoint
 is a read over public logs.
 
+`GET /feed` returns the most recent indexed facts across both chains, newest first: payments (the authorization and the settlement, both cited), grants and account openings, each with its source, block, log index and time, and no amounts or totals; `?limit` defaults to 100 (at most 500) and `?before` takes the previous page's `nextBefore`.
+
 ```json
 { "subject": "0x…", "chainId": 8453, "asOfBlock": "53160200",
   "facts": [ { "source": "metamask:delegation_payment", "label": "(b) exact execution, once", "shape": "b",
