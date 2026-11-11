@@ -184,7 +184,8 @@ A resume is not free: a resume deploy still drops and rebuilds every user index 
 not-ready, measured three times), once Ponder has caught up, behind the 503 gate. Measured on Nov 10 2026 (S211 resume of `dfbc509e`, 102MB `maintenance_work_mem`
 and 2 parallel maintenance workers, the server's settings then): `/ready` answered 503 for 13m33s, of which
 `Created database indexes count=20` took 13m26s. With the session settings below (32MB, no workers) the rebuild
-is expected to take longer; it has not been measured.
+was measured once (S212): the Nov 10 resume deploy rebuilt 20 indexes in 13m08s with database memory flat at
+570–585 MB. Demonstrated once, not yet proven permanent.
 
 ### Session memory settings (R-S212-4)
 
