@@ -22,13 +22,15 @@ import {
   vaultPayments,
   vaults,
 } from "ponder:schema";
-import { and, asc, eq, inArray, isNotNull, or, sql } from "ponder";
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "ponder";
 import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, type PublicClient } from "viem";
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
 import { withUtc } from "./utc";
 import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
+import { boundedLag, chainLag, endBlockOf, headCache, type IndexedBlock } from "./head";
+import { FEED_RECORD_KINDS, externalPaymentItems, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
 import { groundingClient, rpcMetricsText } from "../rpc";
 import {
@@ -83,6 +85,24 @@ async function indexedBlock(origin: string, chain: EnabledChain): Promise<bigint
   return n === undefined ? null : BigInt(n);
 }
 
+/** Ponder's /status: each chain's indexed block (number and timestamp), by chain name. */
+async function indexedStatus(origin: string): Promise<Record<string, IndexedBlock> | null> {
+  const r = await fetch(new URL("/status", origin));
+  if (!r.ok) return null;
+  const s = (await r.json()) as Record<string, { block: IndexedBlock }>;
+  return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v.block]));
+}
+
+// B1: the chain heads behind GET /ready/head, cached per chain (src/api/head.ts). Read on the indexer's transport.
+const heads = headCache(
+  async (name) => {
+    const b = await (publicClients as Record<string, PublicClient>)[name]!.getBlock({ blockTag: "latest" });
+    return { number: b.number, timestamp: b.timestamp };
+  },
+  Date.now,
+  { onError: (name, e) => console.error(`head read failed for ${name}: ${String((e as Error).message ?? e).split("\n")[0]}`) },
+);
+
 async function codeHash(client: PublicClient, address: Address, blockNumber: bigint): Promise<Hex | null> {
   const code = await client.getCode({ address, blockNumber });
   return code && code !== "0x" ? keccak256(code) : null;
@@ -119,8 +139,69 @@ async function nablaLabelOf(client: PublicClient, chain: EnabledChain & { nabla:
 }
 
 // Row E: the RPC legs' counters (src/rpc.ts), Prometheus text, beside Ponder's own /metrics. The reader listens on
-// 127.0.0.1 only and the front relays /read and /ready alone, so this is never public.
+// 127.0.0.1 only and the front relays /read, /feed and /ready (as /ready/head) alone, so this is never public.
 app.get("/metrics/reader", (c) => c.text(rpcMetricsText(), 200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" }));
+
+// B1 (S213): readiness with the head gate. 200 (empty body, as Ponder's /ready) only when Ponder's /ready is 200 and
+// every enabled chain's indexed block is current with its head (src/api/head.ts); 503 otherwise. Loopback only: the
+// front relays it as the public /ready and maps the 503 to {"ready":false}.
+app.get("/ready/head", async (c) => {
+  const ponderReady = await fetch(new URL("/ready", c.req.url));
+  if (ponderReady.status !== 200) return c.text("Historical indexing is not complete.", 503);
+  const status = await indexedStatus(c.req.url);
+  if (!status) return c.text("Indexed head not readable.", 503);
+  const end = endBlockOf();
+  const lags = await Promise.all(
+    enabledChains().map(async (ch) => (end !== undefined ? boundedLag(ch.name, status[ch.name], end) : chainLag(ch.name, status[ch.name], await heads.head(ch.name)))),
+  );
+  const behind = lags.filter((l) => !l.current);
+  if (behind.length) return c.text(`Indexed head is not current: ${behind.map((l) => `${l.chain}: ${"reason" in l ? l.reason : ""}`).join("; ")}`, 503);
+  return c.text("", 200);
+});
+
+// B2 (S213, R-S213-1): GET /feed, the Live Sky door (src/api/feed.ts). Existing tables only; no amounts, no counts.
+app.get("/feed", async (c) => {
+  const q = parseFeedQuery(c.req.query("limit"), c.req.query("before"));
+  if ("error" in q) return c.json({ error: q.error }, 400);
+  const status = await indexedStatus(c.req.url);
+  const chains = enabledChains();
+  if (!status || chains.some((ch) => status[ch.name] === undefined)) return c.json({ ready: false }, 503);
+  const asOf = new Map(chains.map((ch) => [ch.chainId, BigInt(status[ch.name]!.number)]));
+  // Per table: rows at or below each chain's asOfBlock and at or before the cursor key (the page drops the cursor's
+  // own item), newest first; a few more than the limit, for rows that share the cursor's key.
+  const n = q.limit + 3;
+  type T = { chainId: any; blockNumber: any; blockTimestamp: any; logIndex: any };
+  const window = (t: T) => {
+    const asOfCond = or(...chains.map((ch) => and(eq(t.chainId, ch.chainId), sql`${t.blockNumber} <= ${asOf.get(ch.chainId)!.toString()}::numeric(78)`)));
+    const k: FeedKey | null = q.before;
+    return k
+      ? and(asOfCond, sql`(${t.blockTimestamp}, ${t.chainId}, ${t.blockNumber}, ${t.logIndex}) <= (${k[0].toString()}::numeric(78), ${k[1]}::integer, ${k[2].toString()}::numeric(78), ${k[3]}::integer)`)
+      : asOfCond;
+  };
+  const order = (t: T) => [desc(t.blockTimestamp), desc(t.chainId), desc(t.blockNumber), desc(t.logIndex)];
+  const [records, perms, vpays, xpays] = await Promise.all([
+    db.select().from(recordEntries).where(and(window(recordEntries), inArray(recordEntries.kindName, Object.keys(FEED_RECORD_KINDS)))).orderBy(...order(recordEntries)).limit(n),
+    db.select().from(externalPermissions).where(window(externalPermissions)).orderBy(...order(externalPermissions)).limit(n),
+    db.select().from(vaultPayments).where(window(vaultPayments)).orderBy(...order(vaultPayments)).limit(n),
+    db.select().from(externalPayments).where(window(externalPayments)).orderBy(...order(externalPayments)).limit(n),
+  ]);
+  const entryIds = [...new Set(vpays.map((p) => p.fundingEntryId).filter((x): x is string => !!x))];
+  const entries = entryIds.length ? await db.select().from(recordEntries).where(inArray(recordEntries.id, entryIds)) : [];
+  const permIds = [...new Set(xpays.map(permissionIdOf).filter((x): x is string => !!x))];
+  const payPerms = permIds.length ? await db.select().from(externalPermissions).where(inArray(externalPermissions.id, permIds)) : [];
+  const { items, next } = page(
+    [
+      ...recordItems(records),
+      ...permissionItems(perms),
+      ...vaultPaymentItems(vpays, new Map(entries.map((e) => [e.id, e]))),
+      ...externalPaymentItems(xpays, new Map(payPerms.map((p) => [p.id, p]))),
+    ],
+    q,
+    asOf,
+  );
+  const asOfBlock = Object.fromEntries(chains.map((ch) => [String(ch.chainId), asOf.get(ch.chainId)!.toString()]));
+  return c.body(json({ asOfBlock, items, nextBefore: next }), 200, { "content-type": "application/json" });
+});
 
 app.get("/read/:chainId/:address", async (c) => {
   const chainId = Number(c.req.param("chainId"));

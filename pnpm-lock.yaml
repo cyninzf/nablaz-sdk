@@ -11,6 +11,11 @@ overrides:
   on-finished: 2.4.1
   ip-address: 10.7.4
 
+patchedDependencies:
+  ponder@0.18.6:
+    hash: 0c79a750a9517fa44f45fd135018757a6e490fe6d830afea9cbe5a71c4a99e8c
+    path: patches/ponder@0.18.6.patch
+
 importers:
 
   .: {}
@@ -44,7 +49,7 @@ importers:
         version: 4.13.13
       ponder:
         specifier: 0.18.6
-        version: 0.18.6(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76)
+        version: 0.18.6(patch_hash=0c79a750a9517fa44f45fd135018757a6e490fe6d830afea9cbe5a71c4a99e8c)(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76)
       viem:
         specifier: 2.57.4
         version: 2.57.4(typescript@5.9.3)(zod@3.25.76)
@@ -4145,7 +4150,7 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  ponder@0.18.6(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76):
+  ponder@0.18.6(patch_hash=0c79a750a9517fa44f45fd135018757a6e490fe6d830afea9cbe5a71c4a99e8c)(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(hono@4.13.13)(typescript@5.9.3)(viem@2.57.4(typescript@5.9.3)(zod@3.25.76))(zod@3.25.76):
     dependencies:
       '@babel/code-frame': 7.29.7
       '@commander-js/extra-typings': 12.1.0(commander@12.1.0)

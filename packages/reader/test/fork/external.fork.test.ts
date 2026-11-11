@@ -1,7 +1,8 @@
 // B4 part 1 against the live chains, both of them (R-S189-1): the external sources indexed over a fixed
 // window per chain; one rendered s3 §6.4b line per source run through cast and compared with the reader's
 // rows for that subject (R-D2B-1); GET /read served from the same index; the (c) share of the sampled
-// redemptions reported, never asserted (R-S189-8 (iv)). Read-only: no anvil, no transaction.
+// redemptions reported, never asserted (R-S189-8 (iv)). GET /feed (R-S213-1) and GET /ready/head (S213 B1) are
+// served from the same index. Read-only: no anvil, no transaction.
 
 import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -65,13 +66,37 @@ beforeAll(async () => {
   }
 });
 
-// /read answers are collected while the server is up, then the server is stopped and the tables dumped.
+// /read, /feed and /ready/head answers are collected while the server is up, then the server is stopped and the
+// tables dumped.
 const reads: Record<string, any> = {};
+type FeedRun = { pages: any[]; ready: { status: number; body: string }; bad: { query: string; status: number; body: string }[] };
+const feeds: Record<number, FeedRun> = {};
+/** Every /feed page at `limit`, following nextBefore to the end. */
+async function feedPages(url: string, limit: number): Promise<any[]> {
+  const pages: any[] = [];
+  let before: string | null = null;
+  for (let i = 0; i < 1000; i++) {
+    const r: Response = await fetch(`${url}/feed?limit=${limit}${before ? `&before=${before}` : ""}`);
+    expect(r.status).toBe(200);
+    const p: any = await r.json();
+    pages.push(p);
+    before = p.nextBefore;
+    if (!before) return pages;
+  }
+  throw new Error("feed did not end");
+}
 async function reserve(s: Served): Promise<Served> {
   const status = (await (await fetch(`${s.url}/status`)).json()) as Record<string, { id: number }>;
   const chainId = Object.values(status)[0]!.id;
   const subjects = chainId === 8453 ? ["0x92397432579b91B6De49f0f14AfF64628912667D"] : [WINDOWS[42161].spmAccount];
   for (const a of subjects) reads[`${chainId}-${a}`] = await (await fetch(`${s.url}/read/${chainId}/${a}`)).json();
+  const ready = await fetch(`${s.url}/ready/head`);
+  const bad = [];
+  for (const query of ["limit=0", "limit=501", "limit=x", "before=not-a-cursor", "before=MS4yLjM"]) {
+    const r = await fetch(`${s.url}/feed?${query}`);
+    bad.push({ query, status: r.status, body: await r.text() });
+  }
+  feeds[chainId] = { pages: await feedPages(s.url, 37), ready: { status: ready.status, body: await ready.text() }, bad };
   return s;
 }
 
@@ -257,6 +282,79 @@ describe("GET /read: <field>Utc beside every epoch (R-S205-5)", () => {
     };
     for (const r of Object.values(reads)) walk(r.facts, false);
     console.log(`R-S205-5: ${seen} epoch fields checked in the served /read facts`);
+  });
+});
+
+describe.each([42161, 8453] as const)("GET /feed and GET /ready/head, chain %i (R-S213-1, S213 B1)", (chainId) => {
+  const t = () => runs[chainId]!.tables;
+  const f = () => feeds[chainId]!;
+  const items = () => f().pages.flatMap((p) => p.items);
+
+  it("/ready/head is 200 with an empty body once a bounded index has reached its end block", () => {
+    expect(f().ready).toEqual({ status: 200, body: "" });
+  });
+
+  it("a bad limit or cursor is a 400 with an error, never a page", () => {
+    for (const b of f().bad) {
+      expect(b.status, b.query).toBe(400);
+      expect(JSON.parse(b.body), b.query).toHaveProperty("error");
+    }
+  });
+
+  it("pages walk the window newest first with no gap or repeat; every page names asOfBlock for the chain", () => {
+    for (const p of f().pages) {
+      expect(p.asOfBlock).toEqual({ [String(chainId)]: String(WINDOWS[chainId].to) });
+      expect(p.items.length).toBeLessThanOrEqual(37);
+    }
+    const key = (i: any) => [BigInt(i.timestamp), i.chainId, BigInt(i.block), i.logIndex, ["account", "grant", "payment"].indexOf(i.kind)];
+    const all = items();
+    for (let k = 1; k < all.length; k++) {
+      const a = key(all[k - 1]);
+      const b = key(all[k]);
+      const j = a.findIndex((x, n) => x !== b[n]);
+      expect(j, `items ${k - 1} and ${k} share a key`).toBeGreaterThanOrEqual(0);
+      expect(a[j]! > b[j]!, `item ${k} is not older than item ${k - 1}`).toBe(true);
+    }
+  });
+
+  it("one item per spend permission or delegation (grant) and per payment, each from the tables; payments cite both halves", () => {
+    const all = items();
+    const grants = all.filter((i) => i.kind === "grant");
+    const payments = all.filter((i) => i.kind === "payment");
+    expect(all.filter((i) => i.kind === "account")).toEqual([]); // external sources only: no NablaZ record
+    expect(grants.length).toBe(t().external_permissions.length);
+    expect(payments.length).toBe(t().external_payments.length);
+    expect(payments.length).toBeGreaterThan(0);
+    const perms = new Map(t().external_permissions.map((r) => [String(r.id), r]));
+    for (const p of payments) {
+      const row = t().external_payments.find((r) => r.tx_hash === p.citations[1].tx && Number(r.log_index) === p.citations[1].logIndex)!;
+      expect(row, JSON.stringify(p)).toBeDefined();
+      expect(p.source).toBe(row.source === "spm" ? "coinbase:spend_permission_payment" : "metamask:delegation_payment");
+      expect(p.subject).toBe(lc(row.payer));
+      expect(p.citations.map((c: any) => c.role)).toEqual(["authorization", "settlement"]);
+      const perm = perms.get(`${chainId}-${row.source === "spm" ? "spm" : "dm"}-${lc(row.permission_id)}`);
+      if (perm) expect(p.citations[0]).toEqual({ role: "authorization", block: String(perm.block_number), tx: perm.tx_hash, logIndex: Number(perm.log_index) });
+      else expect(p.citations[0]).toEqual({ role: "authorization", notDeterminable: "not determinable: authorization not indexed" });
+    }
+    for (const g of grants) expect(["coinbase:spend_permission", "metamask:delegation"]).toContain(g.source);
+    for (const i of all) {
+      expect(i.timestampUtc).toBe(utcOf(i.timestamp));
+      expect(i.chainId).toBe(chainId);
+    }
+  });
+
+  it("no amount field and no count or total anywhere in the response", () => {
+    const keys = new Set<string>();
+    const walk = (o: unknown): void => {
+      if (Array.isArray(o)) return o.forEach(walk);
+      if (o === null || typeof o !== "object") return;
+      for (const [k, v] of Object.entries(o)) {
+        keys.add(k);
+        walk(v);
+      }
+    };
+    walk(f().pages);
+    for (const k of keys) expect(k, k).not.toMatch(/amount|value|principal|fee|count|total|sum|share/i);
   });
 });
 

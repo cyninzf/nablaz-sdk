@@ -1,0 +1,207 @@
+{
+  "subject": "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c",
+  "chainId": 42161,
+  "asOfBlock": "523296543",
+  "facts": [
+    {
+      "source": "nablaz:record",
+      "label": "(a) within mandate by construction",
+      "shape": "a",
+      "terms": {
+        "kindName": "ACCOUNT_OPENED",
+        "kind": "0x1f828b65dd015ab1431956b1b504d45f89fa9e677e4978f494cd2f30afadb357",
+        "writer": "0x8e65fa412e14c1859a9a278fdefde89a3c15b11c",
+        "writerAuth": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "counterparty": "0x0000000000000000000000000000000000000000",
+        "counterpartyAuth": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "policyHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "policyVersion": "0",
+        "asset": "0x0000000000000000000000000000000000000000",
+        "amount": "0",
+        "obligationRef": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "seq": "0"
+      },
+      "cite": {
+        "chainId": 42161,
+        "block": "517860375",
+        "tx": "0xa19707042ac0618cf675f29f200db116f24db0809d3ed60df9453f31e4c1609e",
+        "logIndex": 9
+      },
+      "reproduce": "cast logs --rpc-url \"$ARB_ONE_RPC_URL\" --from-block 516635327 --address 0x80E937f9DEf48060308Ee00EC279d8448d4775b0 \"RecordEntry(address indexed subject,bytes32 indexed kind,address indexed writer,bytes32 writerAuth,address counterparty,bytes32 counterpartyAuth,bytes32 policyHash,uint32 policyVersion,address asset,uint256 amount,bytes32 amountCommitment,bytes32 obligationRef,bytes32 source,uint64 time,uint64 seq)\" 0x8e65fa412e14c1859a9a278fdefde89a3c15b11c"
+    },
+    {
+      "source": "nablaz:record",
+      "label": "(a) within mandate by construction",
+      "shape": "a",
+      "terms": {
+        "kindName": "GRANT_SET",
+        "kind": "0xc3614105222c21f89722bcfd686df1b0f5e6e8dc0a5b015244577d91e7a4e897",
+        "writer": "0x8e65fa412e14c1859a9a278fdefde89a3c15b11c",
+        "writerAuth": "0xefc5e61448596750c570eac19e80354a2671c1ae063b963ed1db28fa3ab4be8f",
+        "counterparty": "0xcc885831ef9b284e7d5f199a6f4f72d290cc0243",
+        "counterpartyAuth": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "policyHash": "0xc7aee531f26e452e6fad63955c709b98b7bb42d3dea6b93beab3e83d9cc0b352",
+        "policyVersion": "1",
+        "asset": "0x0000000000000000000000000000000000000000",
+        "amount": "0",
+        "obligationRef": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "seq": "1"
+      },
+      "cite": {
+        "chainId": 42161,
+        "block": "518233095",
+        "tx": "0xadb3b33420ece48b4c53705d8e468ecdd9c6e01446aed92ef87434bd7cb68a4c",
+        "logIndex": 1
+      },
+      "reproduce": "cast logs --rpc-url \"$ARB_ONE_RPC_URL\" --from-block 516635327 --address 0x80E937f9DEf48060308Ee00EC279d8448d4775b0 \"RecordEntry(address indexed subject,bytes32 indexed kind,address indexed writer,bytes32 writerAuth,address counterparty,bytes32 counterpartyAuth,bytes32 policyHash,uint32 policyVersion,address asset,uint256 amount,bytes32 amountCommitment,bytes32 obligationRef,bytes32 source,uint64 time,uint64 seq)\" 0x8e65fa412e14c1859a9a278fdefde89a3c15b11c"
+    },
+    {
+      "source": "nablaz:record",
+      "label": "(a) within mandate by construction",
+      "shape": "a",
+      "terms": {
+        "kindName": "PAY_AUTHORIZED",
+        "kind": "0x604a58844babe53cf1e855e7018f7962b8519d87906f1b1741e62da6f3c7a3e7",
+        "writer": "0x8e65fa412e14c1859a9a278fdefde89a3c15b11c",
+        "writerAuth": "0xefc5e61448596750c570eac19e80354a2671c1ae063b963ed1db28fa3ab4be8f",
+        "counterparty": "0xcc885831ef9b284e7d5f199a6f4f72d290cc0243",
+        "counterpartyAuth": "0x00000000000000000000000046414cfb3f27735f2a9824abfb63699bf80ed001",
+        "policyHash": "0xc7aee531f26e452e6fad63955c709b98b7bb42d3dea6b93beab3e83d9cc0b352",
+        "policyVersion": "1",
+        "asset": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+        "amount": "2000000",
+        "obligationRef": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "seq": "2"
+      },
+      "cite": {
+        "chainId": 42161,
+        "block": "518233895",
+        "tx": "0x6f5abcb1ab381d5adfcabd8385eb134a80bbdd3e2b5f8175969f6cc8b9e57602",
+        "logIndex": 6
+      },
+      "reproduce": "cast logs --rpc-url \"$ARB_ONE_RPC_URL\" --from-block 516635327 --address 0x80E937f9DEf48060308Ee00EC279d8448d4775b0 \"RecordEntry(address indexed subject,bytes32 indexed kind,address indexed writer,bytes32 writerAuth,address counterparty,bytes32 counterpartyAuth,bytes32 policyHash,uint32 policyVersion,address asset,uint256 amount,bytes32 amountCommitment,bytes32 obligationRef,bytes32 source,uint64 time,uint64 seq)\" 0x8e65fa412e14c1859a9a278fdefde89a3c15b11c"
+    },
+    {
+      "source": "nablaz:vault_payment",
+      "label": "(a) within mandate by construction",
+      "shape": "a",
+      "terms": {
+        "vault": "0x46414cfb3f27735f2a9824abfb63699bf80ed001",
+        "payee": "0x1633647e98534880807a4ea19862b9bb47a00645",
+        "value": "10000",
+        "token": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+        "nonce": "0x8ea09dae8e888968066f475b19edeca496ae6dd9db9ce14d63dae57a1b27c0ac",
+        "submitter": "0x8f5cb67b49555e614892b7233cfddebfb746e531",
+        "transferLogIndex": 1,
+        "authorization": {
+          "grantIdFromLogs": "0xefc5e61448596750c570eac19e80354a2671c1ae063b963ed1db28fa3ab4be8f",
+          "fundingEntryId": "42161-0x6f5abcb1ab381d5adfcabd8385eb134a80bbdd3e2b5f8175969f6cc8b9e57602-6",
+          "policyHash": "0xc7aee531f26e452e6fad63955c709b98b7bb42d3dea6b93beab3e83d9cc0b352",
+          "policyVersion": "1",
+          "envelopeStatus": "determinate",
+          "envelopeGrantId": "0xefc5e61448596750c570eac19e80354a2671c1ae063b963ed1db28fa3ab4be8f",
+          "envelopeExpiry": "1793491200",
+          "envelopeExpiryUtc": "2026-11-01T00:00:00Z",
+          "grantMatchesEnvelope": true
+        },
+        "counts": {
+          "settlements": 1,
+          "settlementOrdinalInTx": 0,
+          "settlementsInTx": 1,
+          "calls": null,
+          "callsStatus": "not determinable: no RecordEntry for the account in this settlement's tx carries a voucher-set root"
+        }
+      },
+      "cite": {
+        "chainId": 42161,
+        "block": "518234369",
+        "tx": "0x0ce09b201fd76ec8b439a23ef71b2204996c6ec57381d64495d77d7afb643ee0",
+        "logIndex": 0
+      },
+      "reproduce": "cast logs --rpc-url \"$ARB_ONE_RPC_URL\" --from-block 516635327 --address 0xaf88d065e77c8cC2239327C5EDb3A432268e5831 \"AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)\" 0x46414cfb3f27735f2a9824abfb63699bf80ed001\ncast receipt 0x0ce09b201fd76ec8b439a23ef71b2204996c6ec57381d64495d77d7afb643ee0 --rpc-url \"$ARB_ONE_RPC_URL\" --json | jq -r --arg v \"$(cast abi-encode 'f(address)' 0x46414cfb3f27735f2a9824abfb63699bf80ed001)\" '.logs[] | select(.topics[0] == \"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\" and .topics[1] == $v) | [.address, .topics[2], .data] | @tsv'"
+    },
+    {
+      "source": "nablaz:record",
+      "label": "(a) within mandate by construction",
+      "shape": "a",
+      "terms": {
+        "kindName": "VAULT_SWEPT",
+        "kind": "0x3599ffd82aa835758e2b8494f57806fcfb0bc363f126ef9a8d70711b69f68081",
+        "writer": "0x8e65fa412e14c1859a9a278fdefde89a3c15b11c",
+        "writerAuth": "0xefc5e61448596750c570eac19e80354a2671c1ae063b963ed1db28fa3ab4be8f",
+        "counterparty": "0x46414cfb3f27735f2a9824abfb63699bf80ed001",
+        "counterpartyAuth": "0x2c2ed5dd86fb43ad5766dcfa4e33aaf46c79270badcd0d3a429c08741b69c8fa",
+        "policyHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "policyVersion": "0",
+        "asset": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+        "amount": "1990000",
+        "obligationRef": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "seq": "3"
+      },
+      "cite": {
+        "chainId": 42161,
+        "block": "521815869",
+        "tx": "0x1b88a09c0d83385a67c37919e67d5118917710b9f9d74561d37e969e1bb3e2a3",
+        "logIndex": 30
+      },
+      "reproduce": "cast logs --rpc-url \"$ARB_ONE_RPC_URL\" --from-block 516635327 --address 0x80E937f9DEf48060308Ee00EC279d8448d4775b0 \"RecordEntry(address indexed subject,bytes32 indexed kind,address indexed writer,bytes32 writerAuth,address counterparty,bytes32 counterpartyAuth,bytes32 policyHash,uint32 policyVersion,address asset,uint256 amount,bytes32 amountCommitment,bytes32 obligationRef,bytes32 source,uint64 time,uint64 seq)\" 0x8e65fa412e14c1859a9a278fdefde89a3c15b11c"
+    }
+  ],
+  "selfDealing": {
+    "distinctCounterparties": 1,
+    "settlements": 1,
+    "controller": "0x8A6cec15736F3072Db75514815F7470f64dF0100",
+    "shareToSameController": {
+      "0xaf88d065e77c8cc2239327c5edb3a432268e5831": {
+        "value": "0",
+        "total": "10000",
+        "share": 0
+      }
+    },
+    "shareToCounterpartiesWithoutRecord": {
+      "0xaf88d065e77c8cc2239327c5edb3a432268e5831": {
+        "value": "10000",
+        "total": "10000",
+        "share": 1
+      }
+    },
+    "sentence": "A payee controlled by the same person under another key cannot be detected from chain data."
+  },
+  "exposure": {
+    "computable": true,
+    "asOfBlock": "523296543",
+    "grants": [
+      {
+        "grantId": "0xefc5e61448596750c570eac19e80354a2671c1ae063b963ed1db28fa3ab4be8f",
+        "token": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "minRemainingOverWindows": "1990000",
+        "vault": "0x46414CFb3F27735F2a9824abfb63699bF80ed001",
+        "vaultBalance": "0",
+        "exposure": "1990000"
+      }
+    ],
+    "outstandingAuthorizations": "Outstanding authorizations can exist. Each one is bounded by the vault balance and expires at its own validBefore. Unsettled authorizations are not observable onchain."
+  },
+  "cShare": {
+    "chainId": 42161,
+    "asOfBlock": "523296543",
+    "byToken": {
+      "0xaf88d065e77c8cC2239327C5EDb3A432268e5831": {
+        "count": {
+          "c": 0,
+          "total": 1
+        },
+        "value": {
+          "c": "0",
+          "total": "10000"
+        }
+      }
+    }
+  },
+  "notes": [
+    "SpendPermissionManager permissions and spends for this address: nothing indexed (blocks 283144909..523296543)",
+    "DelegationManager redemptions naming this address: nothing indexed (blocks 320575464..523296543)",
+    "no Agent Credit Lines lender registered on this chain",
+    "ERC-8004 feedback about those agentIds: nothing indexed (blocks 428895450..523296543)"
+  ]
+}

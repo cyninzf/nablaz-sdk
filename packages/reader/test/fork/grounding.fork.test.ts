@@ -84,6 +84,9 @@ let read: any;
 const S = {} as { A: Address; agentId: bigint; agentId2: bigint; grantId: Hex; vault: Address; feedbackTx: Record<string, Hex>; settleTx: Hex; plainTx: Hex; ownerPayTx: Hex; endBlock: number };
 let body2: string;
 let read2: any;
+/** GET /read of the NablaZ account A, and GET /feed over the whole window (R-S213-1), while served. */
+let readA: any;
+let feed: any;
 
 const send = async (from: Address | PrivateKeyAccount, to: Address, data: Hex) => {
   const r = await pub.waitForTransactionReceipt({ hash: await wallet.sendTransaction({ account: from, to, data, chain: arbitrum }) });
@@ -181,6 +184,8 @@ beforeAll(async () => {
   read = JSON.parse(body);
   body2 = await (await fetch(`${served.url}/read/42161/${laterOwner.address}`)).text();
   read2 = JSON.parse(body2);
+  readA = await (await fetch(`${served.url}/read/42161/${S.A}`)).json();
+  feed = await (await fetch(`${served.url}/feed?limit=500`)).json();
 }, 1_200_000);
 
 afterAll(async () => {
@@ -190,6 +195,38 @@ afterAll(async () => {
 
 const grounding = () => read.facts.filter((f: any) => f.source === "erc8004:feedback_grounding");
 const byTx = (tx: Hex) => grounding().find((f: any) => f.cite.tx === tx);
+
+describe("GET /feed over the NablaZ scenario (R-S213-1)", () => {
+  const ofA = () => feed.items.filter((i: any) => i.subject === S.A.toLowerCase());
+  it("A's first appearance is its ACCOUNT_OPENED entry, and its GRANT_SET is a grant, each citing its own record log", () => {
+    const record = (kindName: string) => readA.facts.find((f: any) => f.source === "nablaz:record" && f.terms.kindName === kindName);
+    for (const [kind, kindName] of [["account", "ACCOUNT_OPENED"], ["grant", "GRANT_SET"]] as const) {
+      const fact = record(kindName);
+      expect(fact, kindName).toBeDefined();
+      const items = ofA().filter((i: any) => i.kind === kind);
+      expect(items, kind).toHaveLength(1);
+      expect(items[0]).toMatchObject({ chainId: 42161, source: "nablaz:record", block: fact.cite.block, logIndex: fact.cite.logIndex });
+      expect(items[0].citations).toEqual([{ role: "entry", block: fact.cite.block, tx: fact.cite.tx, logIndex: fact.cite.logIndex }]);
+    }
+  });
+
+  it("A's vault payment is one item: the PAIR, its PAY_AUTHORIZED entry and its USDC settlement, both cited (R-S187-1)", () => {
+    const pays = ofA().filter((i: any) => i.kind === "payment");
+    expect(pays).toHaveLength(1);
+    const p = pays[0];
+    const settlement = readA.facts.find((f: any) => f.source === "nablaz:vault_payment");
+    const reservation = readA.facts.find((f: any) => f.source === "nablaz:record" && f.terms.kindName === "PAY_AUTHORIZED");
+    expect(p.source).toBe("nablaz:vault_payment");
+    expect(p.citations).toEqual([
+      { role: "authorization", block: reservation.cite.block, tx: reservation.cite.tx, logIndex: reservation.cite.logIndex },
+      { role: "settlement", block: settlement.cite.block, tx: S.settleTx, logIndex: settlement.cite.logIndex },
+    ]);
+    expect([p.block, p.logIndex]).toEqual([settlement.cite.block, settlement.cite.logIndex]);
+    expect(p.timestampUtc).toBe(utcOf(p.timestamp));
+    expect(JSON.stringify(feed)).not.toMatch(/"(amount|value|count|total)"/i);
+    expect(feed.asOfBlock).toEqual({ "42161": String(S.endBlock) });
+  });
+});
 
 describe("feedback grounding on an Arbitrum fork (R-S191-11, R-S191-12, R-S191-16)", () => {
   it("one grounding fact per feedback about W's agentId, each the rater's attestation (e)", () => {

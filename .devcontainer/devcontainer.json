@@ -1,11 +1,18 @@
 {
   "name": "nablaz-sdk",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
-  "remoteEnv": { "PATH": "${containerEnv:PATH}:/home/node/.foundry/bin" },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/node/.foundry/bin"
+  },
   "customizations": {
     "codespaces": {
       "repositories": {
-        "cyninzf/nablaz-protocol": { "permissions": { "contents": "read" } }
+        "cyninzf/nablaz-protocol": {
+          "permissions": {
+            "contents": "read"
+          }
+        }
       }
     }
   }

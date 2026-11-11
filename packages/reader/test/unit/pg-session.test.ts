@@ -30,3 +30,41 @@ describe("session memory settings (R-S212-4)", () => {
     expect(cfg.database).toEqual({ kind: "pglite", directory: "/tmp/x" });
   });
 });
+
+// S213 B3: Ponder's readonly pool (the API's /read and /feed queries) runs SET work_mem = '512MB' after connecting,
+// which overrode the 16MB above for that pool. patches/ponder@0.18.6.patch sets it to 16MB. The patch is pinned to
+// 0.18.6: this test fails on any other Ponder version, so an upgrade re-proves the patch before it ships.
+describe("readonly pool work_mem (S213 B3, patches/ponder@0.18.6.patch)", () => {
+  it("the installed Ponder is 0.18.6, and its readonly pool sets work_mem 16MB on connect, never 512MB", async () => {
+    const { realpathSync, readFileSync } = await import("node:fs");
+    const { createRequire } = await import("node:module");
+    const { pathToFileURL } = await import("node:url");
+    const path = await import("node:path");
+    const dir = realpathSync(new URL("../../node_modules/ponder", import.meta.url));
+    expect(JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")).version).toBe("0.18.6");
+    const pg = createRequire(path.join(dir, "package.json"))("pg");
+    const sent: string[] = [];
+    const connect = vi.spyOn(pg.Client.prototype, "connect").mockImplementation(function (cb?: (e?: Error) => void) {
+      return cb ? void cb() : Promise.resolve();
+    } as never);
+    const query = vi.spyOn(pg.Client.prototype, "query").mockImplementation(function (sql: string, cb?: (e?: Error) => void) {
+      sent.push(String(sql));
+      return cb ? void cb() : Promise.resolve({ rows: [] });
+    } as never);
+    try {
+      const { createReadonlyPool } = await import(pathToFileURL(path.join(dir, "dist/esm/utils/pg.js")).href);
+      const logger = { warn() {}, error() {}, info() {}, debug() {}, trace() {} };
+      const pool = createReadonlyPool({ max: 1 }, logger, "reader");
+      const client = await pool.connect();
+      client.release();
+      await pool.end();
+      const setup = sent.join("\n");
+      expect(setup).toContain("SET work_mem = '16MB';");
+      expect(setup).not.toContain("512MB");
+      expect(setup).toContain("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;");
+    } finally {
+      connect.mockRestore();
+      query.mockRestore();
+    }
+  });
+});
