@@ -86,8 +86,9 @@ export function readServer(opts: ReadServerOptions = {}): McpServer {
       const url = new URL(`/read/${chainId}/${encodeURIComponent(address)}`, base);
       const readiness = await readerReadiness(base, get);
       if (readiness === "unreachable") return { isError: true, content: [{ type: "text", text: "the reader did not answer" }] };
-      // R-S202-4: not ready is the same {"ready":false} as /read's 503, never an empty record.
-      if (readiness === "not ready") return { isError: true, content: [{ type: "text", text: `GET ${url.pathname}: HTTP 503` }, { type: "text", text: NOT_READY_BODY }] };
+      // R-S202-4: not ready is the same {"ready":false} as /read's 503, never an empty record. The literal is in the
+      // error text itself too (S213-SE7), so the signal is byte-identical on both doors.
+      if (readiness === "not ready") return { isError: true, content: [{ type: "text", text: `GET ${url.pathname}: HTTP 503 ${NOT_READY_BODY}` }, { type: "text", text: NOT_READY_BODY }] };
       let res: Response;
       try {
         res = await get(url);

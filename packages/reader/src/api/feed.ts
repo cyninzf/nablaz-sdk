@@ -25,6 +25,14 @@ export const FEED_MAX_LIMIT = 500;
 export const FEED_RECORD_KINDS = { ACCOUNT_OPENED: "account", GRANT_SET: "grant" } as const;
 export const AUTHORIZATION_NOT_INDEXED = `${NOT_DETERMINABLE}: authorization not indexed`;
 
+/**
+ * S213-SE7: the feed is OFF unless FEED_ENV is exactly "on". Its queries need an index on the block ordering that the
+ * schema does not have yet (it lands at the next schema deploy); until then every /feed request answers 503
+ * {"ready":false} at once and issues no database statement (R-S202-4's logic: the door is not ready).
+ */
+export const FEED_ENV = "NABLAZ_FEED";
+export const feedEnabled = (env: Record<string, string | undefined> = process.env) => env[FEED_ENV] === "on";
+
 export type FeedKind = "account" | "grant" | "payment";
 const KIND_RANK: Record<FeedKind, number> = { account: 0, grant: 1, payment: 2 };
 

@@ -168,7 +168,7 @@ describe("readiness gate (R-S202-4)", () => {
     hits.length = 0;
     let r = await client.callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
     expect(r.isError).toBe(true);
-    expect(texts(r)).toEqual([`GET /read/42161/${TEST}: HTTP 503`, `{"ready":false}`]);
+    expect(texts(r)).toEqual([`GET /read/42161/${TEST}: HTTP 503 {"ready":false}`, `{"ready":false}`]);
     for (const leak of ["facts", "asOfBlock", "as of block", "Historical"]) expect(JSON.stringify(r)).not.toContain(leak);
     expect(hits).toEqual([READY]);
     ready = 1;
@@ -179,8 +179,27 @@ describe("readiness gate (R-S202-4)", () => {
     expect(hits).toEqual([READY, `/read/42161/${TEST}`]);
   });
 
-  it("GET /feed: 503 {\"ready\":false} and the reader's /feed never called while not ready; once ready, relayed with its query, byte for byte", async () => {
+  it("GET /feed is off by default (S213-SE7): 503 {\"ready\":false} at once, ready or not, and the reader is never asked", async () => {
     const front = readHttpServer({ readerUrl });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
+    const port = (front.address() as { port: number }).port;
+    try {
+      for (const r0 of [1, 0]) {
+        ready = r0;
+        hits.length = 0;
+        for (const q of ["", "?limit=500", "?before=MTcwMC44NDUzLjEuMC4y", "?limit=x"]) {
+          const r = await fetch(`http://127.0.0.1:${port}/feed${q}`);
+          expect([r.status, r.headers.get("content-type"), await r.text()]).toEqual([503, "application/json", `{"ready":false}`]);
+        }
+        expect(hits).toEqual([]);
+      }
+    } finally {
+      await new Promise<void>((r) => front.close(() => r()));
+    }
+  });
+
+  it("GET /feed with feedEnabled: 503 {\"ready\":false} and the reader's /feed never called while not ready; once ready, relayed with its query, byte for byte", async () => {
+    const front = readHttpServer({ readerUrl, feedEnabled: true });
     await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
     const url = `http://127.0.0.1:${(front.address() as { port: number }).port}/feed?limit=2&before=MTcwMC44NDUzLjEuMC4y`;
     try {
@@ -228,7 +247,7 @@ describe("readiness gate (R-S202-4)", () => {
       const h = await fetch(`http://127.0.0.1:${(front.address() as { port: number }).port}/read/42161/${TEST}`);
       expect([h.status, await h.text()]).toEqual([503, `{"ready":false}`]);
       const m = await (await connected(brokenUrl)).callTool({ name: READ_TOOL, arguments: { chainId: 42161, address: TEST } });
-      expect(texts(m)).toEqual([`GET /read/42161/${TEST}: HTTP 503`, `{"ready":false}`]);
+      expect(texts(m)).toEqual([`GET /read/42161/${TEST}: HTTP 503 {"ready":false}`, `{"ready":false}`]);
       for (const leak of ["/app/", "pg-pool", "statement timeout"]) expect(JSON.stringify(m)).not.toContain(leak);
       expect(log).toHaveBeenCalledWith(`reader 500 on GET /ready/head: ${UPSTREAM_500}`);
     } finally {
@@ -284,9 +303,13 @@ async function overStdio(readerUrl: string) {
 }
 
 /** Spawns main.ts --transport http on a free port; resolves once it logs the port it bound. */
-async function overHttp(readerUrl: string) {
+async function overHttp(readerUrl: string, feed?: string) {
+  const env = { ...process.env };
+  delete env.NABLAZ_FEED;
+  if (feed !== undefined) env.NABLAZ_FEED = feed;
   const child = spawn(process.execPath, [...NODE_ARGS, MAIN, "--transport", "http", "--port", "0", "--reader-url", readerUrl], {
     stdio: ["ignore", "ignore", "pipe"],
+    env,
   });
   const port = await new Promise<number>((resolve, reject) => {
     let err = "";
@@ -321,6 +344,30 @@ describe("entry points", () => {
       await http.stop();
     }
   }, 30_000);
+
+  it("NABLAZ_FEED=on, and only \"on\", serves GET /feed (S213-SE7); unset or anything else answers 503 {\"ready\":false} without asking the reader", async () => {
+    isReady = 1;
+    for (const feed of [undefined, "", "off", "true", "1", "ON"]) {
+      const http = await overHttp(base, feed);
+      try {
+        seen.length = 0;
+        const r = await fetch(`http://127.0.0.1:${http.port}/feed?limit=5`);
+        expect([r.status, await r.text()], String(feed)).toEqual([503, `{"ready":false}`]);
+        expect(seen, String(feed)).toEqual([]);
+      } finally {
+        await http.stop();
+      }
+    }
+    const on = await overHttp(base, "on");
+    try {
+      seen.length = 0;
+      const r = await fetch(`http://127.0.0.1:${on.port}/feed?limit=5`);
+      expect([r.status, await r.text()]).toEqual([200, FEED]);
+      expect(seen).toEqual([READY, "/feed?limit=5"]);
+    } finally {
+      await on.stop();
+    }
+  }, 60_000);
 
   it("HTTP relays a 2xx or 4xx GET /read unchanged (status, content type, body bytes): reader-authored answers", async () => {
     const http = await overHttp(base);
