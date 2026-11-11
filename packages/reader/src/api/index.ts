@@ -30,7 +30,7 @@ import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
 import { withUtc } from "./utc";
 import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
 import { boundedLag, chainLag, endBlockOf, headCache, type IndexedBlock } from "./head";
-import { FEED_RECORD_KINDS, externalPaymentItems, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
+import { FEED_RECORD_KINDS, externalPaymentItems, feedEnabled, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
 import { groundingClient, rpcMetricsText } from "../rpc";
 import {
@@ -161,6 +161,8 @@ app.get("/ready/head", async (c) => {
 
 // B2 (S213, R-S213-1): GET /feed, the Live Sky door (src/api/feed.ts). Existing tables only; no amounts, no counts.
 app.get("/feed", async (c) => {
+  // S213-SE7: gated off (feedEnabled, src/api/feed.ts) until its index ships; no statement is issued.
+  if (!feedEnabled()) return c.json({ ready: false }, 503);
   const q = parseFeedQuery(c.req.query("limit"), c.req.query("before"));
   if ("error" in q) return c.json({ error: q.error }, 400);
   const status = await indexedStatus(c.req.url);

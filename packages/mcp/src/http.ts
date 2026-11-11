@@ -3,7 +3,8 @@
 // /read/:chainId/:address, GET /feed and GET /ready: relayed to the reader, so the reader itself need not be public; a
 // reader-authored answer unchanged (status, content type, body bytes), a 5xx with a fixed body (relay below). GET /read
 // and GET /feed answer 503 {"ready":false} with nothing read until the reader's readiness is 200 (R-S202-4, the check
-// shared with the MCP tool). GET /ready is the reader's /ready/head (S213 B1): 200 only when the index is ready AND
+// shared with the MCP tool). GET /feed is OFF unless feedEnabled (NABLAZ_FEED=on, S213-SE7): off, it answers 503
+// {"ready":false} at once, with no readiness check and nothing relayed, until the index its queries need ships. GET /ready is the reader's /ready/head (S213 B1): 200 only when the index is ready AND
 // current with both chain heads. GET /live: 200 when the front is up and the reader process runs
 // (by PID when readerPid is set, off the reader's event loop; else its /health answers), 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
@@ -44,7 +45,15 @@ export type HttpServerOptions = ReadServerOptions & {
    * (R-S194-15). Unset: /live asks the reader's /health.
    */
   readerPid?: number;
+  /**
+   * GET /feed is served (S213-SE7). Default false: every /feed request answers 503 {"ready":false} at once and the
+   * reader is not asked. main.ts sets it from FEED_ENV ("on" only), the variable the reader's own /feed reads.
+   */
+  feedEnabled?: boolean;
 };
+
+/** The variable that turns GET /feed on, here and in the reader (packages/reader/src/api/feed.ts). */
+export const FEED_ENV = "NABLAZ_FEED";
 
 /** The rate-limit key: the named header's value when one is named and present, else the socket peer. */
 export function clientIp(req: IncomingMessage, clientIpHeader?: string): string {
@@ -138,6 +147,7 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
     if (req.method === "GET" && path === REGISTRATION_PATH) return res.writeHead(200, { "content-type": "application/json" }).end(REGISTRATION_FILE);
     if (req.method === "GET" && path === FAVICON_PATH) return res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=31536000, immutable" }).end(FAVICON_PNG);
     if (req.method === "GET" && READ_PATH.test(path)) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, path, opts.fetch ?? fetch);
+    if (req.method === "GET" && path === FEED_PATH && !opts.feedEnabled) return notReady(res);
     if (req.method === "GET" && path === FEED_PATH) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, `${path}${url.search}`, opts.fetch ?? fetch);
     if (req.method === "GET" && path === "/ready") return relay(res, opts.readerUrl ?? DEFAULT_READER_URL, READER_READY_PATH, opts.fetch ?? fetch);
     if (path !== MCP_PATH) return plain(res, 404, "not found\n");

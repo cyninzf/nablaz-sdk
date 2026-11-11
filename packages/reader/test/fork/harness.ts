@@ -154,6 +154,8 @@ export async function indexOnce(opts: IndexOpts): Promise<IndexRun | Served> {
     READER_CHAINS: opts.chains ?? "42161",
     READER_SOURCES: opts.sources ?? "nabla",
     PONDER_TELEMETRY_DISABLED: "true",
+    // S213-SE7: /feed is off unless NABLAZ_FEED=on; the fork legs serve it on, the query code the schema deploy lights.
+    NABLAZ_FEED: "on",
   };
   if (opts.rpcUrl) env[ARB_RPC_ENV] = env[ARB_GROUNDING_ENV] = opts.rpcUrl;
   if (opts.baseRpcUrl) env[BASE_RPC_ENV] = env[BASE_GROUNDING_ENV] = opts.baseRpcUrl;

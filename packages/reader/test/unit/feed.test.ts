@@ -5,10 +5,12 @@ import { describe, expect, it } from "vitest";
 import {
   AUTHORIZATION_NOT_INDEXED,
   FEED_DEFAULT_LIMIT,
+  FEED_ENV,
   FEED_MAX_LIMIT,
   decodeCursor,
   encodeCursor,
   externalPaymentItems,
+  feedEnabled,
   keyOf,
   page,
   parseFeedQuery,
@@ -30,6 +32,23 @@ const record = (kindName: string, b: number, l: number, ts: number) => ({
 const vpay = (b: number, l: number, ts: number, fundingEntryId: string | null) => ({ id: `v-${b}`, ...ev(42161, b, l, ts), account: A, vault: "0x01", payee: "0x02", value: 9n, token: "0x03", nonce: "0x", submitter: "0x04", transferLogIndex: l + 1, fundingEntryId, settlements: 1, settlementOrdinalInTx: 0, settlementsInTx: 1, calls: null, callsStatus: "x" });
 const perm = (source: "spm" | "delegation_manager", pid: string, b: number, l: number, ts: number) => ({ id: `8453-${source === "spm" ? "spm" : "dm"}-${pid}`, ...ev(8453, b, l, ts), source, subject: A, grantee: "0x05", permissionId: pid, shape: "a", label: "(a) allowance, per period", terms: {}, status: "approved", useCount: 3 });
 const xpay = (source: "spm" | "delegation_manager", pid: string | null, b: number, l: number, ts: number) => ({ id: `x-${b}-${l}`, ...ev(8453, b, l, ts), source, payer: A, payee: "0x06", token: "0x07", amount: 11n, permissionId: pid, redemptionTx: null, redemptionLogIndex: null });
+
+describe("gate (S213-SE7)", () => {
+  it("off unless NABLAZ_FEED is exactly \"on\"", () => {
+    expect(FEED_ENV).toBe("NABLAZ_FEED");
+    expect(feedEnabled({})).toBe(false);
+    for (const v of ["", "off", "true", "1", "ON", " on"]) expect(feedEnabled({ NABLAZ_FEED: v }), v).toBe(false);
+    expect(feedEnabled({ NABLAZ_FEED: "on" })).toBe(true);
+  });
+
+  it("the route answers 503 {\"ready\":false} before any query when off", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../../src/api/index.ts", import.meta.url), "utf8");
+    const route = src.slice(src.indexOf('app.get("/feed"'));
+    const firstLine = route.split("\n").slice(1).find((l) => !l.trim().startsWith("//"))!;
+    expect(firstLine.trim()).toBe("if (!feedEnabled()) return c.json({ ready: false }, 503);");
+  });
+});
 
 describe("query", () => {
   it("limit defaults to 100, at most 500, an integer from 1", () => {
