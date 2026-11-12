@@ -2,8 +2,11 @@ import { index, onchainTable, type PgColumnsBuilders } from "ponder";
 
 // Every row carries chainId, block, tx hash, log index and the command that reproduces it. Rows hold
 // facts and counts only.
-// byBlock (R-S214-5, the S213 schema event): (chain_id, block_number, log_index) on the four tables GET /feed reads
-// (src/api/feed.ts); /feed stays off (NABLAZ_FEED) until a plain EXPLAIN shows these used (S213-L1).
+// feed (R-S215-4, amending R-S213-6): (block_timestamp, chain_id, block_number, log_index), ascending, on the four
+// tables GET /feed reads (src/api/feed.ts); its ORDER BY is that key descending, so the index is read backward.
+// Explicit names under 63 characters (Ponder's derived names would be truncated). No partial or kind_name index: a
+// partial index would hard-code the feed kinds; revisit if the records page measures above 50 ms in production.
+// /feed stays off (NABLAZ_FEED) until a plain EXPLAIN shows these used (S213-L1).
 
 const evidence = (t: PgColumnsBuilders) => ({
   chainId: t.integer().notNull(),
@@ -44,7 +47,7 @@ export const recordEntries = onchainTable(
     /** tx.from of the transaction that carried the entry. */
     submitter: t.hex().notNull(),
   }),
-  (t) => ({ bySubject: index().on(t.chainId, t.subject, t.seq), byBlock: index().on(t.chainId, t.blockNumber, t.logIndex) }),
+  (t) => ({ bySubject: index().on(t.chainId, t.subject, t.seq), feed: index("record_entries_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex) }),
 );
 
 /** OBLIGATION_OPENED / REPAY / OBLIGATION_CLOSED, one row per entry, grouped by obligationRef. */
@@ -168,7 +171,7 @@ export const vaultPayments = onchainTable(
     calls: t.bigint(),
     callsStatus: t.text().notNull(),
   }),
-  (t) => ({ byAccount: index().on(t.chainId, t.account), byBlock: index().on(t.chainId, t.blockNumber, t.logIndex) }),
+  (t) => ({ byAccount: index().on(t.chainId, t.account), feed: index("vault_payments_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex) }),
 );
 
 /** Implementation per account: ERC-1967 Upgraded on the proxy and the record's IMPLEMENTATION_CHANGED. */
@@ -234,7 +237,7 @@ export const externalPermissions = onchainTable(
   (t) => ({
     bySubject: index().on(t.chainId, t.subject),
     byGrantee: index().on(t.chainId, t.grantee),
-    byBlock: index().on(t.chainId, t.blockNumber, t.logIndex),
+    feed: index("external_permissions_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex),
   }),
 );
 
@@ -257,7 +260,7 @@ export const externalPayments = onchainTable(
   (t) => ({
     byPayer: index().on(t.chainId, t.payer),
     byPayee: index().on(t.chainId, t.payee),
-    byBlock: index().on(t.chainId, t.blockNumber, t.logIndex),
+    feed: index("external_payments_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex),
   }),
 );
 

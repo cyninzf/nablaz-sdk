@@ -110,8 +110,9 @@ Recorded ids (`_ponder_meta`, `key = 'app'`, read S206):
 ### Schema event deploy (R-S214-5, R-S213-6)
 
 The schema event (`reader: schema event — feed indexes, AFG mint-block skip, Base comment, lineage CI, runbook`)
-adds the `byBlock` index `(chain_id, block_number, log_index)` on `record_entries`, `external_permissions`,
-`vault_payments` and `external_payments` (GET /feed's tables, S213-L1). It changes `ponder.schema.ts` and
+adds the feed index `(block_timestamp, chain_id, block_number, log_index)` (R-S215-4: ascending, read backward by
+GET /feed's descending ORDER BY) as `record_entries_feed`, `external_permissions_feed`, `vault_payments_feed` and
+`external_payments_feed` (GET /feed's tables, S213-L1). It changes `ponder.schema.ts` and
 `src/grounding-rpc.ts`, so the build id moves off `a1cb6b1278` (the PR records the new id, computed with
 `scripts/bid.mjs`): it cannot resume the live schema, and it is a full reindex into the new image's own schema.
 It deploys only on the CTO's timing word (expected after the ~Nov 27 Chainstack reset), never with a merge.
@@ -126,12 +127,12 @@ It deploys only on the CTO's timing word (expected after the ~Nov 27 Chainstack 
 3. Deploy WITHOUT the `READER_SCHEMA` override (the plain command under Deploys). The override is for an
    unchanged build id only; with this image it crash-loops ("previously used by a different Ponder app").
 4. Ponder-ready timestamp, from the stream, in order (Ponder 0.18.6 `runtime/multichain.js`): `Completed backfill
-   indexing across all chains`; `Created database indexes` with `count` 18 (14 before this event, plus the four
-   `byBlock`); `Created database views` (schema `reader`), immediately before `is_ready` is set. Record the
+   indexing across all chains`; `Created database indexes` with `count` 24 (20 before this event, plus the four
+   `*_feed`); `Created database views` (schema `reader`), immediately before `is_ready` is set. Record the
    timestamp of each, then the first public `/ready` 200 (the head gate, B1, may hold it a little after).
 5. S213-L1 on production rows, before any flip: from an ephemeral console (above), plain `EXPLAIN` of each of the
-   four GET /feed queries (`src/api/index.ts`, `/feed`) in the new schema. Each plan must use its table's
-   `*_chain_id_block_number_log_index_index`; any `Seq Scan` stops the flip and is reported. The PR records the
+   four GET /feed queries (`src/api/index.ts`, `/feed`) in the new schema. Each plan must be an index scan on its table's
+   `*_feed` index; any `Seq Scan` stops the flip and is reported. The PR records the
    synthetic-row plans this gate repeats.
 6. Deploy-day flag flip, only after step 5 passes and on the word: `NABLAZ_FEED=on`, exactly `on` (the reader and
    the front both test `=== "on"`; `true` or `1` leaves /feed off), as a Fly secret:

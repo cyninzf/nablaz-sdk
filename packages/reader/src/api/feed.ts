@@ -26,8 +26,9 @@ export const FEED_RECORD_KINDS = { ACCOUNT_OPENED: "account", GRANT_SET: "grant"
 export const AUTHORIZATION_NOT_INDEXED = `${NOT_DETERMINABLE}: authorization not indexed`;
 
 /**
- * S213-SE7: the feed is OFF unless FEED_ENV is exactly "on". Its queries need an index on the block ordering that the
- * schema does not have yet (it lands at the next schema deploy); until then every /feed request answers 503
+ * S213-SE7: the feed is OFF unless FEED_ENV is exactly "on". Its queries need the *_feed index
+ * (block_timestamp, chain_id, block_number, log_index; R-S215-4) that the live schema does not have yet (it lands at
+ * the next schema deploy); until then every /feed request answers 503
  * {"ready":false} at once and issues no database statement (R-S202-4's logic: the door is not ready).
  */
 export const FEED_ENV = "NABLAZ_FEED";
