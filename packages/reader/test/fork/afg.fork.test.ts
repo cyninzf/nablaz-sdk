@@ -7,6 +7,10 @@
 // come from decoding the grounding transaction (SpendPermissionUsed; a delegator's Transfer beside a
 // RedeemedDelegation); any other transfer is (c), direct transfer. The comparison is written to
 // docs/reader/afg-agreement-2026-10-20.csv (AFG_WRITE=1, replacing it) and otherwise must equal it.
+// R-S214-5 (S213 A2): binding reads before the identity's mint block skip ownerOf (src/grounding-rpc.ts bindingAt).
+// The CSV equality above shows the skip changes no result; the second test re-reads skipped (agentId, block) pairs
+// without the mint block, the pre-S214 path, and requires the same binding, "none" (a spread sample; every pair with
+// AFG_VERIFY_SKIP=all).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -14,7 +18,7 @@ import { createPublicClient, decodeEventLog, getAddress, http, type Address, typ
 import { CHAINS } from "../../src/chains";
 import { decodeRedeemedDelegation, delegationHash, erc20TransfersFrom, type Delegation, type ReceiptLogLike } from "../../src/delegation";
 import { ReputationRegistryAbi, SpendPermissionManagerAbi } from "../../src/external-abis";
-import { bindingAt, bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
+import { bindingAt, bindingsAtTransferBlocks, boundHistoryAndMint, transfersFrom, walletAt } from "../../src/grounding-rpc";
 import { SPM_LABEL, shapeOfDelegation } from "../../src/labels";
 import { groundingFact, groundingTransfers, paymentFacts, type GroundingPayment, type LabelledPayment, type RaterTransfer } from "../../src/read";
 import { UPSTREAM_BASE } from "./harness";
@@ -132,6 +136,9 @@ async function labelsIn(tx: Hex, transfers: RaterTransfer[]): Promise<LabelledPa
   return out;
 }
 
+/** (agentId, block) pairs whose ownerOf the mint block skipped (R-S214-5). */
+const skipped = new Map<string, { agentId: bigint; block: bigint }>();
+
 type Result = { ours: string; ourPaymentTx: string; label: string; binding: string; walletAtFeedback: string; reason: string };
 
 async function evaluate(row: Row): Promise<Result> {
@@ -144,8 +151,9 @@ async function evaluate(row: Row): Promise<Result> {
   if (fb.agentId.toString() !== row.agent_id || lc(fb.clientAddress) !== lc(row.rater)) return { ours: "not determinable", ...none, reason: "the feedback log does not match the row's agent_id and rater" };
   const block = log.blockNumber!;
   const prior = (await transfersOf(row.rater)).filter((t) => t.block <= block);
-  const history = await boundHistory(client, BASE.IdentityRegistry!, fb.agentId, IDENTITY_START, block);
-  const bindings = await bindingsAtTransferBlocks(client, BASE.IdentityRegistry!, fb.agentId, prior, history);
+  const { bound: history, mintBlock } = await boundHistoryAndMint(client, BASE.IdentityRegistry!, fb.agentId, IDENTITY_START, block);
+  for (const t of prior) if (mintBlock !== null && t.block < mintBlock && history.has(lc(t.to))) skipped.set(`${fb.agentId}:${t.block}`, { agentId: fb.agentId, block: t.block });
+  const bindings = await bindingsAtTransferBlocks(client, BASE.IdentityRegistry!, fb.agentId, prior, history, mintBlock);
   const candidateTxs = [...new Set(prior.filter((t) => { const b = bindings(t.block); return b && b.kind !== "none" && lc(b.address) === lc(t.to); }).map((t) => t.tx))];
   const labelled = (await Promise.all(candidateTxs.map((h) => labelsIn(h, prior)))).flat();
   const g = groundingFact({
@@ -164,7 +172,8 @@ async function evaluate(row: Row): Promise<Result> {
   // Not grounded: say what the chain shows about AFG's payee at AFG's payment block.
   const payee = row.payee.split(":").at(-1)!;
   const afgPay = (await receipt(row.payment_tx)).logs[0]?.blockNumber;
-  const at = afgPay ? await bindingAt(client, BASE.IdentityRegistry!, fb.agentId, afgPay) : null;
+  if (afgPay !== undefined && afgPay !== null && mintBlock !== null && afgPay < mintBlock) skipped.set(`${fb.agentId}:${afgPay}`, { agentId: fb.agentId, block: afgPay });
+  const at = afgPay ? await bindingAt(client, BASE.IdentityRegistry!, fb.agentId, afgPay, mintBlock) : null;
   const atText = !at ? "unread" : at.kind === "none" ? "identity did not exist" : `${at.kind} ${at.address}`;
   if (t.reason === "identity did not exist at the payment block") return { ours: t.grounding, ...base, reason: `identity did not exist at the payment block (AFG's payee ${history.has(lc(payee)) ? "was bound to it later" : "was never bound to it"})` };
   if (at && at.kind !== "none" && lc(at.address) === lc(payee)) return { ours: t.grounding, ...base, reason: `AFG's payee was bound at its payment block (${atText}), yet no rater Transfer to it was found before the feedback` };
@@ -201,5 +210,15 @@ describe("AFG fixture (Base, 816 grounded feedback entries)", () => {
     for (const [k, v] of byReason) console.log(`  disagreement x${v}: ${k}`);
     if (process.env.AFG_WRITE) writeFileSync(RESULT, csv);
     expect(csv).toBe(readFileSync(RESULT, "utf8"));
+  }, 1_200_000);
+
+  it("every ownerOf the mint block skipped would have answered the same binding, none (R-S214-5)", async () => {
+    const pairs = [...skipped.values()].sort((a, b) => (a.agentId === b.agentId ? Number(a.block - b.block) : Number(a.agentId - b.agentId)));
+    const SAMPLE = 60;
+    const checked = process.env.AFG_VERIFY_SKIP === "all" || pairs.length <= SAMPLE ? pairs : Array.from({ length: SAMPLE }, (_, i) => pairs[Math.floor((i * pairs.length) / SAMPLE)]!);
+    console.log(`AFG mint-block skip: ${pairs.length} (agentId, block) binding reads skipped ownerOf; ${checked.length} re-read without the skip`);
+    expect(pairs.length).toBeGreaterThan(0);
+    const reread = await pool(checked, 8, (p) => bindingAt(client, BASE.IdentityRegistry!, p.agentId, p.block));
+    reread.forEach((b, i) => expect(b, `agentId ${checked[i]!.agentId} at block ${checked[i]!.block}`).toEqual({ kind: "none" }));
   }, 1_200_000);
 });

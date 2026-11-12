@@ -17,6 +17,7 @@ set in `fly.toml`.
 | `MCP_CLIENT_IP_HEADER` | `Fly-Client-IP`, the client-IP header Fly's edge sets |
 | `DATABASE_URL` | set by `fly mpg attach nablaz-reader-db -a nablaz-reader`, not in `fly.toml` |
 | `MCP_RATE_LIMIT_PER_MIN` | optional, default 60 |
+| `NABLAZ_FEED` | unset (GET /feed off). `on` is a deploy-day flip, below; never a default in code or `fly.toml` |
 
 The first five are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
 `FLY_IMAGE_REF` is set by Fly. Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES`,
@@ -105,6 +106,39 @@ Recorded ids (`_ponder_meta`, `key = 'app'`, read S206):
 - `deployment-01m6p05twt15f0pb31gr64t2p3` (live until the R-S206-3 reindex): `77bb04f918`, indexed by `4088e055`
   (S203 deploy).
 - `deployment-01m6kzw3gbywjjj45zej11n81k` (fallback): `f5d3ef1e89`, indexed by `ea1461ce` (S201 deploy).
+
+### Schema event deploy (R-S214-5, R-S213-6)
+
+The schema event (`reader: schema event — feed indexes, AFG mint-block skip, Base comment, lineage CI, runbook`)
+adds the `byBlock` index `(chain_id, block_number, log_index)` on `record_entries`, `external_permissions`,
+`vault_payments` and `external_payments` (GET /feed's tables, S213-L1). It changes `ponder.schema.ts` and
+`src/grounding-rpc.ts`, so the build id moves off `a1cb6b1278` (the PR records the new id, computed with
+`scripts/bid.mjs`): it cannot resume the live schema, and it is a full reindex into the new image's own schema.
+It deploys only on the CTO's timing word (expected after the ~Nov 27 Chainstack reset), never with a merge.
+
+1. Budget: a full reindex, ~10M RPC calls (R-S214-5), all behind the 503 gate: `/ready`, `/read`, `/feed` and the
+   MCP tool answer 503 `{"ready":false}` until the new schema is ready. The duration is computed at dispatch as
+   under Deploys, not carried. The Sentry `/ready` monitor fires during the window: expected.
+2. Logs for the ENTIRE window (S213-L7): start a streaming `~/.fly/bin/flyctl logs -a nablaz-reader` in the
+   background, writing to a file, BEFORE the deploy command, and stop it only after step 4. Never `--no-tail`
+   here: it returns 100 lines, about 10 s while Ponder indexes, and the S213-SE9 ready line had rotated out before
+   `/ready` went public. Mask URLs before printing any line.
+3. Deploy WITHOUT the `READER_SCHEMA` override (the plain command under Deploys). The override is for an
+   unchanged build id only; with this image it crash-loops ("previously used by a different Ponder app").
+4. Ponder-ready timestamp, from the stream, in order (Ponder 0.18.6 `runtime/multichain.js`): `Completed backfill
+   indexing across all chains`; `Created database indexes` with `count` 18 (14 before this event, plus the four
+   `byBlock`); `Created database views` (schema `reader`), immediately before `is_ready` is set. Record the
+   timestamp of each, then the first public `/ready` 200 (the head gate, B1, may hold it a little after).
+5. S213-L1 on production rows, before any flip: from an ephemeral console (above), plain `EXPLAIN` of each of the
+   four GET /feed queries (`src/api/index.ts`, `/feed`) in the new schema. Each plan must use its table's
+   `*_chain_id_block_number_log_index_index`; any `Seq Scan` stops the flip and is reported. The PR records the
+   synthetic-row plans this gate repeats.
+6. Deploy-day flag flip, only after step 5 passes and on the word: `NABLAZ_FEED=on`, exactly `on` (the reader and
+   the front both test `=== "on"`; `true` or `1` leaves /feed off), as a Fly secret:
+   `~/.fly/bin/flyctl secrets set NABLAZ_FEED=on -a nablaz-reader < /dev/null`. Setting a secret restarts the
+   machine on the same image and schema: about 13 min of `/ready` 503 again (Timings on record), so stream logs
+   through it as in step 2. Off again: `~/.fly/bin/flyctl secrets unset NABLAZ_FEED -a nablaz-reader < /dev/null`.
+7. Afterwards: the replaced schema is kept as the fallback and dropped only under R-S208-1's two gates.
 
 ## Health: /live and /ready
 
@@ -414,7 +448,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 
 | Default | Value | Set or accepted |
 | --- | --- | --- |
-| Ponder `pollingInterval` | 1000 ms | Set for Base (2000 ms, `ponder.config.ts`); accepted for Arbitrum: Ponder fetches every new block there, so a longer interval saves no calls (S192 measurement). |
+| Ponder `pollingInterval` | 1000 ms | Set for Base (2000 ms, `ponder.config.ts`; a polling interval, not Base's block time, which is ~0.2 s: S213 A1); accepted for Arbitrum: Ponder fetches every new block there, so a longer interval saves no calls (S192 measurement). |
 | Ponder `ethGetLogsBlockRange` | unset | Accepted: per chain, it would cap the Alchemy leg too; the Chainstack cap (10,000 blocks) is held in `src/rpc.ts`. |
 | Ponder per-request transport options | `retryCount: 0`, `timeout: 10_000` | Accepted: Ponder retries and load-balances itself (`ponder/dist/esm/rpc/index.js`). |
 | viem `maxResponseBodySize` | 10,485,760 | Set to 32 MiB on every leg (R-S197-7). |
@@ -427,6 +461,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 | Fly autostop | Fly's, not relied on | Set: `auto_stop_machines = false`, `min_machines_running = 1`. |
 | Front rate limit | 60 per IP per minute | Set: `DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`. |
 | Front relay fetch timeout | none | Accepted: a hung reader holds that request's socket only; the per-IP limit bounds how many one client can hold, and `/live` no longer calls the reader. |
+| GET /feed | off (`NABLAZ_FEED` unset) | Set: off in code (`feedEnabled`, S213-SE7); `on` only as the deploy-day flip of the schema event, above. |
 
 ## Deployment schemas (row J)
 
