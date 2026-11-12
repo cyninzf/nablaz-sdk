@@ -109,13 +109,13 @@ Recorded ids (`_ponder_meta`, `key = 'app'`, read S206):
 
 ### Schema event deploy (R-S214-5, R-S213-6)
 
-The schema event (`reader: schema event — feed indexes, AFG mint-block skip, Base comment, lineage CI, runbook`)
+The schema event (`reader: schema event — feed indexes, AFG mint-block skip, Base comment, runbook`)
 adds the feed index `(block_timestamp, chain_id, block_number, log_index)` (R-S215-4: ascending, read backward by
 GET /feed's descending ORDER BY) as `record_entries_feed`, `external_permissions_feed`, `vault_payments_feed` and
 `external_payments_feed` (GET /feed's tables, S213-L1). It changes `ponder.schema.ts` and
 `src/grounding-rpc.ts`, so the build id moves off `a1cb6b1278` (the PR records the new id, computed with
 `scripts/bid.mjs`): it cannot resume the live schema, and it is a full reindex into the new image's own schema.
-It deploys only on the CTO's timing word (expected after the ~Nov 27 Chainstack reset), never with a merge.
+It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh session, on the founder's word), never with a merge.
 
 1. Budget: a full reindex, ~10M RPC calls (R-S214-5), all behind the 503 gate: `/ready`, `/read`, `/feed` and the
    MCP tool answer 503 `{"ready":false}` until the new schema is ready. The duration is computed at dispatch as
