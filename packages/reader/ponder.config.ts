@@ -11,8 +11,9 @@ import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi }
 // Optional overrides, used by the tests: READER_START_BLOCK, READER_END_BLOCK, READER_PGLITE_DIR,
 // READER_CHAINS (chain ids, comma-separated), READER_SOURCES ("nabla", "external" or both, comma-separated),
 // READER_EXTERNAL_FROM (src/chains.ts).
-// RPC: two URLs per chain, routed by src/rpc.ts (R-S192-8). Base polls every 2 s; Arbitrum keeps Ponder's 1 s
-// default, since Ponder fetches every new block individually there and a longer interval saves no calls.
+// RPC: two URLs per chain, routed by src/rpc.ts (R-S192-8). Base polls every 2 s (POLLING_MS), a polling interval,
+// not Base's block time: that is ~0.2 s as measured (S213 A1), so one poll spans ~10 Base blocks. Arbitrum keeps
+// Ponder's 1 s default, since Ponder fetches every new block individually there and a longer interval saves no calls.
 // Database: Postgres when DATABASE_URL is set (the hosted instance), else PGlite. On Postgres, every connection
 // Ponder opens sets its own session memory at startup (R-S212-4), never the cluster's configuration (R-S204-2):
 // the index rebuild a resume runs is where the 1 GB database ran out of memory (S211). The startup parameter

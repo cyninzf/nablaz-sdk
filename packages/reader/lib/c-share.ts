@@ -10,6 +10,9 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAddress, type Address } from "viem";
 
+// These two queries scan by design (R-S215-4): a whole-range monthly report, and the schema carries no block-range
+// index on external_payments or vault_payments.
+
 /** External payments with their permission's shape: the same join GET /read makes (src/read.ts paymentFacts). */
 export const EXTERNAL_PAYMENTS_SQL = `SELECT p.token, p.amount::text AS amount, perm.shape
 FROM reader.external_payments p

@@ -73,22 +73,48 @@ export async function walletAt(client: PublicClient, registry: Address, agentId:
   return w === ZERO ? null : getAddress(w);
 }
 
+/**
+ * Every address that has owned `agentId` up to `toBlock` (the Identity Registry's ERC-721 Transfer, topic3), and
+ * the identity's mint block: the first of those Transfers from the zero address in [fromBlock, toBlock], or null when
+ * none is in the range (then nothing is known about blocks before it).
+ */
+export async function ownerHistoryAndMint(
+  client: PublicClient,
+  registry: Address,
+  agentId: bigint,
+  fromBlock: bigint,
+  toBlock: bigint,
+): Promise<{ owners: Set<string>; mintBlock: bigint | null }> {
+  const logs = await getLogsSplit(client, { address: registry, topics: [TRANSFER_TOPIC, null, null, pad32(`0x${agentId.toString(16)}`)] }, fromBlock, toBlock);
+  const owners = new Set<string>();
+  let mintBlock: bigint | null = null;
+  for (const l of logs) {
+    if (l.topics.length !== 4) continue;
+    owners.add(`0x${l.topics[2]!.slice(26)}`.toLowerCase());
+    const b = hexToBigInt(l.blockNumber);
+    if (`0x${l.topics[1]!.slice(26)}`.toLowerCase() === ZERO && (mintBlock === null || b < mintBlock)) mintBlock = b;
+  }
+  owners.delete(ZERO);
+  return { owners, mintBlock };
+}
+
 /** Every address that has owned `agentId` up to `toBlock` (the Identity Registry's ERC-721 Transfer, topic3). */
 export async function ownerHistory(client: PublicClient, registry: Address, agentId: bigint, fromBlock: bigint, toBlock: bigint): Promise<Set<string>> {
-  const logs = await getLogsSplit(client, { address: registry, topics: [TRANSFER_TOPIC, null, null, pad32(`0x${agentId.toString(16)}`)] }, fromBlock, toBlock);
-  const out = new Set<string>();
-  for (const l of logs) if (l.topics.length === 4) out.add(`0x${l.topics[2]!.slice(26)}`.toLowerCase());
-  out.delete(ZERO);
-  return out;
+  return (await ownerHistoryAndMint(client, registry, agentId, fromBlock, toBlock)).owners;
 }
 
 /**
  * R-S191-16 at one block: getAgentWallet, else ownerOf; "none" when ownerOf reverts with the registry's
  * ERC721NonexistentToken (the identity did not exist). Any other failure is thrown: a read that cannot be made.
+ * `mintBlock` (R-S214-5, S213 A2): the identity's mint block when known. Before it the identity did not exist, so
+ * ownerOf there can only revert with ERC721NonexistentToken; that call is not issued and the binding is "none", the
+ * answer the revert gives. getAgentWallet is still read first, as at every block. At and after the mint block, and
+ * whenever it is unknown (null/undefined), nothing changes.
  */
-export async function bindingAt(client: PublicClient, registry: Address, agentId: bigint, blockNumber: bigint): Promise<Binding> {
+export async function bindingAt(client: PublicClient, registry: Address, agentId: bigint, blockNumber: bigint, mintBlock?: bigint | null): Promise<Binding> {
   const wallet = await walletAt(client, registry, agentId, blockNumber);
   if (wallet) return { kind: "agentWallet", address: wallet };
+  if (mintBlock != null && blockNumber < mintBlock) return { kind: "none" };
   try {
     const owner = await client.readContract({ address: registry, abi: ownerOfAbi, functionName: "ownerOf", args: [agentId], blockNumber });
     return { kind: "owner", address: getAddress(owner) };
@@ -101,15 +127,30 @@ export async function bindingAt(client: PublicClient, registry: Address, agentId
   }
 }
 
+/**
+ * Every address the agentId has been bound to up to `toBlock` (its agentWallet history and its owner history), and
+ * its mint block from the same owner logs (ownerHistoryAndMint): no extra RPC call.
+ */
+export async function boundHistoryAndMint(
+  client: PublicClient,
+  registry: Address,
+  agentId: bigint,
+  fromBlock: bigint,
+  toBlock: bigint,
+): Promise<{ bound: Set<string>; mintBlock: bigint | null }> {
+  const [w, o] = await Promise.all([agentWalletHistory(client, registry, agentId, fromBlock, toBlock), ownerHistoryAndMint(client, registry, agentId, fromBlock, toBlock)]);
+  return { bound: new Set([...w, ...o.owners]), mintBlock: o.mintBlock };
+}
+
 /** Every address the agentId has been bound to up to `toBlock`: its agentWallet history and its owner history. */
 export async function boundHistory(client: PublicClient, registry: Address, agentId: bigint, fromBlock: bigint, toBlock: bigint): Promise<Set<string>> {
-  const [w, o] = await Promise.all([agentWalletHistory(client, registry, agentId, fromBlock, toBlock), ownerHistory(client, registry, agentId, fromBlock, toBlock)]);
-  return new Set([...w, ...o]);
+  return (await boundHistoryAndMint(client, registry, agentId, fromBlock, toBlock)).bound;
 }
 
 /**
  * The binding at each candidate transfer's own block, for transfers whose recipient is in `candidates`. Returns
- * the lookup groundingTransfers takes; a block with no candidate transfer reads as undefined.
+ * the lookup groundingTransfers takes; a block with no candidate transfer reads as undefined. `mintBlock`: as
+ * bindingAt (boundHistoryAndMint gives it).
  */
 export async function bindingsAtTransferBlocks(
   client: PublicClient,
@@ -117,11 +158,12 @@ export async function bindingsAtTransferBlocks(
   agentId: bigint,
   transfers: RaterTransfer[],
   candidates: Set<string>,
+  mintBlock?: bigint | null,
 ): Promise<(block: bigint) => Binding | undefined> {
   const at = new Map<bigint, Binding>();
   for (const t of transfers) {
     if (!candidates.has(t.to.toLowerCase()) || at.has(t.block)) continue;
-    at.set(t.block, await bindingAt(client, registry, agentId, t.block));
+    at.set(t.block, await bindingAt(client, registry, agentId, t.block, mintBlock));
   }
   return (block) => at.get(block);
 }

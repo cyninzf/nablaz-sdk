@@ -31,7 +31,7 @@ import { withUtc } from "./utc";
 import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
 import { boundedLag, chainLag, endBlockOf, headCache, type IndexedBlock } from "./head";
 import { FEED_RECORD_KINDS, externalPaymentItems, feedEnabled, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
-import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../grounding-rpc";
+import { bindingsAtTransferBlocks, boundHistoryAndMint, transfersFrom, walletAt } from "../grounding-rpc";
 import { groundingClient, rpcMetricsText } from "../rpc";
 import {
   FEEDBACK_URI_NOT_READ,
@@ -421,8 +421,9 @@ app.get("/read/:chainId/:address", async (c) => {
       else {
         try {
           const prior = data.transfers.filter((t) => t.block <= f.blockNumber);
-          const candidates = await boundHistory(grounding, registry, f.agentId, BigInt(transfersFromBlock), f.blockNumber);
-          payments = groundingTransfers(prior, await bindingsAtTransferBlocks(grounding, registry, f.agentId, prior, candidates), data.labelled);
+          // R-S214-5: the mint block skips the ownerOf calls that can only revert (src/grounding-rpc.ts bindingAt).
+          const { bound: candidates, mintBlock } = await boundHistoryAndMint(grounding, registry, f.agentId, BigInt(transfersFromBlock), f.blockNumber);
+          payments = groundingTransfers(prior, await bindingsAtTransferBlocks(grounding, registry, f.agentId, prior, candidates, mintBlock), data.labelled);
         } catch (e) {
           payments = { error: String((e as Error).message ?? e).split("\n")[0]! };
         }
