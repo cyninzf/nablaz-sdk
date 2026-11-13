@@ -196,9 +196,13 @@ TEST-account read, against the baseline pinned in `packages/reader/test/fixtures
 (its five facts by source, block, logIndex and tx, and the two live check 2 txs). From the repo root:
 
 ```
-curl -s https://read.nablaz.io/read/42161/0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c > /tmp/test-read.json
+curl -s -H 'x-nablaz-caller: fixture' https://read.nablaz.io/read/42161/0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c > /tmp/test-read.json
 cd packages/reader && BASELINE_READ=/tmp/test-read.json npx vitest run --project unit test/unit/test-account-baseline.test.ts
 ```
+
+The `x-nablaz-caller` header marks the read as ours for the outside-read instrument (P-GTM-4, below). This form
+sends `fixture`. A CTO probe sends `cto`, an SE probe `se`, and a probe or watcher script `watcher`. With node
+fetch, as in the Codespace: `fetch(url, { headers: { "x-nablaz-caller": "se" } })`.
 
 The test passes only when the read's facts equal the baseline exactly. Without `BASELINE_READ` that case reads the
 committed capture `packages/reader/test/fixtures/test-account-read.json` (S213 A3), so it runs in every `pnpm test`
@@ -266,6 +270,28 @@ rebuild. Notes:
   per chain and leg `nablaz_rpc_requests_total`, `nablaz_rpc_errors_total`, `nablaz_rpc_rate_limited_total`,
   `nablaz_rpc_rate_limited_recent` (1 for 60 s after a 429), `nablaz_rpc_last_error_timestamp_seconds` and
   `nablaz_rpc_last_rate_limited_timestamp_seconds`. Counters start at 0 on each start. The front never relays it.
+- Outside-read instrument (P-GTM-4, R-S214-11, R-S217-7). Every request at the two read doors, GET /read and
+  /mcp, gets a caller class in the front (`packages/mcp/src/caller.ts`), at request time, from its headers:
+  1. `x-nablaz-caller` when the value is exactly one of `fixture`, `ci`, `watcher`, `cto`, `site` or `se`; any
+     other value is ignored.
+  2. Otherwise `ingester` when the user-agent contains a pattern in `packages/mcp/src/caller-ua.json`. That list
+     is empty at first. An entry is added only from a user-agent seen in the log lines below, never guessed.
+  3. Otherwise `unclassified`.
+- What the instrument records:
+  - The front logs one line per door request: `caller {"t","door","class","status","ua"}`. The user-agent is cut
+    to 160 characters, and the line carries no IP.
+  - `/metrics/reader` adds `nablaz_door_requests_total{door,class,stage}`. Stage `attempt` counts read attempts.
+    Stage `served` counts reads the reader answered 200.
+  - The front passes the class to the reader as the internal headers `x-nablaz-door` and `x-nablaz-class`, on its
+    own loopback fetches only. A caller's copy of those headers is never forwarded.
+- Population, stated before any number: the counters cover read attempts and reads served at both doors. MCP
+  discovery calls (initialize, tools/list) and 429s appear only in the front's log lines. Until the site's proxy
+  sends `x-nablaz-caller: site` (a later web PR), site reads sit in `unclassified`.
+- Counters start at 0 on every start, so a monthly reading is a scrape at each end of the window, with any reset
+  acknowledged.
+- Classes are internal bookkeeping. No class or count goes into a public answer or into public copy, and a class
+  labels a caller of the doors, never a subject of the record.
+- A spoofed `x-nablaz-caller` can only undercount outside reads, which raises the human gate earlier, never later.
 
 ## Operator method
 
