@@ -28,6 +28,7 @@ import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
 import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
 import { withUtc } from "./utc";
+import { CLASS_HEADER, DOOR_HEADER, countDoor, doorMetricsText } from "./callers";
 import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
 import { boundedLag, chainLag, endBlockOf, headCache, type IndexedBlock } from "./head";
 import { FEED_RECORD_KINDS, externalPaymentItems, feedEnabled, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
@@ -140,12 +141,16 @@ async function nablaLabelOf(client: PublicClient, chain: EnabledChain & { nabla:
 
 // Row E: the RPC legs' counters (src/rpc.ts), Prometheus text, beside Ponder's own /metrics. The reader listens on
 // 127.0.0.1 only and the front relays /read, /feed and /ready (as /ready/head) alone, so this is never public.
-app.get("/metrics/reader", (c) => c.text(rpcMetricsText(), 200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" }));
+// P-GTM-4 (R-S217-7): followed by nablaz_door_requests_total, read attempts and reads served at both public doors by
+// caller class (src/api/callers.ts); MCP discovery calls and 429s are not in it (the front's log lines only).
+app.get("/metrics/reader", (c) => c.text(rpcMetricsText() + doorMetricsText(), 200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" }));
 
 // B1 (S213): readiness with the head gate. 200 (empty body, as Ponder's /ready) only when Ponder's /ready is 200 and
 // every enabled chain's indexed block is current with its head (src/api/head.ts); 503 otherwise. Loopback only: the
 // front relays it as the public /ready and maps the 503 to {"ready":false}.
 app.get("/ready/head", async (c) => {
+  // P-GTM-4: one read attempt at a door when the front tagged this check (src/api/callers.ts); in memory, no I/O.
+  countDoor("attempt", c.req.header(DOOR_HEADER), c.req.header(CLASS_HEADER));
   const ponderReady = await fetch(new URL("/ready", c.req.url));
   if (ponderReady.status !== 200) return c.text("Historical indexing is not complete.", 503);
   const status = await indexedStatus(c.req.url);
@@ -203,6 +208,12 @@ app.get("/feed", async (c) => {
   );
   const asOfBlock = Object.fromEntries(chains.map((ch) => [String(ch.chainId), asOf.get(ch.chainId)!.toString()]));
   return c.body(json({ asOfBlock, items, nextBefore: next }), 200, { "content-type": "application/json" });
+});
+
+// P-GTM-4: a read served at a door, counted after the answer when it is a 200 the front tagged (src/api/callers.ts).
+app.use("/read/:chainId/:address", async (c, next) => {
+  await next();
+  if (c.res.status === 200) countDoor("served", c.req.header(DOOR_HEADER), c.req.header(CLASS_HEADER));
 });
 
 app.get("/read/:chainId/:address", async (c) => {

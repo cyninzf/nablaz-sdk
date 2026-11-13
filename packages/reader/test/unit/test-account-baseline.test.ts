@@ -1,11 +1,13 @@
 // The TEST account's baseline (S211): its five facts pinned by (source, block, logIndex) and tx, plus the two live
 // check 2 txs (the PAY_AUTHORIZED reservation and its settlement). A post-incident check is mechanical:
-//   curl -s https://read.nablaz.io/read/42161/0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c > /tmp/test-read.json
+//   curl -s -H 'x-nablaz-caller: fixture' https://read.nablaz.io/read/42161/0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c > /tmp/test-read.json
 //   cd packages/reader && BASELINE_READ=/tmp/test-read.json npx vitest run --project unit test/unit/test-account-baseline.test.ts
 // Without BASELINE_READ the case reads test/fixtures/test-account-read.json, a GET /read of the TEST account captured
 // from https://read.nablaz.io on 2026-11-11 (S213 A3, asOfBlock 523296543): the guard always runs, in a Codespace and
 // in CI, and never skips. BASELINE_READ names a fresh capture instead (the post-incident rider); a path that cannot
-// be read fails the case. Test-only: nothing here is in Ponder's build id.
+// be read fails the case. Test-only: nothing here is in Ponder's build id. The x-nablaz-caller header marks the probe
+// as ours for the outside-read instrument (P-GTM-4, R-S217-7; docs/runbooks/hosted-read.md): fixture here; cto, se and
+// watcher for those callers.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
