@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:fork": "vitest run --project fork",
+    "test:monitor": "vitest run --project monitor",
     "report:c-share": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/c-share.ts",
     "estimate:backfill": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/estimate-backfill.ts"
   },

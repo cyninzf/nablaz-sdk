@@ -1,5 +1,6 @@
-// P-GTM-4, the outside-read instrument (R-S214-11, R-S217-7). The front sorts every request at the two public read
-// doors (HTTP GET /read and POST /mcp) into a caller class, at request time and from the request's own headers only:
+// P-GTM-4, the outside-read instrument (R-S214-11, R-S217-7, R-S221-5). The front sorts every request at the three
+// public read doors (HTTP GET /read, GET /feed and POST /mcp) into a caller class, at request time and from the
+// request's own headers only:
 //   1. x-nablaz-caller, when its value is exactly one of CALLER_VALUES (our own callers); any other value is ignored;
 //   2. else the user-agent, against the ingester rules in caller-ua.json (data, not code: registry ingesters and
 //      health checkers, each added only from a user-agent observed in the per-request log line, never guessed);
@@ -21,11 +22,11 @@ export type CallerClass = (typeof CALLER_VALUES)[number] | "ingester" | "unclass
 /** Every class the front can assign; the reader counts only these (packages/reader/src/api/callers.ts). */
 export const CALLER_CLASSES: readonly CallerClass[] = [...CALLER_VALUES, "ingester", "unclassified"];
 
-/** The two public read doors. */
-export type Door = "read" | "mcp";
-export const DOORS: readonly Door[] = ["read", "mcp"];
+/** The three public read doors (/feed since R-S221-5: public since the S221 flip, site traffic must be classifiable). */
+export type Door = "read" | "mcp" | "feed";
+export const DOORS: readonly Door[] = ["read", "mcp", "feed"];
 
-/** Internal headers on the front's loopback fetches to the reader (its readiness check and the /read relay). */
+/** Internal headers on the front's loopback fetches to the reader (its readiness check and the /read and /feed relays). */
 export const DOOR_HEADER = "x-nablaz-door";
 export const CLASS_HEADER = "x-nablaz-class";
 
@@ -50,10 +51,10 @@ export function classify(headers: IncomingHttpHeaders, rules: readonly UaRule[] 
 }
 
 /**
- * The door a request is at, or null (every other path, /feed and /ready included, is not a read door). The path is
+ * The door a request is at, or null (every other path, /ready and /live included, is not a read door). The path is
  * parsed exactly as the front's router parses it (new URL against a dummy base), so the two never disagree.
  */
-export function doorOf(method: string | undefined, rawUrl: string | undefined, readPath: RegExp, mcpPath: string): Door | null {
+export function doorOf(method: string | undefined, rawUrl: string | undefined, readPath: RegExp, mcpPath: string, feedPath: string): Door | null {
   let path: string;
   try {
     path = new URL(rawUrl ?? "/", "http://x").pathname;
@@ -61,6 +62,7 @@ export function doorOf(method: string | undefined, rawUrl: string | undefined, r
     return null;
   }
   if (method === "GET" && readPath.test(path)) return "read";
+  if (method === "GET" && path === feedPath) return "feed";
   if (path === mcpPath) return "mcp";
   return null;
 }

@@ -58,12 +58,12 @@ Timings on record (`/ready` 503 until the index is ready):
   `/ready` 503, `machine update` 20:54:02Z to first public `/ready` 200 at 21:23:18Z; `Created database indexes
   count=24 (22m 25s)` at 21:16:38Z, views 21:16:40Z, then 6m38s to `/ready` 200 (head gate). The earlier ~13 min
   (2026-11-04, 16:05:24Z to 16:18:15Z) was with 20 indexes.
-- Resume deploy (new image, `READER_SCHEMA` = the live schema): about 22 min of `/ready` 503 since the schema event
-  (24 indexes). A resume is not a quick restart: Ponder's crash recovery drops and rebuilds every user index of the
-  schema (below). Measured S217 (2026-11-13): a 16-min index rebuild (`Created database indexes` count 24, the four
-  `*_feed` on ~3.06M and ~1.81M rows included), then ~6 min of head-gate catch-up (inferred) before `/ready` 200.
-  The earlier ~13 min (three times: 2026-11-04, and two resumes on 2026-11-10) was with 20 indexes; it no longer
-  holds.
+- Resume deploy (new image, `READER_SCHEMA` = the live schema): no constant is carried (R-S221-6). A resume is not a
+  quick restart: Ponder's crash recovery drops and rebuilds every user index of the schema (below), and the window
+  grows with row count. Measured points, 24 indexes: S217 (2026-11-13, resume): ~22 min, a 16-min index rebuild
+  (the four `*_feed` on ~3.06M and ~1.81M rows included) then ~6 min of head-gate catch-up (inferred); S221
+  (2026-11-15, same-image `machine update`, the same crash recovery): 29m16s to public `/ready` 200, rebuild 22m25s.
+  Before the schema event (20 indexes): ~13 min, three times (2026-11-04, and two resumes on 2026-11-10).
 - Per-chain finality is read from the `Indexed` lines of the reader's log (`Indexed block chain=<name>
   number=<block>`), one chain per line.
 - New image, new schema (a full index from the RPC cache): no duration is carried (R-S208-1). It is computed at
@@ -90,7 +90,8 @@ variables are unchanged. The id Ponder recorded is in the schema's `_ponder_meta
 ```
 
 `scripts/reader-start.sh` then starts Ponder on `<schema>` instead of the image tag. A resume deploy still drops and
-rebuilds ALL user indexes of the schema: about 22 min not-ready (S217, 24 indexes; Timings on record). It keeps the rows, not the
+rebuilds ALL user indexes of the schema: S217 ~22 min, S221 29m16s to public 200 (rebuild 22m25s), growing with row count
+(Timings on record). It keeps the rows, not the
 indexes. Ponder rolls the tables back to the safe checkpoint (it drops the schema's indexes and reverts rows
 written after it, with `is_ready` back to 0), re-indexes the gap to the head, rebuilds the indexes, re-points the
 `reader` views and sets `is_ready`; `/read` answers 503 `{"ready":false}` until then (below). A mismatched build id crash-loops at start ("Schema … was
@@ -126,10 +127,13 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
 1. Budget: a full reindex, ~10M RPC calls (R-S214-5), all behind the 503 gate: `/ready`, `/read`, `/feed` and the
    MCP tool answer 503 `{"ready":false}` until the new schema is ready. The duration is computed at dispatch as
    under Deploys, not carried. The Sentry `/ready` monitor fires during the window: expected.
-2. Logs for the ENTIRE window (S213-L7): start a streaming `~/.fly/bin/flyctl logs -a nablaz-reader` in the
-   background, writing to a file, BEFORE the deploy command, and stop it only after step 4. Never `--no-tail`
-   here: it returns 100 lines, about 10 s while Ponder indexes, and the S213-SE9 ready line had rotated out before
-   `/ready` went public. Mask URLs before printing any line.
+2. Logs for the ENTIRE window (S213-L7, R-S221-6): start `node scripts/fly-log-poll.mjs <dir>` in the background
+   (`<dir>` outside `/tmp`, e.g. `~/captures/<session>`) BEFORE the deploy command, and stop it only after step 4.
+   It polls `flyctl logs --no-tail` every 5 s and appends each new line, deduplicated by the full line: URL-masked
+   lines to `<dir>/log.txt`, the front's caller lines unmasked to `<dir>/caller.log`. Not a streaming
+   `flyctl logs`: in S221 the stream stalled silently (alive, no lines, while `--no-tail` showed new ones). A single
+   `--no-tail` is not enough either: 100 lines, about 10 s while Ponder indexes, and the S213-SE9 ready line had
+   rotated out before `/ready` went public; the 5 s poll keeps about 2x margin. Mask URLs before printing any line.
 3. Deploy WITHOUT the `READER_SCHEMA` override (the plain command under Deploys). The override is for an
    unchanged build id only; with this image it crash-loops ("previously used by a different Ponder app").
 4. Ponder-ready timestamp, from the stream, in order (Ponder 0.18.6 `runtime/multichain.js`): `Completed backfill
@@ -229,9 +233,10 @@ This form is legitimate only when `bid.mjs` at the commit being deployed equals 
 deploy without `READER_SCHEMA` still indexes into the new image's own schema, a full reindex behind the 503 gate,
 whatever the build id.
 
-A resume is not free: a resume deploy still drops and rebuilds every user index of the schema (about 22 min
-not-ready since the schema event, S217: 16-min rebuild of 24 indexes plus ~6 min of head-gate catch-up, the
-catch-up inferred), once Ponder has caught up, behind the 503 gate. Before the schema event (20 indexes), measured on Nov 10 2026 (S211 resume of `dfbc509e`, 102MB `maintenance_work_mem`
+A resume is not free: a resume deploy still drops and rebuilds every user index of the schema, once Ponder has
+caught up, behind the 503 gate. Measured points, never a constant (R-S221-6): S217 ~22 min (16-min rebuild of 24
+indexes plus ~6 min of head-gate catch-up, the catch-up inferred); S221 29m16s to public 200 (rebuild 22m25s); the
+window grows with row count. Before the schema event (20 indexes), measured on Nov 10 2026 (S211 resume of `dfbc509e`, 102MB `maintenance_work_mem`
 and 2 parallel maintenance workers, the server's settings then): `/ready` answered 503 for 13m33s, of which
 `Created database indexes count=20` took 13m26s. With the session settings below (32MB, no workers) the rebuild
 was measured once (S212): the Nov 10 resume deploy rebuilt 20 indexes in 13m08s with database memory flat at
@@ -281,8 +286,8 @@ rebuild. Notes:
   per chain and leg `nablaz_rpc_requests_total`, `nablaz_rpc_errors_total`, `nablaz_rpc_rate_limited_total`,
   `nablaz_rpc_rate_limited_recent` (1 for 60 s after a 429), `nablaz_rpc_last_error_timestamp_seconds` and
   `nablaz_rpc_last_rate_limited_timestamp_seconds`. Counters start at 0 on each start. The front never relays it.
-- Outside-read instrument (P-GTM-4, R-S214-11, R-S217-7). Every request at the two read doors, GET /read and
-  /mcp, gets a caller class in the front (`packages/mcp/src/caller.ts`), at request time, from its headers:
+- Outside-read instrument (P-GTM-4, R-S214-11, R-S217-7, R-S221-5). Every request at the three read doors,
+  GET /read, GET /feed (since R-S221-5: public since the S221 flip) and /mcp, gets a caller class in the front (`packages/mcp/src/caller.ts`), at request time, from its headers:
   1. `x-nablaz-caller` when the value is exactly one of `fixture`, `ci`, `watcher`, `cto`, `site` or `se`; any
      other value is ignored.
   2. Otherwise `ingester` when the user-agent contains a pattern in `packages/mcp/src/caller-ua.json`. That list
@@ -292,12 +297,13 @@ rebuild. Notes:
   - The front logs one line per door request: `caller {"t","door","class","status","ua"}`. The user-agent is cut
     to 160 characters, and the line carries no IP.
   - `/metrics/reader` adds `nablaz_door_requests_total{door,class,stage}`. Stage `attempt` counts read attempts.
-    Stage `served` counts reads the reader answered 200.
+    Stage `served` counts reads (a `/read` answer or a `/feed` page) the reader answered 200.
   - The front passes the class to the reader as the internal headers `x-nablaz-door` and `x-nablaz-class`, on its
     own loopback fetches only. A caller's copy of those headers is never forwarded.
-- Population, stated before any number: the counters cover read attempts and reads served at both doors. MCP
-  discovery calls (initialize, tools/list) and 429s appear only in the front's log lines. Until the site's proxy
-  sends `x-nablaz-caller: site` (a later web PR), site reads sit in `unclassified`.
+- Population, stated before any number: the counters cover read attempts and reads served at the three doors. MCP
+  discovery calls (initialize, tools/list), 429s and a `/feed` answered 503 while `NABLAZ_FEED` is off appear only
+  in the front's log lines. Until the site's proxy (`/api/sky` for the feed) sends `x-nablaz-caller: site` (a later
+  web PR), site reads sit in `unclassified`.
 - Counters start at 0 on every start, so a monthly reading is a scrape at each end of the window, with any reset
   acknowledged.
 - Classes are internal bookkeeping. No class or count goes into a public answer or into public copy, and a class
@@ -418,7 +424,8 @@ plain node without `NODE_PATH`.
 ### Logs
 
 `~/.fly/bin/flyctl logs -a nablaz-reader --no-tail` returns the last 100 lines only (S200: 100 lines, about 18 s,
-both reads). It cannot reach an earlier day. Mask URLs before printing any line.
+both reads). It cannot reach an earlier day. Mask URLs before printing any line. For any window, capture with
+`scripts/fly-log-poll.mjs` (schema event, step 2), not a streaming `flyctl logs`, which can stall silently (S221).
 
 ### Restart policy and exit 75 (S196–S197 record)
 

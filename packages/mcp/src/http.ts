@@ -9,10 +9,10 @@
 // (by PID when readerPid is set, off the reader's event loop; else its /health answers), 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
 // overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint.
-// P-GTM-4 (R-S214-11, R-S217-7): every request at the two read doors (GET /read/*, /mcp) gets a caller class from its
-// own headers (caller.ts), in memory, before anything else; one log line per such request on stderr (door, class,
-// status, truncated user-agent, time; no IP); and the class rides the front's own loopback fetches to the reader (the
-// readiness check and the /read relay) as internal headers, which the reader counts on /metrics/reader. Nothing of it
+// P-GTM-4 (R-S214-11, R-S217-7, R-S221-5): every request at the three read doors (GET /read/*, GET /feed, /mcp) gets
+// a caller class from its own headers (caller.ts), in memory, before anything else; one log line per such request on
+// stderr (door, class, status, truncated user-agent, time; no IP); and the class rides the front's own loopback
+// fetches to the reader (the readiness check and the /read and /feed relays) as internal headers, which the reader counts on /metrics/reader. Nothing of it
 // is in any response: status, headers and body bytes are what they were.
 // GET /.well-known/agent-registration.json: the ERC-8004 registration file at EIP-8004's own path (also its
 // endpoint-domain verification artifact; packages/mcp/static/), the bytes read once at start-up. GET /favicon.ico: the
@@ -144,7 +144,7 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
   const allow = rateLimiter(opts.rateLimitPerMin ?? DEFAULT_RATE_LIMIT_PER_MIN);
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // P-GTM-4: header parsing only (no I/O); the line is written when the response closes, 429s included.
-    const door = doorOf(req.method, req.url, READ_PATH, MCP_PATH);
+    const door = doorOf(req.method, req.url, READ_PATH, MCP_PATH, FEED_PATH);
     const cls = door ? classify(req.headers) : null;
     if (door && cls) {
       const ua = req.headers["user-agent"];
@@ -161,7 +161,7 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
     if (req.method === "GET" && path === FAVICON_PATH) return res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=31536000, immutable" }).end(FAVICON_PNG);
     if (req.method === "GET" && READ_PATH.test(path)) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, path, tagged(opts.fetch ?? fetch, "read", cls ?? "unclassified"));
     if (req.method === "GET" && path === FEED_PATH && !opts.feedEnabled) return notReady(res);
-    if (req.method === "GET" && path === FEED_PATH) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, `${path}${url.search}`, opts.fetch ?? fetch);
+    if (req.method === "GET" && path === FEED_PATH) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, `${path}${url.search}`, tagged(opts.fetch ?? fetch, "feed", cls ?? "unclassified"));
     if (req.method === "GET" && path === "/ready") return relay(res, opts.readerUrl ?? DEFAULT_READER_URL, READER_READY_PATH, opts.fetch ?? fetch);
     if (path !== MCP_PATH) return plain(res, 404, "not found\n");
     // Stateless: no session, no server-initiated stream, so only POST carries a request.

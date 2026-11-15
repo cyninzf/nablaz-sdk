@@ -15,6 +15,8 @@ export default defineConfig({
           fileParallelism: false,
         },
       },
+      // Live-state monitors (R-S221-3): read the chain head, so CI runs them in a non-gating job of their own.
+      { test: { name: "monitor", include: ["test/monitor/**/*.test.ts"], testTimeout: 120_000 } },
     ],
   },
 });
