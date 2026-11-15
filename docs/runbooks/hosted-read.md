@@ -17,7 +17,7 @@ set in `fly.toml`.
 | `MCP_CLIENT_IP_HEADER` | `Fly-Client-IP`, the client-IP header Fly's edge sets |
 | `DATABASE_URL` | set by `fly mpg attach nablaz-reader-db -a nablaz-reader`, not in `fly.toml` |
 | `MCP_RATE_LIMIT_PER_MIN` | optional, default 60 |
-| `NABLAZ_FEED` | unset (GET /feed off). `on` is a deploy-day flip, below; never a default in code or `fly.toml` |
+| `NABLAZ_FEED` | `on` since 2026-11-15 (S221), set as machine env by `flyctl machine update --env` (below). Unset, GET /feed is off; never a default in code or `fly.toml` |
 
 The first five are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
 `FLY_IMAGE_REF` is set by Fly. Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES`,
@@ -53,11 +53,17 @@ no other flags. It ran 14:00:34Z to 14:02:21Z, exit 0, no prompt, and produced
 `/live` 200 and `/ready` 503 at 14:02:26Z.
 
 Timings on record (`/ready` 503 until the index is ready):
-- Same image, same schema (a `machine update` or restart, Ponder replays from its own schema): about 13 min
-  (2026-11-04, 16:05:24Z to 16:18:15Z).
-- Resume deploy (new image, `READER_SCHEMA` = the live schema): still about 13 min of `/ready` 503. A resume is
-  not a quick restart: Ponder's crash recovery drops and rebuilds every user index of the schema (below). About
-  13 min not-ready was measured three times (2026-11-04, and two resumes on 2026-11-10).
+- Same image, same schema (a `machine update` or restart, Ponder replays from its own schema): crash recovery, so the
+  same index rebuild as a resume. Measured 2026-11-15 (S221, the `NABLAZ_FEED=on` flip, 24 indexes): 29m16s of
+  `/ready` 503, `machine update` 20:54:02Z to first public `/ready` 200 at 21:23:18Z; `Created database indexes
+  count=24 (22m 25s)` at 21:16:38Z, views 21:16:40Z, then 6m38s to `/ready` 200 (head gate). The earlier ~13 min
+  (2026-11-04, 16:05:24Z to 16:18:15Z) was with 20 indexes.
+- Resume deploy (new image, `READER_SCHEMA` = the live schema): about 22 min of `/ready` 503 since the schema event
+  (24 indexes). A resume is not a quick restart: Ponder's crash recovery drops and rebuilds every user index of the
+  schema (below). Measured S217 (2026-11-13): a 16-min index rebuild (`Created database indexes` count 24, the four
+  `*_feed` on ~3.06M and ~1.81M rows included), then ~6 min of head-gate catch-up (inferred) before `/ready` 200.
+  The earlier ~13 min (three times: 2026-11-04, and two resumes on 2026-11-10) was with 20 indexes; it no longer
+  holds.
 - Per-chain finality is read from the `Indexed` lines of the reader's log (`Indexed block chain=<name>
   number=<block>`), one chain per line.
 - New image, new schema (a full index from the RPC cache): no duration is carried (R-S208-1). It is computed at
@@ -84,7 +90,7 @@ variables are unchanged. The id Ponder recorded is in the schema's `_ponder_meta
 ```
 
 `scripts/reader-start.sh` then starts Ponder on `<schema>` instead of the image tag. A resume deploy still drops and
-rebuilds ALL user indexes of the schema: about 13 min not-ready, measured three times. It keeps the rows, not the
+rebuilds ALL user indexes of the schema: about 22 min not-ready (S217, 24 indexes; Timings on record). It keeps the rows, not the
 indexes. Ponder rolls the tables back to the safe checkpoint (it drops the schema's indexes and reverts rows
 written after it, with `is_ready` back to 0), re-indexes the gap to the head, rebuilds the indexes, re-points the
 `reader` views and sets `is_ready`; `/read` answers 503 `{"ready":false}` until then (below). A mismatched build id crash-loops at start ("Schema … was
@@ -135,10 +141,14 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
    `*_feed` index; any `Seq Scan` stops the flip and is reported. The PR records the
    synthetic-row plans this gate repeats.
 6. Deploy-day flag flip, only after step 5 passes and on the word: `NABLAZ_FEED=on`, exactly `on` (the reader and
-   the front both test `=== "on"`; `true` or `1` leaves /feed off), as a Fly secret:
-   `~/.fly/bin/flyctl secrets set NABLAZ_FEED=on -a nablaz-reader < /dev/null`. Setting a secret restarts the
-   machine on the same image and schema: about 13 min of `/ready` 503 again (Timings on record), so stream logs
-   through it as in step 2. Off again: `~/.fly/bin/flyctl secrets unset NABLAZ_FEED -a nablaz-reader < /dev/null`.
+   the front both test `=== "on"`; `true` or `1` leaves /feed off), as machine env, never `fly deploy` (no new
+   schema) and not a Fly secret. The form that ran on 2026-11-15 (S221):
+   `~/.fly/bin/flyctl machine update 850dd3a4113e78 -a nablaz-reader --env NABLAZ_FEED=on --yes < /dev/null`.
+   Read `flyctl machine status -d` before and after: the only change is `NABLAZ_FEED`, and `READER_SCHEMA`, the
+   image and the VM size are unchanged. The update restarts the machine on the same image and schema: crash
+   recovery rebuilds every index, 29m16s of `/ready` 503 (Timings on record), so capture logs through it as in
+   step 2. Off again (not yet run): flyctl 0.5.7's `machine update` has no flag to unset an env var, so
+   `--env NABLAZ_FEED=off` in the same form; any value other than `on` is off, and it costs the same restart.
 7. Afterwards: the replaced schema is kept as the fallback and dropped only under R-S208-1's two gates.
 
 ## Health: /live and /ready
@@ -219,8 +229,9 @@ This form is legitimate only when `bid.mjs` at the commit being deployed equals 
 deploy without `READER_SCHEMA` still indexes into the new image's own schema, a full reindex behind the 503 gate,
 whatever the build id.
 
-A resume is not free: a resume deploy still drops and rebuilds every user index of the schema (about 13 min
-not-ready, measured three times), once Ponder has caught up, behind the 503 gate. Measured on Nov 10 2026 (S211 resume of `dfbc509e`, 102MB `maintenance_work_mem`
+A resume is not free: a resume deploy still drops and rebuilds every user index of the schema (about 22 min
+not-ready since the schema event, S217: 16-min rebuild of 24 indexes plus ~6 min of head-gate catch-up, the
+catch-up inferred), once Ponder has caught up, behind the 503 gate. Before the schema event (20 indexes), measured on Nov 10 2026 (S211 resume of `dfbc509e`, 102MB `maintenance_work_mem`
 and 2 parallel maintenance workers, the server's settings then): `/ready` answered 503 for 13m33s, of which
 `Created database indexes count=20` took 13m26s. With the session settings below (32MB, no workers) the rebuild
 was measured once (S212): the Nov 10 resume deploy rebuilt 20 indexes in 13m08s with database memory flat at
@@ -488,7 +499,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 | Fly autostop | Fly's, not relied on | Set: `auto_stop_machines = false`, `min_machines_running = 1`. |
 | Front rate limit | 60 per IP per minute | Set: `DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`. |
 | Front relay fetch timeout | none | Accepted: a hung reader holds that request's socket only; the per-IP limit bounds how many one client can hold, and `/live` no longer calls the reader. |
-| GET /feed | off (`NABLAZ_FEED` unset) | Set: off in code (`feedEnabled`, S213-SE7); `on` only as the deploy-day flip of the schema event, above. |
+| GET /feed | on (`NABLAZ_FEED=on`, machine env, S221) | Set: off in code unless `NABLAZ_FEED` is exactly `on` (`feedEnabled`, S213-SE7); flipped on 2026-11-15 after the R-S217-1 EXPLAIN gate (schema event, step 6). |
 
 ## Deployment schemas (row J)
 

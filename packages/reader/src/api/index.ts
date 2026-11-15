@@ -166,7 +166,7 @@ app.get("/ready/head", async (c) => {
 
 // B2 (S213, R-S213-1): GET /feed, the Live Sky door (src/api/feed.ts). Existing tables only; no amounts, no counts.
 app.get("/feed", async (c) => {
-  // S213-SE7: gated off (feedEnabled, src/api/feed.ts) until its index ships; no statement is issued.
+  // S213-SE7: gated by NABLAZ_FEED (feedEnabled, src/api/feed.ts); off, no statement is issued.
   if (!feedEnabled()) return c.json({ ready: false }, 503);
   const q = parseFeedQuery(c.req.query("limit"), c.req.query("before"));
   if ("error" in q) return c.json({ error: q.error }, 400);
