@@ -12,7 +12,9 @@ describe("door counters", () => {
     countDoor("attempt", "read", "unclassified");
     countDoor("served", "read", "unclassified");
     countDoor("attempt", "mcp", "fixture");
+    countDoor("served", "feed", "site");
     expect(doorMetricsText().split("\n").filter((l) => l && !l.startsWith("#"))).toEqual([
+      `nablaz_door_requests_total{door="feed",class="site",stage="served"} 1`,
       `nablaz_door_requests_total{door="mcp",class="fixture",stage="attempt"} 1`,
       `nablaz_door_requests_total{door="read",class="unclassified",stage="attempt"} 2`,
       `nablaz_door_requests_total{door="read",class="unclassified",stage="served"} 1`,
@@ -24,7 +26,8 @@ describe("door counters", () => {
       [undefined, undefined],
       ["read", undefined],
       [undefined, "cto"],
-      ["feed", "cto"],
+      ["sky", "cto"],
+      ["FEED", "cto"],
       ["read", "admin"],
       ["read", "CTO"],
       ['read",x="1', "cto"],

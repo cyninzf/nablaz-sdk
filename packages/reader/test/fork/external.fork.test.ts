@@ -7,11 +7,11 @@
 import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
-import { createPublicClient, getAddress, http, parseAbi, type Address, type Hex, type PublicClient } from "viem";
+import { createPublicClient, getAddress, http, type Address, type Hex, type PublicClient } from "viem";
 import { cShareOverIndex, formatShare } from "../../lib/c-share";
 import { bindingsAtTransferBlocks, boundHistory, transfersFrom, walletAt } from "../../src/grounding-rpc";
 import { groundingFact, groundingTransfers, paymentFacts, type LabelledPayment } from "../../src/read";
-import { CHAINS, CURRENT_ACCOUNT_IMPL_LINEAGE, PROTOCOL_CONFIG } from "../../src/chains";
+import { CHAINS } from "../../src/chains";
 import { render } from "../../src/oneliners";
 import { EPOCH_KEYS, utcOf } from "../../src/api/utc";
 import { UPSTREAM, UPSTREAM_BASE, indexOnce, redact, stopAndDump, type Served, type Tables } from "./harness";
@@ -358,14 +358,5 @@ describe.each([42161, 8453] as const)("GET /feed and GET /ready/head, chain %i (
   });
 });
 
-describe("NablaZ canonical lineage", () => {
-  it("the lineage tip is ProtocolConfig.currentAccountImpl()", async () => {
-    const c = createPublicClient({ transport: http(UPSTREAM) });
-    const current = await c.readContract({
-      address: PROTOCOL_CONFIG,
-      abi: parseAbi(["function currentAccountImpl() view returns (address)"]),
-      functionName: "currentAccountImpl",
-    });
-    expect(current).toBe(CURRENT_ACCOUNT_IMPL_LINEAGE.at(-1));
-  });
-});
+// The canonical-lineage check (ProtocolConfig.currentAccountImpl() at the head) reads live state: it is a monitor, in
+// test/monitor/lineage.monitor.test.ts (R-S221-3).

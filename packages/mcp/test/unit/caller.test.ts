@@ -1,6 +1,6 @@
-// P-GTM-4 (R-S214-11, R-S217-7): the front's caller classifier (src/caller.ts) and its wiring at both read doors. The
-// header allowlist, an unknown value ignored, the user-agent config, the default "unclassified"; the internal loopback
-// headers the reader counts (set by the front, never a caller's copy); one log line per door request, no IP; and every
+// P-GTM-4 (R-S214-11, R-S217-7, R-S221-5): the front's caller classifier (src/caller.ts) and its wiring at the three
+// read doors. The header allowlist, an unknown value ignored, the user-agent config, the default "unclassified"; the
+// internal loopback headers the reader counts (set by the front, never a caller's copy); one log line per door request, no IP; and every
 // answer byte-identical with and without x-nablaz-caller.
 
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
@@ -22,7 +22,7 @@ import {
   doorOf,
   tagged,
 } from "../../src/caller.ts";
-import { MCP_PATH, readHttpServer } from "../../src/http.ts";
+import { FEED_PATH, MCP_PATH, readHttpServer } from "../../src/http.ts";
 import { READER_READY_PATH } from "../../src/server.ts";
 import * as reader from "../../../reader/src/api/callers.ts";
 
@@ -72,13 +72,19 @@ describe("classify", () => {
 });
 
 describe("doorOf, callerLogLine, tagged", () => {
-  it("only GET /read/* and /mcp are doors; /feed, /ready, /live and the rest are not", () => {
-    expect(doorOf("GET", `/read/42161/${TEST}`, READ_PATH, MCP_PATH)).toBe("read");
-    expect(doorOf("GET", `/read/42161/${TEST}?x=1`, READ_PATH, MCP_PATH)).toBe("read");
-    expect(doorOf("POST", `/read/42161/${TEST}`, READ_PATH, MCP_PATH)).toBeNull();
-    expect(doorOf("POST", MCP_PATH, READ_PATH, MCP_PATH)).toBe("mcp");
-    expect(doorOf("GET", MCP_PATH, READ_PATH, MCP_PATH)).toBe("mcp");
-    for (const p of ["/feed", "/ready", "/live", "/", "/favicon.ico", "/.well-known/agent-registration.json"]) expect(doorOf("GET", p, READ_PATH, MCP_PATH)).toBeNull();
+  it("only GET /read/*, GET /feed and /mcp are doors (R-S221-5); /ready, /live and the rest are not", () => {
+    const door = (m: string, p: string) => doorOf(m, p, READ_PATH, MCP_PATH, FEED_PATH);
+    expect(door("GET", `/read/42161/${TEST}`)).toBe("read");
+    expect(door("GET", `/read/42161/${TEST}?x=1`)).toBe("read");
+    expect(door("POST", `/read/42161/${TEST}`)).toBeNull();
+    expect(door("POST", MCP_PATH)).toBe("mcp");
+    expect(door("GET", MCP_PATH)).toBe("mcp");
+    expect(FEED_PATH).toBe("/feed");
+    expect(door("GET", "/feed")).toBe("feed");
+    expect(door("GET", "/feed?limit=5&before=abc")).toBe("feed");
+    expect(door("POST", "/feed")).toBeNull();
+    expect(door("GET", "/feed/x")).toBeNull();
+    for (const p of ["/ready", "/live", "/", "/favicon.ico", "/.well-known/agent-registration.json"]) expect(door("GET", p)).toBeNull();
   });
 
   it("the log line holds time, door, class, status and a truncated user-agent; nothing else", () => {
@@ -122,7 +128,7 @@ describe("both doors, through the front", () => {
     vi.restoreAllMocks();
   });
 
-  async function front(opts: { rateLimitPerMin?: number } = {}) {
+  async function front(opts: { rateLimitPerMin?: number; feedEnabled?: boolean } = {}) {
     const s = readHttpServer({ readerUrl: base, ...opts });
     await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
     return { url: `http://127.0.0.1:${(s.address() as { port: number }).port}`, close: () => new Promise<void>((r) => s.close(() => r())) };
@@ -214,11 +220,47 @@ describe("both doors, through the front", () => {
     }
   });
 
-  it("non-door paths log nothing and send no internal headers (/ready, /feed, /live)", async () => {
+  it("GET /feed (on): the readiness check and the relay carry door feed and the class; the query rides unchanged", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await front({ feedEnabled: true });
+    try {
+      await (await fetch(`${f.url}/feed?limit=5`, { headers: { [CALLER_HEADER]: "site", [DOOR_HEADER]: "read", [CLASS_HEADER]: "cto", "user-agent": "sky-proxy/1" } })).text();
+      await (await fetch(`${f.url}/feed`, { headers: { "user-agent": "outside/1" } })).text();
+      expect(tags()).toEqual([
+        [READER_READY_PATH, "feed", "site"],
+        ["/feed?limit=5", "feed", "site"],
+        [READER_READY_PATH, "feed", "unclassified"],
+        ["/feed", "feed", "unclassified"],
+      ]);
+      await settle();
+      expect(callerLines(log).map((l) => [l.door, l.class, l.status, l.ua])).toEqual([
+        ["feed", "site", 200, "sky-proxy/1"],
+        ["feed", "unclassified", 200, "outside/1"],
+      ]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("GET /feed (off): 503 {\"ready\":false}, logged with its class, reaches no reader", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const f = await front();
     try {
-      for (const p of ["/ready", "/feed", "/live", "/nope"]) await (await fetch(`${f.url}${p}`, { headers: { [CALLER_HEADER]: "cto" } })).text();
+      const r = await fetch(`${f.url}/feed`, { headers: { [CALLER_HEADER]: "site" } });
+      expect([r.status, await r.text()]).toEqual([503, `{"ready":false}`]);
+      expect(hits).toEqual([]);
+      await settle();
+      expect(callerLines(log).map((l) => [l.door, l.class, l.status])).toEqual([["feed", "site", 503]]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("non-door paths log nothing and send no internal headers (/ready, /live)", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await front();
+    try {
+      for (const p of ["/ready", "/live", "/nope"]) await (await fetch(`${f.url}${p}`, { headers: { [CALLER_HEADER]: "cto" } })).text();
       await settle();
       expect(callerLines(log)).toEqual([]);
       for (const h of hits) expect([h.headers[DOOR_HEADER], h.headers[CLASS_HEADER]]).toEqual([undefined, undefined]);
@@ -229,18 +271,21 @@ describe("both doors, through the front", () => {
 
   it("every door answer is byte-identical with and without x-nablaz-caller (status, content type, body)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const f = await front();
-    const answer = async (h: Record<string, string>) => {
-      const r = await fetch(`${f.url}/read/42161/${TEST}`, { headers: h });
+    const f = await front({ feedEnabled: true });
+    const answer = async (h: Record<string, string>, path = `/read/42161/${TEST}`) => {
+      const r = await fetch(`${f.url}${path}`, { headers: h });
       return [r.status, r.headers.get("content-type"), await r.text(), [...r.headers.keys()].filter((k) => k !== "date").sort()];
     };
     try {
-      const plain = await answer({});
-      expect(plain[2]).toBe(BODY);
-      for (const v of [...CALLER_VALUES, "bogus"]) expect(await answer({ [CALLER_HEADER]: v })).toEqual(plain);
-      ready = false;
-      const notReady = await answer({});
-      expect(await answer({ [CALLER_HEADER]: "cto" })).toEqual(notReady);
+      for (const path of [`/read/42161/${TEST}`, "/feed?limit=5"]) {
+        ready = true;
+        const plain = await answer({}, path);
+        expect(plain[2]).toBe(BODY);
+        for (const v of [...CALLER_VALUES, "bogus"]) expect(await answer({ [CALLER_HEADER]: v }, path)).toEqual(plain);
+        ready = false;
+        const notReady = await answer({}, path);
+        expect(await answer({ [CALLER_HEADER]: "cto" }, path)).toEqual(notReady);
+      }
     } finally {
       await f.close();
     }

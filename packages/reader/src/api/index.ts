@@ -141,8 +141,9 @@ async function nablaLabelOf(client: PublicClient, chain: EnabledChain & { nabla:
 
 // Row E: the RPC legs' counters (src/rpc.ts), Prometheus text, beside Ponder's own /metrics. The reader listens on
 // 127.0.0.1 only and the front relays /read, /feed and /ready (as /ready/head) alone, so this is never public.
-// P-GTM-4 (R-S217-7): followed by nablaz_door_requests_total, read attempts and reads served at both public doors by
-// caller class (src/api/callers.ts); MCP discovery calls and 429s are not in it (the front's log lines only).
+// P-GTM-4 (R-S217-7, R-S221-5): followed by nablaz_door_requests_total, read attempts and reads served at the three
+// public doors by caller class (src/api/callers.ts); MCP discovery calls and 429s are not in it (the front's log lines
+// only).
 app.get("/metrics/reader", (c) => c.text(rpcMetricsText() + doorMetricsText(), 200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" }));
 
 // B1 (S213): readiness with the head gate. 200 (empty body, as Ponder's /ready) only when Ponder's /ready is 200 and
@@ -164,9 +165,15 @@ app.get("/ready/head", async (c) => {
   return c.text("", 200);
 });
 
+// P-GTM-4 (R-S221-5): a /feed page served at the feed door, counted as /read's is (src/api/callers.ts).
+app.use("/feed", async (c, next) => {
+  await next();
+  if (c.res.status === 200) countDoor("served", c.req.header(DOOR_HEADER), c.req.header(CLASS_HEADER));
+});
+
 // B2 (S213, R-S213-1): GET /feed, the Live Sky door (src/api/feed.ts). Existing tables only; no amounts, no counts.
 app.get("/feed", async (c) => {
-  // S213-SE7: gated off (feedEnabled, src/api/feed.ts) until its index ships; no statement is issued.
+  // S213-SE7: gated by NABLAZ_FEED (feedEnabled, src/api/feed.ts); off, no statement is issued.
   if (!feedEnabled()) return c.json({ ready: false }, 503);
   const q = parseFeedQuery(c.req.query("limit"), c.req.query("before"));
   if ("error" in q) return c.json({ error: q.error }, 400);
