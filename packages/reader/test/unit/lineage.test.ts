@@ -77,8 +77,8 @@ describe("account lineage data file", () => {
     expect(canonicalLineage({ implementations: [boot, other] }).ok).toBe(false);
     expect(canonicalLineage({ implementations: [v31!, boot] }).ok).toBe(false);
     const cam = `0x${"ab".repeat(32)}` as const;
-    expect(nablaLabel({ implementations: [boot, v31!], mandateCodeHash: cam, camV4CodeHash: cam }).shape).toBe("a");
-    expect(nablaLabel({ implementations: [boot, other], mandateCodeHash: cam, camV4CodeHash: cam }).shape).toBe("c");
+    expect(nablaLabel({ implementations: [boot, v31!], mandateCodeHash: cam, canonicalMandateCodeHashes: [cam] }).shape).toBe("a");
+    expect(nablaLabel({ implementations: [boot, other], mandateCodeHash: cam, canonicalMandateCodeHashes: [cam] }).shape).toBe("c");
   });
 
   // Needs a nablaz-protocol checkout (CI has none): NABLAZ_PROTOCOL_DIR=/path/to/nablaz-protocol pnpm test

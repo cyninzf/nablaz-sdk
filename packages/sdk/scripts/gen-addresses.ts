@@ -16,7 +16,7 @@ import { createPublicClient, getAddress, http, type Address } from "viem";
 const SOURCE = "script/expected/permanent-arbitrum.txt";
 const MANIFEST = "deployments/arbitrum-one.json";
 // G1 (S220, Nov 14 2026): not in SOURCE at the commit read; taken from MANIFEST by name. Only these names.
-const FROM_MANIFEST = new Set(["NablaRecordV2", "NablaAccountV3_2"]);
+const FROM_MANIFEST = new Set(["NablaRecordV2", "NablaAccountV3_2", "ConsumerAIMandateV5"]);
 // "live": what ProtocolConfig and new accounts use. "coexisting": still deployed and still in the manifest,
 // kept so old logs decode; never a payment target (R-S184-5). A vault's implementation is always read from
 // its account (VAULT_IMPL()), never from this table.
@@ -32,6 +32,9 @@ const WANTED = {
   // G1 (R-S221-4): V3_2 accounts write to NablaRecordV2; v1 NablaRecord stays live for V3_1 and older accounts.
   NablaRecordV2: "live",
   NablaAccountV3_2: "live",
+  // G1-B (S209 C4, act 11): V3_2 accounts pin CAM V5 as their mandate (MANDATE_PIN). ABI-identical to V4; V4 stays
+  // live for V3_1 and older accounts.
+  ConsumerAIMandateV5: "live",
 } as const;
 
 const proto = process.argv[2];

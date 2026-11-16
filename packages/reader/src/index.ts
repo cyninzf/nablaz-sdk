@@ -1,4 +1,4 @@
-import { and, desc, eq } from "ponder";
+import { and, asc, desc, eq } from "ponder";
 import { ponder, type Context } from "ponder:registry";
 import {
   accounts,
@@ -15,6 +15,7 @@ import {
 } from "ponder:schema";
 import { BaseError, ContractFunctionRevertedError, getAddress, parseAbi, type Address, type Hex } from "viem";
 import { nablaOf } from "./chains";
+import { initialMandateOf } from "./labels";
 import { render } from "./oneliners";
 import {
   COUNTERPARTY_KINDS,
@@ -432,7 +433,8 @@ ponder.on("Usdc:AuthorizationUsed", async ({ event, context }) => {
   const funding = await context.db.find(vaultFundings, { id: `${chainId}-${lc(vault.vault)}-${lc(token)}` });
 
   // R-S184-2 / R-B0-1: the envelope expiry comes from envelopeOf at the settlement block, never from entries.
-  // Read at N−1 and N; the mandate is the account's latest DEPENDENCY_SET (field 0), else the canonical CAM V4.
+  // Read at N−1 and N; the mandate is the account's latest DEPENDENCY_SET (field 0), else the one it was initialized
+  // with: CAM V5 for an account created on NablaAccountV3_2 (its MANDATE_PIN), CAM V4 otherwise (initialMandateOf).
   const [dep] = await context.db.sql
     .select({ counterparty: recordEntries.counterparty })
     .from(recordEntries)
@@ -446,7 +448,25 @@ ponder.on("Usdc:AuthorizationUsed", async ({ event, context }) => {
     )
     .orderBy(desc(recordEntries.blockNumber), desc(recordEntries.logIndex))
     .limit(1);
-  const mandate = getAddress(dep?.counterparty ?? chain.ConsumerAIMandateV4);
+  const initial = dep
+    ? null
+    : initialMandateOf(
+        (
+          await context.db.sql
+            .select({ implementation: implementationHistory.implementation })
+            .from(implementationHistory)
+            .where(
+              and(
+                eq(implementationHistory.chainId, chainId),
+                eq(implementationHistory.account, lc(vault.account)),
+                eq(implementationHistory.source, "Upgraded"),
+              ),
+            )
+            .orderBy(asc(implementationHistory.blockNumber), asc(implementationHistory.logIndex))
+        ).map((r) => r.implementation as Address),
+        { accountV3_2: chain.NablaAccountV3_2, camV4: chain.ConsumerAIMandateV4, camV5: chain.ConsumerAIMandateV5 },
+      );
+  const mandate = getAddress(dep?.counterparty ?? initial!);
 
   let envelope: Record<string, unknown> = {
     envelopeMandate: mandate,

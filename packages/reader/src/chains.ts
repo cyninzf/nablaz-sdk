@@ -35,6 +35,13 @@ export type ChainSources = {
     NablaAccountFactoryPermanent: Address | null;
     AccountRegistryV6: Address | null;
     ConsumerAIMandateV4: Address | null;
+    /**
+     * CAM V5 (G1-B): NablaAccountV3_2's immutable MANDATE_PIN; a V3_2 account is initialized with it (PIN_MISMATCH(1)
+     * otherwise). ABI-identical to V4. Accounts created on V3_1 or older keep V4 until a DEPENDENCY_SET replaces it.
+     */
+    ConsumerAIMandateV5: Address | null;
+    /** NablaAccountV3_2: the implementation whose accounts start on CAM V5. */
+    NablaAccountV3_2: Address | null;
     /** First block to index the NablaZ sources from: their earliest deployment block. */
     startBlock: number | null;
     /** NablaRecordV2's deployment block (G1 deploy tx 9, S220), where its source starts. */
@@ -99,6 +106,8 @@ export const CHAINS: Record<number, ChainSources> = {
       NablaAccountFactoryPermanent: arb.NablaAccountFactoryPermanent.address,
       AccountRegistryV6: arb.AccountRegistryV6.address,
       ConsumerAIMandateV4: arb.ConsumerAIMandateV4.address,
+      ConsumerAIMandateV5: arb.ConsumerAIMandateV5.address,
+      NablaAccountV3_2: arb.NablaAccountV3_2.address,
       startBlock: Math.min(arb.NablaRecord.deployBlock, arb.NablaAccountFactoryPermanent.deployBlock, arb.AccountRegistryV6.deployBlock),
       recordV2StartBlock: arb.NablaRecordV2.deployBlock,
     },
@@ -131,6 +140,8 @@ export const CHAINS: Record<number, ChainSources> = {
       NablaAccountFactoryPermanent: null,
       AccountRegistryV6: null,
       ConsumerAIMandateV4: null,
+      ConsumerAIMandateV5: null,
+      NablaAccountV3_2: null,
       startBlock: null,
       recordV2StartBlock: null,
     },

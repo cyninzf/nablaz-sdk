@@ -157,8 +157,8 @@ export type ExposureGrant = {
 export function exposure(canonicalMandate: boolean, grants: ExposureGrant[], asOfBlock: bigint) {
   if (!canonicalMandate)
     return {
-      result: { computable: false, reason: `${NOT_DETERMINABLE}: dependencies().mandate is not CAM V4 by code hash`, outstandingAuthorizations: OUTSTANDING_AUTHORIZATIONS },
-      notes: [`exposure: ${NOT_DETERMINABLE} (mandate is not CAM V4 by code hash)`],
+      result: { computable: false, reason: `${NOT_DETERMINABLE}: dependencies().mandate is neither CAM V4 nor CAM V5 by code hash`, outstandingAuthorizations: OUTSTANDING_AUTHORIZATIONS },
+      notes: [`exposure: ${NOT_DETERMINABLE} (mandate is neither CAM V4 nor CAM V5 by code hash)`],
     };
   const rows = grants.map((g) => {
     const window = g.remaining.length === 0 ? null : g.remaining.reduce((m, x) => (x < m ? x : m));
