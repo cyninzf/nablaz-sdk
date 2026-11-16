@@ -187,7 +187,8 @@ export function recordFacts(rows: Row[], nabla: NablaLabel | null): Fact[] {
       source: "nablaz:record",
       label: own ? nabla!.label : attestationLabel(r.writer),
       shape: own ? nabla!.shape : "e",
-      terms: plain(r, ["kindName", "kind", "writer", "writerAuth", "counterparty", "counterpartyAuth", "policyHash", "policyVersion", "asset", "amount", "obligationRef", "seq"]),
+      // seq is per record (NablaRecord and NablaRecordV2 each keep their own), so the fact names its emitter.
+      terms: plain(r, ["emitter", "kindName", "kind", "writer", "writerAuth", "counterparty", "counterpartyAuth", "policyHash", "policyVersion", "asset", "amount", "obligationRef", "seq"]),
       cite: cite(r),
       reproduce: render("1-record-entries", { chainId: r.chainId, subject: r.subject, record: r.emitter }),
     };

@@ -65,6 +65,7 @@ function sources(c: ChainSources): { name: string; from: number; filters: number
     const s = c.nabla.startBlock;
     out.push(
       { name: "NablaRecord", from: s, filters: 1 },
+      { name: "NablaRecordV2", from: c.nabla.recordV2StartBlock, filters: 1 },
       { name: "AccountFactory", from: s, filters: 1 },
       { name: "AccountRegistry", from: s, filters: 1 },
       { name: "AccountProxyViaFactory", from: s, filters: 2 },
