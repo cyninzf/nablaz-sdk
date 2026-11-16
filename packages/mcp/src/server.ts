@@ -77,7 +77,7 @@ export function readServer(opts: ReadServerOptions = {}): McpServer {
       title: READ_TOOL_TITLE,
       description: READ_TOOL_DESCRIPTION,
       inputSchema: {
-        chainId: z.number().int().positive().describe("EVM chain id, for example 42161 (Arbitrum One) or 8453 (Base)"),
+        chainId: z.number().int().positive().describe("EVM chain id, for example 42161 (Arbitrum One), 8453 (Base) or 137 (Polygon)"),
         address: z.string().describe("The subject address, 0x-prefixed"),
       },
       annotations: { title: READ_TOOL_TITLE, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
