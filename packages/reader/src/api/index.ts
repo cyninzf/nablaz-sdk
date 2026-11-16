@@ -31,6 +31,7 @@ import { withUtc } from "./utc";
 import { CLASS_HEADER, DOOR_HEADER, countDoor, doorMetricsText } from "./callers";
 import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
 import { boundedLag, chainLag, endBlockOf, headCache, type IndexedBlock } from "./head";
+import { actorIdentityAt, type BindingRow } from "./actor-identity";
 import { FEED_RECORD_KINDS, externalPaymentItems, feedEnabled, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
 import { bindingsAtTransferBlocks, boundHistoryAndMint, transfersFrom, walletAt } from "../grounding-rpc";
 import { groundingClient, rpcMetricsText } from "../rpc";
@@ -213,9 +214,39 @@ app.get("/feed", async (c) => {
     q,
     asOf,
   );
+  await withActorIdentity(items);
   const asOfBlock = Object.fromEntries(chains.map((ch) => [String(ch.chainId), asOf.get(ch.chainId)!.toString()]));
   return c.body(json({ asOfBlock, items, nextBefore: next }), 200, { "content-type": "application/json" });
 });
+
+/**
+ * β actorIdentity (S222): on each payment item, the ERC-8004 agentId its payer was bound to at the item's block
+ * (src/api/actor-identity.ts), from agent_wallets and agent_owners. Per chain: the agentIds each payer has ever been
+ * agentWallet or owner of, then those agentIds' full histories; resolved per item at its own block.
+ */
+async function withActorIdentity(items: { chainId: number; kind: string; subject: string; block: string; actorIdentity?: unknown }[]) {
+  const pays = items.filter((i) => i.kind === "payment");
+  for (const chainId of [...new Set(pays.map((i) => i.chainId))]) {
+    const mine = pays.filter((i) => i.chainId === chainId);
+    const actors = [...new Set(mine.map((i) => lc(i.subject)))];
+    const [ws, os] = await Promise.all([
+      db.selectDistinct({ agentId: agentWallets.agentId }).from(agentWallets).where(and(eq(agentWallets.chainId, chainId), inArray(agentWallets.wallet, actors))),
+      db.selectDistinct({ agentId: agentOwners.agentId }).from(agentOwners).where(and(eq(agentOwners.chainId, chainId), inArray(agentOwners.owner, actors))),
+    ]);
+    const ids = [...new Set([...ws, ...os].map((r) => r.agentId))];
+    if (!ids.length) continue;
+    const [wRows, oRows] = await Promise.all([
+      db.select().from(agentWallets).where(and(eq(agentWallets.chainId, chainId), inArray(agentWallets.agentId, ids))),
+      db.select().from(agentOwners).where(and(eq(agentOwners.chainId, chainId), inArray(agentOwners.agentId, ids))),
+    ]);
+    const wallets: BindingRow[] = wRows.map((r) => ({ agentId: r.agentId, blockNumber: r.blockNumber, logIndex: r.logIndex, value: r.wallet }));
+    const owners: BindingRow[] = oRows.map((r) => ({ agentId: r.agentId, blockNumber: r.blockNumber, logIndex: r.logIndex, value: r.owner }));
+    for (const i of mine) {
+      const id = actorIdentityAt(i.subject, BigInt(i.block), wallets, owners);
+      if (id) i.actorIdentity = id;
+    }
+  }
+}
 
 // P-GTM-4: a read served at a door, counted after the answer when it is a 200 the front tagged (src/api/callers.ts).
 app.use("/read/:chainId/:address", async (c, next) => {
