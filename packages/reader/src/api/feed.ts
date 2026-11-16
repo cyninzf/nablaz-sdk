@@ -1,4 +1,4 @@
-// GET /feed (Live Sky, R-S213-1): the most recent indexed facts across both chains, newest first, from the existing
+// GET /feed (Live Sky, R-S213-1): the most recent indexed facts across every enabled chain, newest first, from the existing
 // tables only (src/api/index.ts runs the queries; this file holds the query parsing, the cursor and the items).
 //
 // Kinds:
@@ -12,7 +12,8 @@
 // timestamp (epoch seconds) and timestampUtc (R-S205-5), and its citations. No amount field, and no count or
 // total anywhere in the response.
 //
-// Order: (timestamp, chainId, block, logIndex, kind) descending; timestamps make the two chains' blocks comparable.
+// Order: (timestamp, chainId, block, logIndex, kind) descending; timestamps make the chains' blocks comparable.
+// Polygon (R-S221-8) adds delegation grants and payments under chainId 137; the kinds are unchanged.
 // The cursor (`before`) is that key of the last item served, base64url-encoded; it is opaque to callers.
 
 import type { Hex } from "viem";

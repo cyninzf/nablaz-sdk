@@ -9,10 +9,11 @@ It holds no keys, needs no account or API key, and runs anywhere you have an RPC
 
 ## What it reads
 
-Arbitrum One and Base are both enabled. The NablaZ contracts are live on Arbitrum One only, so on Base
-the reader indexes the third-party sources alone.
+Arbitrum One, Base and Polygon PoS are enabled. The NablaZ contracts are live on Arbitrum One only, so on
+Base the reader indexes the third-party sources alone, and on Polygon the MetaMask `DelegationManager` alone
+(R-S221-8; a `/read` on Polygon names every other source as not on that chain).
 
-Third-party sources, on both chains:
+Third-party sources, on Arbitrum One and Base (Polygon: the `DelegationManager` only):
 
 - Coinbase `SpendPermissionManager`: `SpendPermissionApproved`, `SpendPermissionUsed`,
   `SpendPermissionRevoked`.
@@ -223,6 +224,8 @@ export READER_ARBITRUM_RPC_URL=...             # Arbitrum One RPC; archive for t
 export READER_ARBITRUM_GROUNDING_RPC_URL=...   # Arbitrum One RPC for backfill eth_getLogs and grounding reads
 export READER_BASE_RPC_URL=...                 # Base RPC
 export READER_BASE_GROUNDING_RPC_URL=...       # Base RPC for backfill eth_getLogs and grounding reads
+export READER_POLYGON_RPC_URL=...              # Polygon PoS RPC
+export READER_POLYGON_GROUNDING_RPC_URL=...    # Polygon PoS RPC for backfill eth_getLogs and grounding reads
 export PONDER_TELEMETRY_DISABLED=true
 export READER_EXTERNAL_FROM=42161:518780000,8453:53160000   # optional; see below
 pnpm reader                          # = cd packages/reader && pnpm start --schema reader
@@ -295,13 +298,15 @@ pnpm --silent mcp -- --transport http --port 3042
 ```
 
 To run the reader and the HTTP MCP server together as one instance over full history, use this
-environment. Both chains are read, and every source starts at its deployment block:
+environment. All three chains are read, and every source starts at its deployment block:
 
 ```sh
 READER_ARBITRUM_RPC_URL=...             # Arbitrum One RPC, archive: head tracking and state reads
 READER_ARBITRUM_GROUNDING_RPC_URL=...   # Arbitrum One RPC, archive, unlimited eth_getLogs range
 READER_BASE_RPC_URL=...                 # Base RPC, archive
 READER_BASE_GROUNDING_RPC_URL=...       # Base RPC, archive, unlimited eth_getLogs range
+READER_POLYGON_RPC_URL=...              # Polygon PoS RPC: head tracking, blocks and receipts
+READER_POLYGON_GROUNDING_RPC_URL=...    # Polygon PoS RPC, unlimited eth_getLogs range
 PONDER_TELEMETRY_DISABLED=true
 NABLAZ_READER_URL=http://localhost:42069
 PORT=3042
