@@ -48,6 +48,12 @@ function on<T extends object>(pick: (c: EnabledChain) => boolean, build: (c: Ena
   );
 }
 const nablaOn = (c: EnabledChain) => sources.has("nabla") && hasNabla(c);
+/**
+ * NablaRecordV2 starts at its own deploy block, after the other NablaZ sources. A window that ends before it
+ * (READER_END_BLOCK, e.g. the fork tests' pre-G1 range) leaves V2 out on that chain: Ponder refuses start > end.
+ */
+const recordV2On = (c: EnabledChain) =>
+  nablaOn(c) && (endOverride === undefined || (startOverride ?? recordV2Start(c)!) <= endOverride);
 const externalOn = () => sources.has("external");
 type NablaChain = EnabledChain & { nabla: NablaContracts };
 function perChain<T extends object>(build: (c: NablaChain) => T) {
@@ -71,7 +77,7 @@ export default createConfig({
     // through one handler (src/index.ts), merged per subject; ConsentRegistered / ConsentRevoked are V2's own.
     NablaRecordV2: {
       abi: NablaRecordV2Abi,
-      chain: on(nablaOn, (c) => ({ address: (c as NablaChain).nabla.NablaRecordV2 }), (c) => recordV2Start(c)!),
+      chain: on(recordV2On, (c) => ({ address: (c as NablaChain).nabla.NablaRecordV2 }), (c) => recordV2Start(c)!),
     },
     AccountFactory: {
       abi: NablaAccountFactoryPermanentAbi,
