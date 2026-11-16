@@ -25,7 +25,7 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "ponder";
 import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, type PublicClient } from "viem";
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
-import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
+import { enabledChains, externalStart, hasExternal, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
 import { canonicalLineage, isCanonicalMandate, nablaLabel, type NablaLabel } from "../labels";
 import { withUtc } from "./utc";
 import { CLASS_HEADER, DOOR_HEADER, countDoor, doorMetricsText } from "./callers";
@@ -386,10 +386,11 @@ app.get("/read/:chainId/:address", async (c) => {
     ? await db.select().from(feedbacks).where(and(eq(feedbacks.chainId, chainId), inArray(feedbacks.agentId, agentIds)))
     : [];
   const groundingFacts: Fact[] = [];
-  if (fbs.length) {
-    const registry = chain.external.IdentityRegistry;
+  // Feedback rows exist only on a chain carrying the ERC-8004 registries; the null checks narrow the types.
+  const registry = chain.external.IdentityRegistry;
+  const transfersFromBlock = externalStart(chain, "IdentityRegistry");
+  if (fbs.length && registry !== null && transfersFromBlock !== null) {
     const grounding = groundingOf(chain);
-    const transfersFromBlock = externalStart(chain, "IdentityRegistry");
     const nablaOn = hasNabla(chain) && sourcesOn().has("nabla");
     const controllerOf = async (who: Hex, block: bigint) => {
       if (!hasNabla(chain)) return null;
@@ -495,6 +496,18 @@ app.get("/read/:chainId/:address", async (c) => {
       hasNabla: hasNabla(chain),
       indexed: sourcesOn(),
       lenders: chain.external.creditLineLenders.length,
+      absent: new Set(
+        (
+          [
+            ["spm", "SpendPermissionManager"],
+            ["dm", "DelegationManager"],
+            ["agent_wallet", "IdentityRegistry"],
+            ["feedback", "ReputationRegistry"],
+          ] as const
+        )
+          .filter(([, source]) => !hasExternal(chain, source))
+          .map(([key]) => key),
+      ),
       counts: {
         record: records.length,
         vault_payment: vpay.length,

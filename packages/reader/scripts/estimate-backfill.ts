@@ -35,7 +35,7 @@ import { CHAINS, hasNabla, type ChainSources } from "../src/chains.ts";
 const CU = { eth_getLogs: 60, eth_getBlockByNumber: 20, eth_blockNumber: 10 } as const;
 const PONDER_START_RANGE = 500;
 const PONDER_GROWTH = 1.05;
-const POLL_SECONDS: Record<number, number> = { 42161: 1, 8453: 2 };
+const POLL_SECONDS: Record<number, number> = { 42161: 1, 8453: 2, 137: 2 };
 const SAMPLE_BLOCKS = 100_000n;
 
 function flag(name: string, fallback: number): number {
@@ -74,13 +74,12 @@ function sources(c: ChainSources): { name: string; from: number; filters: number
     );
   }
   const b = c.external.startBlocks;
-  out.push(
-    { name: "SpendPermissionManager", from: b.SpendPermissionManager, filters: 1 },
-    { name: "DelegationManager", from: b.DelegationManager, filters: 1 },
-    { name: "ReputationRegistry", from: b.ReputationRegistry, filters: 1 },
-    { name: "IdentityRegistry", from: b.IdentityRegistry, filters: 1 },
-  );
-  if (c.external.creditLineLenders.length > 0) out.push({ name: "CreditLine", from: b.creditLineLenders, filters: 1 });
+  // A source the chain does not carry has a null start block (Polygon: DelegationManager only).
+  for (const name of ["SpendPermissionManager", "DelegationManager", "ReputationRegistry", "IdentityRegistry"] as const) {
+    const from = b[name];
+    if (from !== null) out.push({ name, from, filters: 1 });
+  }
+  if (c.external.creditLineLenders.length > 0 && b.creditLineLenders !== null) out.push({ name: "CreditLine", from: b.creditLineLenders, filters: 1 });
   return out;
 }
 

@@ -1,6 +1,6 @@
 import { createConfig, factory } from "ponder";
 import { getAbiItem, parseAbi } from "viem";
-import { enabledChains, externalStart, hasNabla, nablaStart, recordV2Start, sourcesOn, type EnabledChain, type NablaContracts } from "./src/chains";
+import { enabledChains, externalStart, hasExternal, hasNabla, nablaStart, recordV2Start, sourcesOn, type EnabledChain, type ExternalSource, type NablaContracts } from "./src/chains";
 import { DelegationManagerAbi } from "./src/delegation";
 import { indexerTransport, rpcUrls } from "./src/rpc";
 import { AgentCreditLineAbi, IdentityRegistryAbi, ReputationRegistryAbi, SpendPermissionManagerAbi } from "./src/external-abis";
@@ -36,7 +36,8 @@ const startOverride = envBlock("READER_START_BLOCK");
 const endOverride = envBlock("READER_END_BLOCK");
 
 const chainsOn = enabledChains();
-const POLLING_MS: Record<number, number> = { 8453: 2_000 };
+// Polygon PoS: ~2 s blocks; one poll per block, like Base's interval (R-S221-8 #2 steady-state basis).
+const POLLING_MS: Record<number, number> = { 8453: 2_000, 137: 2_000 };
 const sources = sourcesOn();
 
 /** One entry per chain that `pick` accepts; each with its own start block unless overridden. */
@@ -55,6 +56,14 @@ const nablaOn = (c: EnabledChain) => sources.has("nabla") && hasNabla(c);
 const recordV2On = (c: EnabledChain) =>
   nablaOn(c) && (endOverride === undefined || (startOverride ?? recordV2Start(c)!) <= endOverride);
 const externalOn = () => sources.has("external");
+/** An external source, on every enabled chain that carries it (Polygon: DelegationManager only, R-S221-8). */
+function external<S extends Exclude<ExternalSource, "creditLineLenders">>(source: S) {
+  return on(
+    (c) => externalOn() && hasExternal(c, source),
+    (c) => ({ address: c.external[source]! }),
+    (c) => externalStart(c, source)!,
+  );
+}
 type NablaChain = EnabledChain & { nabla: NablaContracts };
 function perChain<T extends object>(build: (c: NablaChain) => T) {
   return on(nablaOn, (c) => build(c as NablaChain), (c) => nablaStart(c)!);
@@ -108,36 +117,36 @@ export default createConfig({
     // PAY_AUTHORIZED. A vault is never the emitter, so a Ponder factory cannot narrow this filter.
     Usdc: {
       abi: UsdcAbi,
-      chain: perChain((c) => ({ address: c.usdc })),
+      chain: perChain((c) => ({ address: c.usdc! })),
     },
 
-    // ── External sources (s3 §6.4c), every enabled chain ──
+    // ── External sources (s3 §6.4c), every enabled chain that carries them ──
     SpendPermissionManager: {
       abi: SpendPermissionManagerAbi,
-      chain: on(externalOn, (c) => ({ address: c.external.SpendPermissionManager }), (c) => externalStart(c, "SpendPermissionManager")),
+      chain: external("SpendPermissionManager"),
     },
     DelegationManager: {
       abi: DelegationManagerAbi,
-      chain: on(externalOn, (c) => ({ address: c.external.DelegationManager }), (c) => externalStart(c, "DelegationManager")),
+      chain: external("DelegationManager"),
     },
     // ERC-8004 (R-D2B-2): NewFeedback, and the agentWallet history from MetadataSet (other keys are skipped by
     // the handler).
     ReputationRegistry: {
       abi: ReputationRegistryAbi,
-      chain: on(externalOn, (c) => ({ address: c.external.ReputationRegistry }), (c) => externalStart(c, "ReputationRegistry")),
+      chain: external("ReputationRegistry"),
     },
     IdentityRegistry: {
       abi: IdentityRegistryAbi,
-      chain: on(externalOn, (c) => ({ address: c.external.IdentityRegistry }), (c) => externalStart(c, "IdentityRegistry")),
+      chain: external("IdentityRegistry"),
     },
     // Agent Credit Lines: registered only on chains with a configured lender. None today (R-S189-6: the
     // decoder and its fixtures ship anyway; a source with nothing indexed says "nothing indexed", R-S190-5).
     CreditLine: {
       abi: AgentCreditLineAbi,
       chain: on(
-        (c) => externalOn() && c.external.creditLineLenders.length > 0,
+        (c) => externalOn() && hasExternal(c, "creditLineLenders"),
         (c) => ({ address: c.external.creditLineLenders }),
-        (c) => externalStart(c, "creditLineLenders"),
+        (c) => externalStart(c, "creditLineLenders")!,
       ),
     },
   },

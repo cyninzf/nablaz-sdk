@@ -290,10 +290,13 @@ export function emptySourceNotes(x: {
   lenders: number;
   counts: Record<string, number>;
   ranges: Record<string, IndexedRange>;
+  /** Keys of third-party sources this chain does not carry (Polygon: all but "dm", R-S221-8); default none. */
+  absent?: Set<string>;
 }): string[] {
   const notes: string[] = [];
   const say = (key: string, text: string) => {
-    if ((x.counts[key] ?? 0) === 0) notes.push(rangeNote(text, x.ranges[key] ?? { from: null, to: 0n }));
+    if (x.absent?.has(key)) notes.push(`${text}: not a source on chain ${x.chainId}, so nothing is reported`);
+    else if ((x.counts[key] ?? 0) === 0) notes.push(rangeNote(text, x.ranges[key] ?? { from: null, to: 0n }));
   };
   if (!x.hasNabla) notes.push(`no NablaZ source on chain ${x.chainId} (R-S189-1)`);
   else if (!x.indexed.has("nabla")) notes.push("NablaZ sources: not indexed by this instance (READER_SOURCES), so no NablaZ fact is reported");

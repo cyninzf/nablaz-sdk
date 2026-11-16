@@ -106,6 +106,20 @@ describe("notes (R-S189-6, R-S190-5, R-S190-6)", () => {
       "ERC-8004 agentIds whose agentWallet or owner this address has been: nothing indexed (blocks ?..0)",
     ]);
   });
+  it("a source the chain does not carry is said so, never \"nothing indexed\" (Polygon, R-S221-8)", () => {
+    const n = emptySourceNotes({
+      chainId: 137,
+      hasNabla: false,
+      indexed: new Set(["nabla", "external"]),
+      lenders: 0,
+      counts: {},
+      ranges: { dm: { from: 69623266, to: 97000000n } },
+      absent: new Set(["spm", "agent_wallet", "feedback"]),
+    });
+    expect(n).toContain("SpendPermissionManager permissions and spends for this address: not a source on chain 137, so nothing is reported");
+    expect(n).toContain("DelegationManager redemptions naming this address: nothing indexed (blocks 69623266..97000000)");
+    expect(n.some((x) => x.startsWith("ERC-8004 agentIds") && x.includes("not a source on chain 137"))).toBe(true);
+  });
   it("never a backwards range: below a source's start block the note says how far the index has got", () => {
     const n = emptySourceNotes({ chainId: 8453, hasNabla: false, indexed: new Set(["external"]), lenders: 0, counts: {}, ranges: { spm: { from: 518780000, to: 516668399n }, dm: { from: 4, to: 10n } } });
     expect(n).toContain("SpendPermissionManager permissions and spends for this address: indexed up to 516668399; source starts at 518780000");

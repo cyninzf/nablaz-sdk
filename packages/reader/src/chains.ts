@@ -7,8 +7,10 @@ import erc8004 from "./generated/erc8004.json" with { type: "json" };
  *
  * `nabla`: NablaZ contracts. Null means no NablaZ source on this chain (R-S189-1: NablaZ entries stay
  * Arbitrum-only). `external`: third-party sources (s3 §6.4c), pasted from nablaz-protocol
- * script/expected/external-{arbitrum,base}.txt at 4ace372840989469430996afd7f4668cab046e8e. An enabled
- * chain must have every external address.
+ * script/expected/external-{arbitrum,base}.txt at 4ace372840989469430996afd7f4668cab046e8e (Arbitrum, Base) and
+ * from MetaMask's own deployment list (Polygon, below). An external source a chain does not carry is null in both
+ * its address and its start block (R-S221-8: Polygon carries the DelegationManager only); an enabled chain with
+ * one of the two set and not the other is refused.
  */
 export type ChainSources = {
   chainId: number;
@@ -23,8 +25,8 @@ export type ChainSources = {
   rpcEnv: string;
   /** Environment variable holding this chain's grounding RPC URL: backfill eth_getLogs and the grounding reads. */
   groundingRpcEnv: string;
-  /** Native USDC on this chain (Circle). */
-  usdc: Address;
+  /** Native USDC on this chain (Circle); read only by the NablaZ vault source. Null on a chain without NablaZ sources that has no need of it. */
+  usdc: Address | null;
   nabla: {
     NablaRecord: Address | null;
     /**
@@ -56,13 +58,13 @@ export type ChainSources = {
     IdentityRegistry: Address | null;
     /** Agent Credit Lines lenders. None is known on either chain (s3 §6.4b (6)). */
     creditLineLenders: Address[];
-    /** Per source: its deployment block. */
+    /** Per source: its deployment block; null exactly when the source is not on this chain. */
     startBlocks: {
-      SpendPermissionManager: number;
-      DelegationManager: number;
-      creditLineLenders: number;
-      ReputationRegistry: number;
-      IdentityRegistry: number;
+      SpendPermissionManager: number | null;
+      DelegationManager: number | null;
+      creditLineLenders: number | null;
+      ReputationRegistry: number | null;
+      IdentityRegistry: number | null;
     };
   };
 };
@@ -83,6 +85,7 @@ const arb = ARBITRUM_ONE.contracts;
 const DEPLOYED = {
   42161: { SpendPermissionManager: 283144909, DelegationManager: 320575464, ReputationRegistry: 428895450, IdentityRegistry: 428895443 },
   8453: { SpendPermissionManager: 23499060, DelegationManager: 28207787, ReputationRegistry: 41663784, IdentityRegistry: 41663783 },
+  137: { DelegationManager: 69623266 },
 } as const;
 
 /** ERC-8004 registries per chain, from src/generated/erc8004.json (scripts/gen-erc8004.ts). */
@@ -90,6 +93,15 @@ const ERC8004 = erc8004.chains as Record<string, { IdentityRegistry: string; Rep
 
 // Same address on both chains (s3 §6.4c premise 1).
 const SPM: Address = "0xf85210B21cC50302F477BA56686d2019dC9b67Ad";
+/**
+ * MetaMask DelegationManager v1.3.0. Polygon (R-S221-8 #2), read from MetaMask's own publications on 2026-11-16:
+ * npm @metamask/delegation-deployments@2.1.0, dist/index.mjs, DELEGATOR_CONTRACTS["1.3.0"][137] = DEPLOYMENTS_1_3_0,
+ * whose DelegationManager is this address; and MetaMask/delegation-framework documents/Deployments.md at b4b8c41
+ * ("v1.3.0", DelegationManager, Polygon among the mainnets). Polygon's deployment block 69623266: eth_getCode is
+ * empty at 69623265 and 11,503 bytes at 69623266 (archive RPC, 2026-11-16). Its runtime code equals Arbitrum's and
+ * Base's except the immutables (chain id and cached EIP-712 domain separator), so the one decoder serves all three.
+ * Polygon also has v1.0.0 and v1.1.0 managers at other addresses; like Arbitrum and Base, only v1.3.0 is indexed.
+ */
 const DM: Address = "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
 
 export const CHAINS: Record<number, ChainSources> = {
@@ -160,6 +172,42 @@ export const CHAINS: Record<number, ChainSources> = {
       },
     },
   },
+  // Polygon PoS (R-S221-8 #2): the MetaMask DelegationManager only. No NablaZ contract (R-S189-1), no
+  // SpendPermissionManager, ERC-8004 registry or credit-line source. Falsifier: under ~1k distinct root delegators
+  // across 90 days of this index pauses the chain; the measurement is published either way.
+  137: {
+    chainId: 137,
+    name: "polygon",
+    enabled: true,
+    rpcEnv: "READER_POLYGON_RPC_URL",
+    groundingRpcEnv: "READER_POLYGON_GROUNDING_RPC_URL",
+    usdc: null,
+    nabla: {
+      NablaRecord: null,
+      NablaRecordV2: null,
+      NablaAccountFactoryPermanent: null,
+      AccountRegistryV6: null,
+      ConsumerAIMandateV4: null,
+      ConsumerAIMandateV5: null,
+      NablaAccountV3_2: null,
+      startBlock: null,
+      recordV2StartBlock: null,
+    },
+    external: {
+      SpendPermissionManager: null,
+      DelegationManager: DM,
+      ReputationRegistry: null,
+      IdentityRegistry: null,
+      creditLineLenders: [],
+      startBlocks: {
+        SpendPermissionManager: null,
+        DelegationManager: DEPLOYED[137].DelegationManager,
+        creditLineLenders: null,
+        ReputationRegistry: null,
+        IdentityRegistry: null,
+      },
+    },
+  },
 };
 
 /**
@@ -167,13 +215,23 @@ export const CHAINS: Record<number, ChainSources> = {
  * ("<chainId>:<block>,…") moves it later for a local read over a window. READER_START_BLOCK, when set,
  * overrides both in ponder.config.ts.
  */
-export function externalStart(c: ChainSources, source: keyof ChainSources["external"]["startBlocks"], env = process.env): number {
+export function externalStart(c: ChainSources, source: ExternalSource, env = process.env): number | null {
+  const deployed = c.external.startBlocks[source];
+  if (deployed === null) return null;
   if (env.READER_START_BLOCK) return Number(env.READER_START_BLOCK);
   for (const kv of (env.READER_EXTERNAL_FROM ?? "").split(",").filter(Boolean)) {
     const [id, block] = kv.split(":").map((x) => Number(x.trim()));
-    if (id === c.chainId && block !== undefined && Number.isFinite(block)) return Math.max(block, c.external.startBlocks[source]);
+    if (id === c.chainId && block !== undefined && Number.isFinite(block)) return Math.max(block, deployed);
   }
-  return c.external.startBlocks[source];
+  return deployed;
+}
+
+export type ExternalSource = keyof ChainSources["external"]["startBlocks"];
+
+/** True when the chain carries this external source (credit lines: when it has a registered lender). */
+export function hasExternal(c: ChainSources, source: ExternalSource): boolean {
+  if (source === "creditLineLenders") return c.external.creditLineLenders.length > 0 && c.external.startBlocks.creditLineLenders !== null;
+  return c.external[source] !== null && c.external.startBlocks[source] !== null;
 }
 
 /** READER_SOURCES: which source groups this instance indexes ("nabla", "external"; default both). */
@@ -195,8 +253,7 @@ export function nablaStart(c: ChainSources, env = process.env): number | null {
 
 /** The earliest block any source on the chain starts from. */
 export function startBlockOf(c: ChainSources): number {
-  const xs = [c.external.startBlocks.SpendPermissionManager, c.external.startBlocks.DelegationManager];
-  if (c.nabla.startBlock !== null) xs.push(c.nabla.startBlock);
+  const xs = [c.external.startBlocks.SpendPermissionManager, c.external.startBlocks.DelegationManager, c.nabla.startBlock].filter((x): x is number => x !== null);
   return Math.min(...xs);
 }
 
@@ -205,9 +262,7 @@ export type NablaContracts = { [K in Exclude<keyof ChainSources["nabla"], "start
   recordV2StartBlock: number;
 };
 
-export type EnabledChain = ChainSources & {
-  external: ChainSources["external"] & { SpendPermissionManager: Address; DelegationManager: Address; ReputationRegistry: Address; IdentityRegistry: Address };
-};
+export type EnabledChain = ChainSources;
 
 /** True when every NablaZ source on the chain has an address. */
 export function hasNabla(c: ChainSources): c is ChainSources & { nabla: NablaContracts } {
@@ -215,8 +270,9 @@ export function hasNabla(c: ChainSources): c is ChainSources & { nabla: NablaCon
 }
 
 /**
- * Enabled chains. Refuses an enabled chain with a null external address, and a chain whose NablaZ
- * sources are partly set. NablaZ nulls together mean "no NablaZ sources on this chain".
+ * Enabled chains. Refuses an enabled chain with an external source whose address and start block disagree (one
+ * null, the other set), a chain with no source at all, and a chain whose NablaZ sources are partly set. NablaZ
+ * nulls together mean "no NablaZ sources on this chain"; an external null pair means "not on this chain".
  * READER_CHAINS (comma-separated chain ids) narrows the set; the tests use it.
  */
 export function enabledChains(chains: Record<number, ChainSources> = CHAINS, only = process.env.READER_CHAINS): EnabledChain[] {
@@ -224,13 +280,25 @@ export function enabledChains(chains: Record<number, ChainSources> = CHAINS, onl
   return Object.values(chains)
     .filter((c) => c.enabled && (want === null || want.has(c.chainId)))
     .map((c) => {
-      for (const [name, address] of Object.entries(c.external)) {
-        if (address === null) throw new Error(`chain ${c.chainId} is enabled but external ${name} has no address`);
+      for (const name of ["SpendPermissionManager", "DelegationManager", "ReputationRegistry", "IdentityRegistry"] as const) {
+        if ((c.external[name] === null) !== (c.external.startBlocks[name] === null))
+          throw new Error(`chain ${c.chainId} is enabled but external ${name} has an address without a start block, or a start block without an address`);
       }
+      if (c.external.creditLineLenders.length > 0 && c.external.startBlocks.creditLineLenders === null)
+        throw new Error(`chain ${c.chainId} has credit-line lenders but no creditLineLenders start block`);
       const nulls = Object.values(c.nabla).filter((v) => v === null).length;
       if (nulls !== 0 && nulls !== Object.keys(c.nabla).length) throw new Error(`chain ${c.chainId} has a partial NablaZ source set`);
-      return c as EnabledChain;
+      const anyExternal = (["SpendPermissionManager", "DelegationManager", "ReputationRegistry", "IdentityRegistry"] as const).some((n) => c.external[n] !== null);
+      if (nulls !== 0 && !anyExternal) throw new Error(`chain ${c.chainId} is enabled but carries no source`);
+      return c;
     });
+}
+
+/** A registered source's deployment block on the chain; throws when the chain does not carry it (handlers only run where it does). */
+export function sourceStart(chainId: number, source: ExternalSource): number {
+  const b = chainById(chainId).external.startBlocks[source];
+  if (b === null) throw new Error(`chain ${chainId} does not carry ${source}`);
+  return b;
 }
 
 export function chainById(chainId: number): EnabledChain {

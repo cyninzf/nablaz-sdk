@@ -49,7 +49,7 @@ async function fetchRetrying429(input: RequestInfo | URL, init?: RequestInit): P
 }
 const client = createPublicClient({ transport: http(UPSTREAM_BASE, { fetchFn: fetchRetrying429 }) }) as PublicClient;
 /** The Identity Registry's first block with code on Base: no agentWallet, so no grounding transfer, is older. */
-const IDENTITY_START = BigInt(BASE.startBlocks.IdentityRegistry);
+const IDENTITY_START = BigInt(BASE.startBlocks.IdentityRegistry!);
 
 type Row = { feedback_id: string; agent_id: string; rater: string; feedback_block: string; feedback_tx: Hex; payment_tx: Hex; payee: string; rail: string };
 const rows: Row[] = (() => {

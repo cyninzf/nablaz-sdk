@@ -25,6 +25,7 @@ describe("s3 §6.4b one-liners", () => {
     expect(line.endsWith(` ${s}`)).toBe(true);
     expect(line).not.toContain("<SUBJECT>");
     expect(render("5-redeemed-delegation", { chainId: 8453, rootDelegator: s, from: 28207787 })).toContain('--rpc-url "$BASE_RPC_URL" --from-block 28207787 ');
+    expect(render("5-redeemed-delegation", { chainId: 137, rootDelegator: s, from: 69623266 })).toContain('--rpc-url "$POLYGON_RPC_URL"');
     for (const id of ids) expect(render(id, { chainId: 8453 })).not.toMatch(/https?:\/\//);
   });
 
