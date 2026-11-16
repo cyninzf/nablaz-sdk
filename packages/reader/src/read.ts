@@ -189,7 +189,7 @@ export function recordFacts(rows: Row[], nabla: NablaLabel | null): Fact[] {
       shape: own ? nabla!.shape : "e",
       terms: plain(r, ["kindName", "kind", "writer", "writerAuth", "counterparty", "counterpartyAuth", "policyHash", "policyVersion", "asset", "amount", "obligationRef", "seq"]),
       cite: cite(r),
-      reproduce: render("1-record-entries", { chainId: r.chainId, subject: r.subject }),
+      reproduce: render("1-record-entries", { chainId: r.chainId, subject: r.subject, record: r.emitter }),
     };
   });
 }

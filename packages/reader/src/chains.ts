@@ -27,11 +27,18 @@ export type ChainSources = {
   usdc: Address;
   nabla: {
     NablaRecord: Address | null;
+    /**
+     * NablaRecordV2 (G1-A; R-S221-4): V3_2 accounts write here, V3_1 and older keep writing to NablaRecord until each
+     * holder upgrades. Same RecordEntry topic0, so one decoder serves both; read merged per subject.
+     */
+    NablaRecordV2: Address | null;
     NablaAccountFactoryPermanent: Address | null;
     AccountRegistryV6: Address | null;
     ConsumerAIMandateV4: Address | null;
     /** First block to index the NablaZ sources from: their earliest deployment block. */
     startBlock: number | null;
+    /** NablaRecordV2's deployment block (G1 deploy tx 9, S220), where its source starts. */
+    recordV2StartBlock: number | null;
   };
   external: {
     SpendPermissionManager: Address | null;
@@ -88,10 +95,12 @@ export const CHAINS: Record<number, ChainSources> = {
     usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
     nabla: {
       NablaRecord: arb.NablaRecord.address,
+      NablaRecordV2: arb.NablaRecordV2.address,
       NablaAccountFactoryPermanent: arb.NablaAccountFactoryPermanent.address,
       AccountRegistryV6: arb.AccountRegistryV6.address,
       ConsumerAIMandateV4: arb.ConsumerAIMandateV4.address,
       startBlock: Math.min(arb.NablaRecord.deployBlock, arb.NablaAccountFactoryPermanent.deployBlock, arb.AccountRegistryV6.deployBlock),
+      recordV2StartBlock: arb.NablaRecordV2.deployBlock,
     },
     external: {
       SpendPermissionManager: SPM,
@@ -116,7 +125,15 @@ export const CHAINS: Record<number, ChainSources> = {
     rpcEnv: "READER_BASE_RPC_URL",
     groundingRpcEnv: "READER_BASE_GROUNDING_RPC_URL",
     usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    nabla: { NablaRecord: null, NablaAccountFactoryPermanent: null, AccountRegistryV6: null, ConsumerAIMandateV4: null, startBlock: null },
+    nabla: {
+      NablaRecord: null,
+      NablaRecordV2: null,
+      NablaAccountFactoryPermanent: null,
+      AccountRegistryV6: null,
+      ConsumerAIMandateV4: null,
+      startBlock: null,
+      recordV2StartBlock: null,
+    },
     external: {
       SpendPermissionManager: SPM,
       DelegationManager: DM,
@@ -153,6 +170,12 @@ export function sourcesOn(env = process.env): Set<"nabla" | "external"> {
   return new Set((env.READER_SOURCES || "nabla,external").split(",").map((s) => s.trim()) as ("nabla" | "external")[]);
 }
 
+/** Where NablaRecordV2 starts indexing: its deployment block, unless READER_START_BLOCK overrides it. */
+export function recordV2Start(c: ChainSources, env = process.env): number | null {
+  if (c.nabla.recordV2StartBlock === null) return null;
+  return env.READER_START_BLOCK ? Number(env.READER_START_BLOCK) : c.nabla.recordV2StartBlock;
+}
+
 /** Where the NablaZ sources start indexing. */
 export function nablaStart(c: ChainSources, env = process.env): number | null {
   if (c.nabla.startBlock === null) return null;
@@ -166,7 +189,10 @@ export function startBlockOf(c: ChainSources): number {
   return Math.min(...xs);
 }
 
-export type NablaContracts = { [K in Exclude<keyof ChainSources["nabla"], "startBlock">]: Address } & { startBlock: number };
+export type NablaContracts = { [K in Exclude<keyof ChainSources["nabla"], "startBlock" | "recordV2StartBlock">]: Address } & {
+  startBlock: number;
+  recordV2StartBlock: number;
+};
 
 export type EnabledChain = ChainSources & {
   external: ChainSources["external"] & { SpendPermissionManager: Address; DelegationManager: Address; ReputationRegistry: Address; IdentityRegistry: Address };

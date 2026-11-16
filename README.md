@@ -28,7 +28,8 @@ Third-party sources, on both chains:
 
 NablaZ sources, where deployed:
 
-- `RecordEntry` from `NablaRecord`, every field.
+- `RecordEntry` from `NablaRecord` and `NablaRecordV2` (G1; V3_2 accounts write to V2), every field, merged per
+  subject and told apart by `emitter`; `ConsentRegistered` / `ConsentRevoked` from `NablaRecordV2`.
 - `AccountCreated` from `NablaAccountFactoryPermanent` and `AccountRegistryV6`, to discover accounts.
 - ERC-1967 `Upgraded` on every discovered account proxy.
 - USDC `AuthorizationUsed` and `Transfer` where the authorizer or sender is a grantee vault. Vaults are
@@ -40,7 +41,8 @@ NablaZ sources, where deployed:
 | Table | One row per |
 |---|---|
 | `record_entries` | `RecordEntry`, raw |
-| `obligation_pairs` | `OBLIGATION_OPENED` / `REPAY` / `OBLIGATION_CLOSED` entry, grouped by `obligationRef` |
+| `obligation_pairs` | `OBLIGATION_OPENED` / `REPAY` / `OBLIGATION_CLOSED` entry, grouped by `obligationRef` within one record (`emitter`) |
+| `consent_events` | `NablaRecordV2` `ConsentRegistered` / `ConsentRevoked` |
 | `vault_payments` | settlement: a vault's `AuthorizationUsed` paired with its `Transfer`, and the grant and envelope it drew against |
 | `implementation_history` | `Upgraded` log or `IMPLEMENTATION_CHANGED` entry, per account |
 | `counterparties` | distinct (subject, counterparty) pair, with first evidence and counts |

@@ -33,16 +33,34 @@ export const KIND_NAMES = [
   "RELEASE",
   "PROOF_ACCEPTED",
   "EXTERNAL_ATTESTATION",
+  // G1-A (NablaRecordV2; nablaz-protocol src/record/RecordKinds.sol at 1ab54ec). The record itself writes
+  // CONSENT_GRANTED / CONSENT_REVOKED; V3_2 accounts write the rest.
+  "CONSENT_GRANTED",
+  "CONSENT_REVOKED",
+  "HOOK_SURFACE_SET",
+  "GUARDIAN_SET",
+  "RECOVERY_INITIATED",
+  "RECOVERY_CANCELLED",
+  "RISK_TIER_SET",
+  // G1-E.
+  "DESCRIPTOR_SET",
   "REFUSED",
 ] as const;
-export type KindName = (typeof KIND_NAMES)[number];
+/**
+ * Kind 0 (bytes32(0)): written by NablaAccountV3_2 on the controller's delegate branch when no descriptor applies,
+ * so the value moved is not priced (amount 0 = unknown, counterparty = the adapter). Not a RecordKinds constant and
+ * not a keccak of its label; labeled here so the row is read, never dropped as unknown.
+ */
+export const UNPRICEABLE = "UNPRICEABLE" as const;
+export type KindName = (typeof KIND_NAMES)[number] | typeof UNPRICEABLE;
 
-/** kind = keccak256 of the kind name. */
-export const KIND: Record<KindName, Hex> = Object.fromEntries(
-  KIND_NAMES.map((n) => [n, keccak256(stringToHex(n))]),
-) as Record<KindName, Hex>;
+/** kind = keccak256 of the kind name; UNPRICEABLE is bytes32(0). */
+export const KIND: Record<KindName, Hex> = {
+  ...(Object.fromEntries(KIND_NAMES.map((n) => [n, keccak256(stringToHex(n))])) as Record<(typeof KIND_NAMES)[number], Hex>),
+  [UNPRICEABLE]: pad("0x0", { size: 32 }),
+};
 
-const KIND_BY_HASH = new Map<Hex, KindName>(KIND_NAMES.map((n) => [KIND[n], n]));
+const KIND_BY_HASH = new Map<Hex, KindName>([...KIND_NAMES, UNPRICEABLE].map((n) => [KIND[n], n]));
 
 /** The kind's name, or null for a hash that is not a known kind. */
 export function kindName(kind: Hex): KindName | null {

@@ -28,6 +28,16 @@ describe("s3 §6.4b one-liners", () => {
     for (const id of ids) expect(render(id, { chainId: 8453 })).not.toMatch(/https?:\/\//);
   });
 
+  it("renders a record row from its own emitter: v1 is §6.4b's line, NablaRecordV2 its address and deploy block (R-S221-4)", () => {
+    const s = "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c";
+    const v1 = render("1-record-entries", { chainId: 42161, subject: s });
+    expect(render("1-record-entries", { chainId: 42161, subject: s, record: "0x80e937f9def48060308ee00ec279d8448d4775b0" })).toBe(v1);
+    const v2 = render("1-record-entries", { chainId: 42161, subject: s, record: "0x2618c4e053e9fa8f02cb26007fa3c0e4951f9e57" });
+    expect(v2).toBe(v1.replace("--from-block 516635327 --address 0x80E937f9DEf48060308Ee00EC279d8448d4775b0", "--from-block 524296058 --address 0x2618c4e053E9fA8f02Cb26007Fa3c0E4951F9e57"));
+    expect(v2).not.toBe(v1);
+    expect(() => render("1-record-entries", { chainId: 42161, subject: s, record: "0x000000000000000000000000000000000000dEaD" })).toThrow(/not a NablaZ record/);
+  });
+
   it("refuses an unknown chain", () => {
     expect(() => render("4-spm-used", { chainId: 1 })).toThrow(/no RPC variable/);
   });

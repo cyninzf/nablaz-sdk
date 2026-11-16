@@ -1,10 +1,10 @@
 import { createConfig, factory } from "ponder";
 import { getAbiItem, parseAbi } from "viem";
-import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain, type NablaContracts } from "./src/chains";
+import { enabledChains, externalStart, hasNabla, nablaStart, recordV2Start, sourcesOn, type EnabledChain, type NablaContracts } from "./src/chains";
 import { DelegationManagerAbi } from "./src/delegation";
 import { indexerTransport, rpcUrls } from "./src/rpc";
 import { AgentCreditLineAbi, IdentityRegistryAbi, ReputationRegistryAbi, SpendPermissionManagerAbi } from "./src/external-abis";
-import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi } from "@nablaz/sdk/abis";
+import { AccountRegistryV6Abi, NablaAccountFactoryPermanentAbi, NablaRecordAbi, NablaRecordV2Abi } from "@nablaz/sdk/abis";
 
 // Every source is parameterized by chain (src/chains.ts). Only enabled chains are configured; a NablaZ
 // source is registered only on chains that have one (R-S189-1).
@@ -66,6 +66,12 @@ export default createConfig({
     NablaRecord: {
       abi: NablaRecordAbi,
       chain: perChain((c) => ({ address: c.nabla.NablaRecord })),
+    },
+    // G1-A (R-S221-4): the second record address. RecordEntry's topic0 equals v1's, so both feed record_entries
+    // through one handler (src/index.ts), merged per subject; ConsentRegistered / ConsentRevoked are V2's own.
+    NablaRecordV2: {
+      abi: NablaRecordV2Abi,
+      chain: on(nablaOn, (c) => ({ address: (c as NablaChain).nabla.NablaRecordV2 }), (c) => recordV2Start(c)!),
     },
     AccountFactory: {
       abi: NablaAccountFactoryPermanentAbi,

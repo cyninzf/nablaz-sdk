@@ -6,6 +6,7 @@ import {
   factoryAccounts,
   grants,
   implementationHistory,
+  consentEvents,
   obligationPairs,
   recordEntries,
   vaultFundings,
@@ -160,7 +161,28 @@ ponder.on("AccountProxyViaRegistry:Upgraded", async ({ event, context }) => onUp
 
 // ── record_entries and what derives from them ───────────────────────
 
-ponder.on("NablaRecord:RecordEntry", async ({ event, context }) => {
+// One handler for both record addresses (R-S221-4): NablaRecord (v1) and NablaRecordV2 share RecordEntry's signature,
+// so their rows land in one table, told apart by `emitter`. V3_2 accounts write to V2, older ones to v1 (the C8 cut).
+type RecordEntryArgs = { event: { args: RecordEntryEventArgs; block: BlockLike; transaction: { hash: Hex; from: Address }; log: LogLike }; context: Context };
+type RecordEntryEventArgs = {
+  subject: Address;
+  kind: Hex;
+  writer: Address;
+  writerAuth: Hex;
+  counterparty: Address;
+  counterpartyAuth: Hex;
+  policyHash: Hex;
+  policyVersion: number;
+  asset: Address;
+  amount: bigint;
+  amountCommitment: Hex;
+  obligationRef: Hex;
+  source: Hex;
+  time: bigint;
+  seq: bigint;
+};
+
+async function onRecordEntry({ event, context }: RecordEntryArgs) {
   const chainId = context.chain.id;
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log);
   const id = rowId(chainId, ev.txHash, ev.logIndex);
@@ -203,6 +225,7 @@ ponder.on("NablaRecord:RecordEntry", async ({ event, context }) => {
         .where(
           and(
             eq(obligationPairs.chainId, chainId),
+            eq(obligationPairs.emitter, lc(event.log.address)),
             eq(obligationPairs.obligationRef, lc(a.obligationRef)),
             eq(obligationPairs.role, "OPENED"),
           ),
@@ -213,6 +236,7 @@ ponder.on("NablaRecord:RecordEntry", async ({ event, context }) => {
     await context.db.insert(obligationPairs).values({
       id,
       ...ev,
+      emitter: event.log.address,
       subject: a.subject,
       obligationRef: a.obligationRef,
       role,
@@ -258,6 +282,46 @@ ponder.on("NablaRecord:RecordEntry", async ({ event, context }) => {
   }
 
   if (name === "PAY_AUTHORIZED") await onPayAuthorized(context, ev, id, event.args);
+}
+
+ponder.on("NablaRecord:RecordEntry", onRecordEntry);
+ponder.on("NablaRecordV2:RecordEntry", onRecordEntry);
+
+// ── consent_events: NablaRecordV2 consent lifecycle (G1-A) ──────────
+
+ponder.on("NablaRecordV2:ConsentRegistered", async ({ event, context }) => {
+  const ev = evidence(context.chain.id, event.block, event.transaction.hash, event.log);
+  const a = event.args;
+  await context.db.insert(consentEvents).values({
+    id: rowId(ev.chainId, ev.txHash, ev.logIndex),
+    ...ev,
+    emitter: event.log.address,
+    event: "REGISTERED",
+    subject: a.subject,
+    consentId: a.consentId,
+    writer: a.writer,
+    kinds: [...a.kinds],
+    counterparty: a.counterparty,
+    scope: a.scope,
+    validAfter: a.validAfter,
+    validUntil: a.validUntil,
+    maxEntries: a.maxEntries,
+  });
+});
+
+ponder.on("NablaRecordV2:ConsentRevoked", async ({ event, context }) => {
+  const ev = evidence(context.chain.id, event.block, event.transaction.hash, event.log);
+  const a = event.args;
+  await context.db.insert(consentEvents).values({
+    id: rowId(ev.chainId, ev.txHash, ev.logIndex),
+    ...ev,
+    emitter: event.log.address,
+    event: "REVOKED",
+    subject: a.subject,
+    consentId: a.consentId,
+    writer: a.writer,
+    used: a.used,
+  });
 });
 
 /** P0-4: the vault from logs alone — PAY_AUTHORIZED.counterpartyAuth, the funding Transfer, CREATE2. */

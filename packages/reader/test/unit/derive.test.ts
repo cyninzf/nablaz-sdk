@@ -31,6 +31,15 @@ describe("kinds", () => {
     expect(kindName(KIND.OBLIGATION_OPENED)).toBe("OBLIGATION_OPENED");
     expect(kindName(keccak256(stringToHex("NOT_A_KIND")))).toBeNull();
   });
+
+  it("labels the G1-A / G1-E kinds and kind 0 as UNPRICEABLE (R-S221-4)", () => {
+    for (const n of ["CONSENT_GRANTED", "CONSENT_REVOKED", "HOOK_SURFACE_SET", "GUARDIAN_SET", "RECOVERY_INITIATED", "RECOVERY_CANCELLED", "RISK_TIER_SET", "DESCRIPTOR_SET"] as const)
+      expect(kindName(keccak256(stringToHex(n))), n).toBe(n);
+    expect(kindName(pad("0x0", { size: 32 }))).toBe("UNPRICEABLE");
+    expect(KIND.UNPRICEABLE).toBe(pad("0x0", { size: 32 }));
+    // UNPRICEABLE is the zero word, not the hash of its label.
+    expect(kindName(keccak256(stringToHex("UNPRICEABLE")))).toBeNull();
+  });
 });
 
 describe("vault address from logs (P0-4)", () => {
