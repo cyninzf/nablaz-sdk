@@ -19,6 +19,7 @@
 import type { Hex } from "viem";
 import { NOT_DETERMINABLE, paymentFacts, permissionFacts, recordFacts, vaultPaymentFacts } from "../read";
 import { utcOf } from "./utc";
+import type { ActorIdentity } from "./actor-identity";
 
 export const FEED_DEFAULT_LIMIT = 100;
 export const FEED_MAX_LIMIT = 500;
@@ -52,6 +53,11 @@ export type FeedItem = {
   timestamp: string;
   timestampUtc: string | null;
   citations: FeedCitation[];
+  /**
+   * β (S222): payment items only, and only when the payer was bound to an ERC-8004 agentId at the payment's block
+   * (src/api/actor-identity.ts). Additive and optional: an item without it reads as before.
+   */
+  actorIdentity?: ActorIdentity;
 };
 
 /** The order key: (timestamp, chainId, block, logIndex, kind rank). */
