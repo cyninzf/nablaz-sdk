@@ -3,8 +3,14 @@
   "source": {
     "repo": "nablaz-protocol",
     "path": "script/expected/permanent-arbitrum.txt",
-    "commit": "d6aaba99a4f3e4b98fe10fdfddea42ee76f8745d",
+    "commit": "1ab54ecd37a3609d2f7de1e94e57c944498bbc19",
     "blob": "1e33615bc6ead25d22bdd72b88f8a942f7546270"
+  },
+  "manifest": {
+    "repo": "nablaz-protocol",
+    "path": "deployments/arbitrum-one.json",
+    "commit": "1ab54ecd37a3609d2f7de1e94e57c944498bbc19",
+    "blob": "fd2fef3b75c1ff52fc55fee381bcc3e2ce30d6f1"
   },
   "note": "Implementations ProtocolConfig has published as currentAccountImpl, oldest first. An account is in the lineage when its Upgraded events name only these, after at most one first Upgraded to the bootstrap.",
   "lineage": [
@@ -17,6 +23,12 @@
       "name": "NablaAccountV3_1",
       "address": "0x3786B747AEf4E31A7A45cc7EBBBc8C462927AcDc",
       "provenance": "Safe nonce 147 setCurrentAccountImpl(NablaAccountV3_1), tx 0x4e6fc2c23182ea9ec1b56039524eafaee19346be8c1146c616d23989c65a1033, block 517848229 (s3 §10 row VF)"
+    },
+    {
+      "name": "NablaAccountV3_2",
+      "address": "0xa581b2888AD131D42F18C2eED1051A4576Ca06B9",
+      "from": "deployments/arbitrum-one.json",
+      "provenance": "Safe nonce 159 setCurrentAccountImpl(NablaAccountV3_2), tx 0xdb14c1c6f9d74eda7e36cc9e0774424494b88c362b2893b87420927f7e919cb2, block 524308312, ProtocolConfig CurrentAccountImplSet (G1 act 12, S220; CTO sweep at block 524308580)"
     }
   ],
   "bootstrap": {

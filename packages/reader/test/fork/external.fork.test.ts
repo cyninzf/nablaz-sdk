@@ -200,7 +200,7 @@ describe.each([42161, 8453] as const)("chain %i, ERC-8004 and the (c) share", (c
   it("R-D2B-2 (R-S191-11/16): grounding of every feedback in the window, counted (monitor, not a gate)", async () => {
     const client = createPublicClient({ transport: http(rpcUrl) }) as PublicClient;
     const registry = CHAINS[chainId]!.external.IdentityRegistry!;
-    const identityStart = BigInt(CHAINS[chainId]!.external.startBlocks.IdentityRegistry);
+    const identityStart = BigInt(CHAINS[chainId]!.external.startBlocks.IdentityRegistry!);
     // Payment facts in the window, by payer, matched to their Transfer logs below (labels only).
     const pays = t().external_payments.map(camel);
     const perms = new Map(t().external_permissions.map((p) => [String(p.id), camel(p)]));

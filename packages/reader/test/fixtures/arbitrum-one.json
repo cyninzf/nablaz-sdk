@@ -1,0 +1,634 @@
+{
+  "chainId": 42161,
+  "network": "arbitrum-one",
+  "chainName": "Arbitrum One",
+  "issuerAuthority": "0xcb1A73D0a0B94D2f65fD5f08b329c4D5a6788EbF",
+  "contracts": {
+    "IssuerActionsTimelock": "0xDc3FC02C75A624B39aA91A72177266DAb35578AA",
+    "EligibilityEngine": "0xB9D24B7cb966a20bBbCCeaf3fFA09861652E3276",
+    "EETFactory_v1_superseded": "0x2b92E4c2A8F807967801164796977600427d7e54",
+    "EETFactoryV2": "0x2802D316cd3a0D7cC78B5f80F5D73530d908877e",
+    "EETOracle": "0x6b736E8E8aE4b4a40EA0491D370Ad392cB0C0380",
+    "DistributionVault": "0x7467c55D665C08eC23eD6115715198ECea000636",
+    "DistributionVault_v1_deprecated": "0x81ef3BC6ea2b43CFa2c6e97E0Bc07a57d4702fb1",
+    "PilotEET": "0x2b317700B8929C077770043aE9857Bfd89eA0eF1",
+    "LiquidityEnvelope": "0xd06deF338fD6fdF0f3EbecdF87709488a4Ba4416",
+    "LiquidityEnvelope_v1_deprecated": "0x8B866Dd4E212746051e7659a27E9b2E15932f251",
+    "BilateralSettlement_v1_deprecated": "0x8b935EF5978F87C3738F988C4B54d628Bf03da27",
+    "EncumbranceRegistry_v1_superseded": "0x43736BeA38b0ed29A5D0BeeE101c46b4af4a54c6",
+    "SettlementRouter": "0xb4d6587bB3897E4e0F2De086662Eb9B8eE7b1ee3",
+    "BilateralModuleV3": "0x15b926F7CF412b13c42ca2B1abDbD7E2f5eC9ED1",
+    "BilateralModuleV2_superseded": "0xFe8A3B7cc22498Ea1b75c714fD10FAE3E30B52b1",
+    "WaiverRegistry": "0x309F6c889A13F9BDfDC653B454039d5F34E357fB",
+    "BilateralModule_v1_dead": "0x4fFCf5758d2D564149cC3a58B0d0B31F32afcb8E",
+    "AccountRegistry_v2_superseded": "0x8Fb91C42c3F6c38e0443036f3972C2Bdf6241c70",
+    "AccountRegistry_v1_deprecated": "0x05a4640c49A130cB62cC96900450BF29550E654C",
+    "NablaAccount_v1_superseded": "0xddcB70A901Cd26f4c9bAc2b5549d905c17cf7106",
+    "nablaAccountViewV2": "0xef81B629B3d3254486FFffB3abff2B99753a44E1",
+    "nablaAccountViewV2_old_superseded": "0x71Ac1D197Ef3783A3221409d7131384dFd4eAb82",
+    "NablaAccount_v1_deprecated": "0x51D12efa7f2960b8EAEfA95b165305BDFD606491",
+    "ZKProofGate_v1_superseded": "0x160a95dd2Cf1B31bc50e7289216110dc68fa5552",
+    "ZKProofGateV2_v4accounts_immutable": "0x53a9d96cFe6891B39a859516B3ae341087333F1b",
+    "ZKProofGateV2_v1_superseded": "0xEa2C47D63508DC7533307E1C5c96F94B65175ace",
+    "JurisdictionVerifier": "0xC04C85ba59F9bb13c90f938d21191580F6aF2774",
+    "IncomeVerifier": "0x17242548954A124e0430Cc2d41927Dc6f6Cf59ac",
+    "MandateBoundsVerifier": "0x57bD9d527c3dfF447E91cEE648Bfd7B7B2B3cf45",
+    "NullifierRegistry": "0x1A74A8FC8e9F7f4D0477c7C1640818431447E6fD",
+    "CapabilityRegistry": "0xD2E661a7f53eD9A1fe7186f15B2396B175b2Daf1",
+    "ConsumerAIMandate": "0xca324E43169a6746736f19709A858fce9E0DD2cf",
+    "consumerAIMandateV2": "0xdF1FF02FA7b1A132CAD214524f7A9FcA65aa19F9",
+    "ProviderRegistry": "0x1791693AFD34064105fa764Cc9a54BA7EB46c96F",
+    "CamelotSwapProvider_dead": "0x5577c05562593DE4956EcA877adEcD0884E8B3E5",
+    "PaymentAdapter": "0x7d500dB78ED205ECeeE04B6544EB844618259FDd",
+    "PaymentAdapter_v3_superseded": "0x0C172f22CF01D8A90aDF365Affe706ee60D930d9",
+    "PaymentAdapter_v2_deprecated": "0xe19Ce68F3B4daA93D8B4904E192C25fF8E528792",
+    "PaymentAdapter_v1_deprecated": "0x4ae831579a9b7e494959a2aaB462fdc57FA6f43D",
+    "Stack1DistributionAdapter": "0xcC468Ad9Cf02cFFe4301675B94DC5671A1c644F5",
+    "Stack1DistributionAdapter_v1_deprecated": "0x9f95540f2064fB42e07F0AB6853cFcE700088ED2",
+    "Stack1CollateralAdapter": "0x4A353Fd9A8303A9286786948B371F82A20b5F452",
+    "MorphoLendAdapter": "0x733133150415b33Ad80e0fA3EF408d73c0a4316C",
+    "MorphoLendAdapter_v6_superseded": "0xcd486f6E7c459476Ef9e66381b3083219Fffe99c",
+    "MorphoLendAdapter_v3_deprecated": "0xeEb734Daab257aa5E5175240e43ECE213451a245",
+    "MorphoLendAdapter_v2_deprecated": "0x7d0455F1bA4032dD7005aa5016DCfCe4cc225343",
+    "AaveLendAdapter": "0xA79aD82c87463E908e2bf4437145eab7C3Ce89a0",
+    "OndoYieldAdapter_v3_deprecated": "0xC24A3729485A17567918De8fe06cCa1b5AD28A17",
+    "OndoYieldAdapter_v2_deprecated": "0x7679a325f7B37b28D7cB20320e11Ada25F1B7649",
+    "MoonPayAdapter": "0xb056B27816892BC3D24c2e9538A47142EDBD8f5B",
+    "TransakAdapter": "0x6103d82FeAdb66F533d0d05F8054151D749Ff776",
+    "YellowCardAdapter": "0xD136BFfF39e1F1cBe2bD112f11E94B07e1754d96",
+    "KotaniPayAdapter": "0xFa6062A568FEd794EfE7126d6B38e7F049a08171",
+    "RampAdapter": "0x02F2B3864c1FdDf61acB1b329Bc22D6A638dc623",
+    "GnosisPayAdapter": "0x9Bc1Ad17A20c39f7d28406696CCc66cbB619bC64",
+    "AlchemyPayAdapter": "0xB9af5bc0a176FF8B4eE0d56E2650d01ad8db85Ae",
+    "RainAdapter": "0x69Ee07eFBeaDf1b24B9d74Fb7B1A8C7835C6222B",
+    "RiskConfig": "0xaa96035256dc584aBd9c66B5Fb3f73631c122827",
+    "RiskConfigTimelock": "0x2f578393FCCd75aC5D681eF530d6e15b30ED3Ff9",
+    "OndoYieldAdapter_v4_deprecated": "0x946Cc1fC476B061de700320C1e84589691EC1904",
+    "MorphoLendAdapter_v5_superseded": "0xCfDD732101539D6A4806d74cf633926b08f7080f",
+    "MorphoLendAdapter_v4_superseded": "0xEF61d9BaadDbFAA9a494C544242B01354a607D0c",
+    "NablaAccountFactory_v4_superseded": "0x2f9BfC3F08651730e52529f41beD3ec89BE00144",
+    "NablaAccountFactory_v3_superseded": "0x213018E26B7b6B597Be72487a09904D0010Cd03A",
+    "NablaAccountFactory_v2_superseded": "0x5483aE46f3E57c38fC7C81c7A0b008B1F67ED516",
+    "NablaAccountFactory_v1_superseded": "0x8998A37516DC49b2Bd45E0CCf9fF936F937b2529",
+    "DefaultOnboardingHook_v3_superseded": "0x06C3755d73968aD94615295C6d0CF724f4eaF8E4",
+    "DefaultOnboardingHook_v2_dead": "0xC626cED7dccAb43e2c3d1a8f2E7003b0DADA9069",
+    "DefaultOnboardingHook_v1_dead": "0xE264e1E63875b93589beD0a2AA1eDC7a0E3B8EeA",
+    "DeFiYieldAdapter_sUSDe": "0x11f954a338d29903cD9cFdBF4b311A3AdfDa2598",
+    "DeFiYieldAdapter_sUSDe_v5_superseded": "0x365D5E9497B6602213e52806627c6c5702b80c29",
+    "DeFiYieldAdapter_sUSDe_v4_dead": "0x02175Bb62A9d5C905a3c75894de99453291E5108",
+    "DeFiYieldAdapter_sUSDe_v3_dead": "0xd8874294294cC487ef01da8086306743108a484F",
+    "DeFiYieldAdapter_sUSDe_v2_dead": "0xEBA42B0AC408503D06B2c736D5caDcCe3Af1Fa23",
+    "DeFiYieldAdapter_sUSDe_v1_dead": "0xb535BFd354A34eED28aD339c0275D8e4903d9994",
+    "defiYieldAdapterWstETHV6": "0x1A671c549D8a9C1230fBB37b366A8E5a60EF3Ddd",
+    "defiYieldAdapterWstETH_v5_superseded": "0x6da7E89433431aA37E65C9Fb8CEb1BD9Ca5c2458",
+    "DeFiYieldAdapter_wstETH_v4_superseded": "0x8094A616a9Ffe72Eb628772bBB7340C5E14675B2",
+    "DeFiYieldAdapter_wstETH_v3_superseded": "0xd3B0024a2C95A98606d78da1C9510E8915a54b8c",
+    "DeFiYieldAdapter_wstETH_v2_dead": "0xeF073f690F294c47EE19BB2A0A4B058266146612",
+    "DeFiYieldAdapter_wstETH_v1_dead": "0x5d58F8330c1B166450C14b2acc5C7CC43e4BAeb3",
+    "UniswapV3SwapProvider_susde_v2": "0x20c5fca15ca0cA5aF4eEfEd5038A4e35Cd508dfC",
+    "UniswapV3SwapProvider_wsteth_v2": "0xa3fc9C5C54D6E3da6061dF26375F9095DFF1d4bD",
+    "uniswapV3MultiHopSwapProviderV2": "0x863B34d94AbCA7902A017cB79320a1794686ECa6",
+    "uniswapV3MultiHopSwapProvider_v1_dead": "0xCC33be8ccab6166980Fb607e684118951F40142D",
+    "AggregatingSwapProvider": "0x492554382b46C78857EE01eaB370e5753982Aade",
+    "AggregatingSwapProvider_v1_superseded": "0x8A897b02440c71441B29061150DC5c7A3E0465D8",
+    "UniswapV3SwapProvider_susde_v1_dead": "0xEB9E4c0F927c33A84EfD1c41bF955C273453AF74",
+    "UniswapV3SwapProvider_wsteth_v1_dead": "0x5379aC8F5B0a8B881265EDAeDa3FB22166e88e09",
+    "UniswapV3SwapProvider_100_dead": "0x80aEbafe3c9DbdF429B47257A29b4076F842e43a",
+    "UniswapV3SwapProvider_dead": "0x13cA3eAB091c8c36D11345B646eE80b21Fe6ff6b",
+    "UniswapV3SwapProvider_10000_dead": "0xa42b84be763F7584628df261412b832cde1bd6bE",
+    "RouteIntelligence": "0xFae5E851F90806d514AaBEe6BC22Fb2cae0bB840",
+    "EETView": "0x1bf0759eD7953F441ACB41137888d6eEF8e28f44",
+    "SettlementView": "0x659261C3b427A18c8866519549c164149f10FdE7",
+    "CapitalPartnerFacility": "0x16683c4321b2d37E1ef87618bd1b1F15b0D32F37",
+    "PayrollLoanAdapter": "0x0c0e13c6d16e5b30C63F6B73E5fF527e0171C5fF",
+    "CreditContextView": "0x18740893956923A1801350B50CCe2284fEdBec05",
+    "RepaymentTracker": "0xe0A93a36e91aFaAeC0e2C711A2f067D64308e9bf",
+    "VaultRegistry": "0x46d3785F617077856D3c7AEE879869f0e4D159c2",
+    "MandateObjectiveView": "0x3bac69AD2dda2227807b367f35eaeec8B6FB66c4",
+    "ERC4626YieldAdapter": "0x51A7E78367D8c3f7b58a2C8537380e39e9dfAf52",
+    "ProofStateRelay": "0xDc89C9e4C00Be41f704B85cE2B59EB3Def2fc8B0",
+    "EncumbranceRegistryV2": "0x0EDC4415ff83e0d299bCdE3D025117ED3fD77B0d",
+    "ZKProofGateV2_type10": "0x99Be6d43f9D101C27Cb8786e82F99605B54ff1d2",
+    "AgentServiceRegistry": "0x633Ef753396F4A4A6BE1d638e7266f7a265a1353",
+    "AgentServicePaymentAdapter": "0xfE1c64e1c485Cc4f4366355cA79fB2508c628054",
+    "StargateBridgeProvider": "0x3614607328aebC292780C2e1512f8041C9F231CC",
+    "AccountRegistry_superseded": "0x9C49537D6fB46CaA09F89821aee109A3170a08D2",
+    "AdapterPauseRegistry": "0xA5f830C2692B7B86E31bCb6F750391a570FCC53a",
+    "DefaultOnboardingHook_superseded": "0xe25906cF0D6Cb9F25171b19638b41fCF468E69e8",
+    "nablaAccountFactoryV5_superseded": "0x5DC09cA0cd951d037F44943C5E61e21C482012Bf",
+    "RegistryResolver": "0x2508bbd1978100D196774aD2577ec0b07A352225",
+    "AccountRegistryV5": "0x955708eF8f2b13f353AbB864085Fda7D438D5265",
+    "ConsumerAIMandateV2Resolver": "0x2B12a9534a0E06a84E74bA970DC24EB6e12CCF6B",
+    "DefaultOnboardingHookV6": "0x8050C913F99bb5f3c077245485EedA3e9e5D3e0c",
+    "AccountRegistryV4_superseded": "0x66881fdB76f3A89adA78d505F16089B3643Ccc5E",
+    "ZKProofGateV2_superseded": "0x99Be6d43f9D101C27Cb8786e82F99605B54ff1d2",
+    "ConsumerAIMandateV2New_superseded": "0xA6B2fa840422a3BED2f6AD7f03691bC4C86A6aFc",
+    "NablaAccountFactoryV6_superseded": "0x22F175A96E82C403E78284A622b6Fa7E82bcE074",
+    "DefaultOnboardingHookV5_superseded": "0xb709538806d0693735A1BC4CE9D34efD4DF6e9F5",
+    "NablaAccount_v2_superseded": "0x5Cb633318774655ab8c60B3A30928047E50BD76d",
+    "EncumbranceRegistryV3": "0xd1dac78bd405Ba19b20621B16c532F19413773fe",
+    "NablaAccountFactoryGen2_superseded": "0xf706C351aC1a3C694802C748EcadE464A40e4bb3",
+    "CrossBorderAdapter_superseded": "0x44C155a9702C9B1C7f29532156Dc9DF2F3aaeEEf",
+    "ProtocolHealthGate": "0xfaDe1Fd20FdF9e55A2E1eA73E7963D2EC448AaD2",
+    "ProtocolHealthGate_superseded": "0x50f0896E7226857d2Bd58A84efa26E803e8fd031",
+    "NablaAccountFactory_v7_superseded": "0x46ee2f5f5Fd7C6a71B3cc0187EDBB990e972e03C",
+    "NablaAccountFactoryV8": "0x6e7254CD6De569983023A09Bf4DC57058A2b2FE0",
+    "NablaAccountFactoryGen2_superseded_2": "0x76FF1A1473331Ea0B62C1F5eb66b42eb62B99604",
+    "CCTPBridgeProvider_superseded": "0xf065995c1f18776E22859A82BF67A205A2316803",
+    "ZKProofGate_v3_superseded": "0x9291C265D6Deacbd3f4d52ECAf53d04781F05510",
+    "consumerAIMandate_v3_superseded": "0x24319348C7F14c781dbaDFa9c20E84Cc645C4166",
+    "ConsumerAIMandateV3": "0xBf79e8Cfd75e20089051fd54Ae3f89d691C5772B",
+    "NablaAccount_v2_superseded_2": "0xe07bA765Ab88B8F19e4afD422A6463e40AEF1E33",
+    "NablaAccountFactoryGen2_superseded_3": "0x873EB105Eccd5eE1346c54A07A529a748e618132",
+    "CCTPBridgeProvider_v2_superseded": "0x549D2Da0F02A9324F4230b47480B29D6E29D9e54",
+    "AggregatingBridgeProvider_superseded": "0xaBB7dF6A321e66B7a36323984122CDeF7E90e1C0",
+    "AggregatingBridgeProvider": "0x6084b0fCFd73C3269BaC5C23f06f404b4c6a4258",
+    "CrossBorderAdapter_v2_superseded": "0x4Ad9bd8bA7C639D19Ab07125bA5Fba6f87Ff8132",
+    "NablaAccount_v2_superseded_3": "0x0dE2bc1b45242A422ffB321543e09076402EC0db",
+    "NablaAccountFactoryGen2_superseded_4": "0xD557e6289266bd654392bc8f94f6D37D28277093",
+    "NablaAccount_v2_superseded_4": "0xe715698cA980D8E60a2446641F2A5453ab9aB05B",
+    "NablaAccountV2": "0x886Be8431a904eC4e5D5E09F5481F13A8AD0fb2d",
+    "NablaAccountFactoryGen2_superseded_5": "0xbaad47ed9DcE423F86f2647596c308455D4cD032",
+    "NablaAccountFactoryGen2": "0x8Feaa55C933D3fb28280a52a0EdD425ccDb9b2bF",
+    "CCTPBridgeProvider_v2_superseded_2": "0x8257B4b432Ae455858d37782dE6B47D997FA6123",
+    "CCTPBridgeProviderV3": "0x19B4226a2595386d773f6E2eda7A033E9310837E",
+    "CrossBorderAdapter_v3_superseded": "0x31A7Eea5E02FE87fBac65EE815B7cA5f76C7b8bB",
+    "CrossBorderAdapterV4": "0x5e9f47993e7AFDA67ae09d99859AD66425fb988d",
+    "DestinationAdapterRegistry": "0x63EF5384fd2583745e20876425b3e76a33c92D15",
+    "AuthorizedRelayerRegistry": "0x3795B5abb19A2c652DD1e5E7a61d67dcFfbcAB3a",
+    "ZKProofGate_v3_superseded_2": "0x2555c0E41fCdDF9D9c50C7E3d52932092fF93b34",
+    "ZKProofGateV4": "0x767DdcA34D045e3A89a8a622aE8F2eB2Afe6c1EB",
+    "MigrationHelper": "0xf7a27a52fDFA5f700e0ed03685deb1dBd574196D",
+    "MigrationSweepAdapter": "0xDc32C6b31D7dDd706806fceb3Bc8d56d868F46A0",
+    "YieldConsistencyVerifier": "0x55AC7Ac73ccA3CBcab00f1dFAF4E3bCb8dA28248",
+    "BridgeAdapter_v1_dead": "0xf2aAA57Cc48EA5DED2E840fABa0503Ecd8785aeD",
+    "BridgeAdapterV2": "0xA721A8777F920c7FECC2DD6637E3EfF1e4f05C82",
+    "AccreditationVerifier": "0xA134520C0e196991Ce669ade7Dc4b7B135eAF052",
+    "CollateralVerifier": "0xa8F816bAD674F7E25325F1bbBcaec4ef9c28Ef82",
+    "RepaymentVerifier_superseded": "0xFaB3331073CD54c1508738AF5c01204fB73f1878",
+    "RepaymentVerifier": "0x8e5566F15424313EC4360212650488FafFA0A272",
+    "CCTPSendMessageProvider": "0xcDA232e6860792a5d93dcb5217F5ADCdf827CE83",
+    "CrossBorderAdapterV4Redemption": "0x92aA9Be96B6b27ae075944609b13B5d849D464E2",
+    "ERC4626DestinationReceiveRedemptionAdapterArb": "0xE8a537EB1B7e3F85A17d1eb21D30D719cd6e2be0",
+    "Stack1ExitAdapter": "0x516eB7224dE5C9C9EC6F980686f4dc93F40825b0",
+    "PilotEETV2": "0x970A5263416b09811AFb3542733647fe922dDBF6",
+    "ProtocolConfig": "0x59C3023543956e133dce6E1D22D4974bCF1097AE",
+    "NablaAccountBootstrap": "0xCa3330683eD6659B44EBA03B8d057e65e6Ff2eD5",
+    "AccountRegistryV6": "0x0A9077F739a4D637bf72faFe66b55a3e0e3A4EA0",
+    "NablaAccountFactoryPermanent": "0x86dbDF2570a8670b866340e9e0A1A4B1FC5508ca",
+    "ConsumerAIMandateV4": "0x02D9bEfE43A9E375d5a8D2111a593A0c3d664DB2",
+    "EncumbranceRegistryV4": "0xDCA193c52d72344a94B676DD4c8563C129067681",
+    "NablaRecord": "0x80E937f9DEf48060308Ee00EC279d8448d4775b0",
+    "GranteeVault": "0xD07EB7d343Dc6f89dc40ae5e822A84e7F9ddcA14",
+    "ActionDerivation": "0x521FCAcEC84ea9ffc1e38B5a4CaE19a39900Aae1",
+    "AccountAsync": "0x1F19f3ad1138653820b612eB516A1C9c8E41eA28",
+    "AccountSignatures": "0xa7a1bd680EA2EB8034386b64D07aD9e52Ca9C514",
+    "AccountVaults": "0x02E22d2776AcC8987d2600e0bb74F42264de323b",
+    "NablaAccountV3": "0x2DE2f1da0B9d47Ec417Ad10f909f8740E0b027fA",
+    "ProofGateV1Shim": "0x207AB6ef123aEA547A68f609C9C3b7AF7AA866Ee",
+    "GranteeVaultV2": "0x630963b04c992d912F26e9bEF8C9339b2c29aED0",
+    "NablaAccountV3_1": "0x3786B747AEf4E31A7A45cc7EBBBc8C462927AcDc",
+    "VaultRegistryV2": "0x6185367BDA4c74931ADb373E5216468E41890165",
+    "ERC4626YieldAdapterV2": "0x82Af159ba427D078DA36eB00F83C4b95b7001643",
+    "ERC4626YieldDescriptor": "0x9EDE2894D463774fABb5896b76C00dD00AdD58A9",
+    "ActionDerivationV2": "0xd44719c1857DD2aFEB1ce993170dc627E643531c",
+    "AccountDescriptors": "0xe39782840680e60A3A46b5C366BE626CDF50e125",
+    "AccountModules": "0x6120756bD89DfD4D2BFAA8bBCAC6E512E0307f3a",
+    "AccountControl": "0x6BCDF9fa7168101d9aB5d894b59Da27E863cc272",
+    "AccountGrantee": "0x399A0Ba1320b81A14a1D344b10a2d4a8a0E2aF85",
+    "NablaRecordV2": "0x2618c4e053E9fA8f02Cb26007Fa3c0E4951F9e57",
+    "ConsumerAIMandateV5": "0x6aFD79571c641B8c5293C8A9613CA851F6Dc5EBd",
+    "NablaAccountV3_2": "0xa581b2888AD131D42F18C2eED1051A4576Ca06B9",
+    "ProtocolHealthGateV2": "0xBe5c1B93C26fc650098ED53d287F38049396ddEa"
+  },
+  "safe": "0xcb1A73D0a0B94D2f65fD5f08b329c4D5a6788EbF",
+  "deployedAt": "2026-03-14T00:00:00Z",
+  "yieldAdapters": {
+    "sUSDe": {
+      "type": "defi_yield",
+      "adapter": "0x11f954a338d29903cD9cFdBF4b311A3AdfDa2598",
+      "underlyingAsset": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "underlyingSymbol": "USDC",
+      "yieldToken": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2",
+      "yieldTokenSymbol": "sUSDe",
+      "label": "Ethena staked USDe",
+      "chainId": 42161,
+      "active": false,
+      "riskClass": "stable",
+      "supportedStablecoins": [
+        "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+      ],
+      "swapProviderId": "uniswap-v3-susde-v2",
+      "swapProvider": "0x20c5fca15ca0cA5aF4eEfEd5038A4e35Cd508dfC",
+      "poolFeeTier": 100,
+      "protocolFeeBps": 25,
+      "tierEligibility": [
+        "Conservative",
+        "Moderate",
+        "Growth"
+      ],
+      "status": "route_unavailable",
+      "apySource": {
+        "type": "susde"
+      }
+    },
+    "wstETH": {
+      "type": "defi_yield",
+      "adapter": "0x1A671c549D8a9C1230fBB37b366A8E5a60EF3Ddd",
+      "underlyingAsset": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "underlyingSymbol": "USDC",
+      "yieldToken": "0x5979D7b546E38E414F7E9822514be443A4800529",
+      "yieldTokenSymbol": "wstETH",
+      "label": "Ethereum staking yield",
+      "chainId": 42161,
+      "active": true,
+      "riskClass": "volatile",
+      "supportedStablecoins": [
+        "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+      ],
+      "swapProviderId": "uniswap-v3-multihop-wsteth-v2",
+      "swapProvider": "0x863B34d94AbCA7902A017cB79320a1794686ECa6",
+      "route": "USDC \u2192 WETH (0.05%) \u2192 wstETH (0.01%)",
+      "protocolFeeBps": 25,
+      "tierEligibility": [
+        "Conservative",
+        "Moderate",
+        "Growth"
+      ],
+      "riskDisclosure": "ETH yield \u2014 value fluctuates with ETH price",
+      "apySource": {
+        "type": "wsteth"
+      }
+    }
+  },
+  "vaultRegistry": {
+    "entries": [
+      {
+        "vaultAddress": "0x7e97fa6893871A2751B5fE961978DCCb2c201E65",
+        "underlyingAsset": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "underlyingSymbol": "USDC",
+        "label": "Morpho USDC Gauntlet Core",
+        "chainId": 42161,
+        "active": true,
+        "apySource": {
+          "type": "morpho",
+          "curator": "gauntlet"
+        }
+      },
+      {
+        "vaultAddress": "0x7c574174DA4b2be3f705c6244B4BfA0815a8B3Ed",
+        "underlyingAsset": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "underlyingSymbol": "USDC",
+        "label": "Morpho USDC Gauntlet Prime",
+        "chainId": 42161,
+        "active": true,
+        "apySource": {
+          "type": "morpho",
+          "curator": "gauntlet"
+        }
+      },
+      {
+        "vaultAddress": "0x7CFaDFD5645B50bE87d546f42699d863648251ad",
+        "underlyingAsset": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "underlyingSymbol": "USDC",
+        "label": "Aave v3 USDC Static",
+        "chainId": 42161,
+        "active": true,
+        "apySource": {
+          "type": "aave",
+          "pool": "v3-arbitrum"
+        }
+      },
+      {
+        "vaultAddress": "0xEB71A37713B56646916152F2D063E3251Ef9211D",
+        "underlyingAsset": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+        "underlyingSymbol": "USDC",
+        "label": "Static HyperLend HyperEVM USDC v2",
+        "chainId": 999,
+        "active": true,
+        "apySource": {
+          "type": "hyperlend",
+          "pool": "hyperevm-usdc"
+        }
+      },
+      {
+        "vaultAddress": "0xBEEFE94c8aD530842bfE7d8B397938fFc1cb83b2",
+        "underlyingAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "underlyingSymbol": "USDC",
+        "label": "Steakhouse Prime USDC (Base)",
+        "chainId": 8453,
+        "active": true,
+        "apySource": {
+          "type": "morpho",
+          "curator": "steakhouse"
+        }
+      },
+      {
+        "vaultAddress": "0xC509aB7bB4eDbF193b82264D499a7Fc526Cd01F4",
+        "underlyingAsset": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+        "underlyingSymbol": "USDC",
+        "label": "Static Aave Avalanche USDC (stataAvaUSDC)",
+        "chainId": 43114,
+        "active": true,
+        "apySource": {
+          "type": "aave",
+          "pool": "v3-avalanche"
+        }
+      },
+      {
+        "vaultAddress": "0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61",
+        "underlyingAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "underlyingSymbol": "USDC",
+        "label": "Gauntlet USDC Prime (Base)",
+        "chainId": 8453,
+        "active": true,
+        "apySource": {
+          "type": "morpho",
+          "curator": "gauntlet"
+        }
+      }
+    ],
+    "excluded": [
+      {
+        "label": "Morpho USDT Gauntlet Core",
+        "address": "0x139250CdB310D657eAC506c7C7FC6AcDE34Af1ec",
+        "reason": "~$121 TVL, unusable liquidity"
+      },
+      {
+        "label": "Aave USDT Static",
+        "address": "0xb165a74407fE1e519d6bCbDeC1Ed3202B35a4140",
+        "reason": "~$59K TVL, marginal liquidity"
+      },
+      {
+        "label": "wstETH ERC4626",
+        "reason": "Does not exist on Arbitrum One \u2014 wstETH uses DeFiYieldAdapter via yieldAdapters section"
+      }
+    ]
+  },
+  "viewContracts": {
+    "RouteIntelligence": "0xFae5E851F90806d514AaBEe6BC22Fb2cae0bB840",
+    "EETView": "0x1bf0759eD7953F441ACB41137888d6eEF8e28f44",
+    "SettlementView": "0x659261C3b427A18c8866519549c164149f10FdE7",
+    "CreditContextView": "0x18740893956923A1801350B50CCe2284fEdBec05",
+    "MandateObjectiveView": "0x3bac69AD2dda2227807b367f35eaeec8B6FB66c4"
+  },
+  "settlement": {
+    "bilateralModuleId": "0xe312037373ec1a17fd73a452b4a574ccd4cc8079a34ac6fd175c9d19b0ed950e",
+    "bilateralModuleAddress": "0x15b926F7CF412b13c42ca2B1abDbD7E2f5eC9ED1",
+    "settlementRouterAddress": "0xb4d6587bB3897E4e0F2De086662Eb9B8eE7b1ee3",
+    "encumbranceRegistryAddress": "0x43736BeA38b0ed29A5D0BeeE101c46b4af4a54c6",
+    "liquidityEnvelopeAddress": "0xd06deF338fD6fdF0f3EbecdF87709488a4Ba4416",
+    "waiverRegistryAddress": "0x309F6c889A13F9BDfDC653B454039d5F34E357fB",
+    "defaultTimeoutSeconds": 259200,
+    "maxTimeoutSeconds": 7776000,
+    "waiverLimit": 10,
+    "feeBps": 20
+  },
+  "zkArtifacts": {
+    "_doc": "Canonical SHA-256 hashes for ZK circuit artifacts (wasm / zkey / vkey). Source of truth: this file, authored by Protocol Engineer from the post-ceremony artifacts that match the deployed Verifier contracts. Consumers (web) verify their bundled public/circuits/* copies against these \u2014 verifying a copy against itself is circular, so PE authors, web verifies. A pin is NEVER seeded from the artifact it pins: that manufactures agreement and is the exact mechanism by which web served the superseded April repayment VK for months while every check passed (S168; web #318 corrected it).",
+    "_pendingSemantics": "TWO PENDINGS, TWO MEANINGS \u2014 do not let one flip the other. (1) HERE, proto zkArtifacts.<Circuit>.pending answers 'are the canonical hashes recorded?'. It flips false the moment PE records them, and says nothing about what any consumer serves. (2) WEB, public/deployments/stack1-arbitrum-one-v0.json zkArtifacts.<circuit>.pending answers 'is the served artifact set complete enough to generate a proof?' \u2014 web's repayment.pending stays TRUE until the zkey ships web-side, which web #318 left deliberately. As of S168 proto Repayment is pending=false and web repayment is pending=true, and BOTH are correct simultaneously. A future session that reads one and updates the other has produced a defect, not a sync. Invariant (aa) enforces hash identity across the ledgers; it deliberately does NOT couple the two pending flags.",
+    "_ledgerIdentity": "These entries mirror circuits/canonical-hashes.json and are checked against it by Pattern A invariant (aa) \u2014 same circuit, same artifact role, same hash, or CI fails. Cross-repo identity against web's zkArtifacts is checked by scripts/check-manifest-exhaustiveness.py. Both exist because this block is a MIRROR of registry state (class-3), and an unchecked mirror is how ledgers silently diverge.",
+    "Accreditation": {
+      "wasmSha256": "4f68d70526f9bec873a5ac9ba87d78fca4e68d618d88fd9d526308953ac579d4",
+      "zkeySha256": "3b336c1b0d196f77353a1364e054d2a632e32be8e82f9e162e5f8090843f7f7e",
+      "vkeySha256": "5ae99805a5001900b3decc0585d331147ce4189551073b7c9cb46b7f1b12afab",
+      "circuitVersion": "1.0.0",
+      "ceremonyContribution": null,
+      "pending": false
+    },
+    "Jurisdiction": {
+      "wasmSha256": "c898d396a324391f02096f6dbcc23c9728802e799607f4d2253b888a025f0147",
+      "zkeySha256": "707e456d84ffccbc7e9aeb4835b7ae8df8c2f14159920157a6b3026373f70b62",
+      "vkeySha256": "18c9d9c8271d481b355060e8dc15cf33deeef5a276e851bbb1385813ac6b69f1",
+      "circuitVersion": "1.0.0",
+      "ceremonyContribution": null,
+      "pending": false
+    },
+    "Collateral": {
+      "wasmSha256": "b41ee930a66ee561d933237cbec3b72e5e975f19920eb612099f3005b93ed2c4",
+      "zkeySha256": "ecea879693a82d07bce67b3981964221bc22cda61b461debdc894641f16a1f12",
+      "vkeySha256": "35952340e6ffb718b89c7eaa8d58715123d6f07fe445bf5ac57e1bb212678330",
+      "circuitVersion": "1.0.0",
+      "ceremonyContribution": null,
+      "pending": false
+    },
+    "Income": {
+      "wasmSha256": "45488870b895b250ec224603a68a4fa6b7697ef66af07bd37c1f8ea5dfcdacb9",
+      "zkeySha256": "df712cf54d9d2271727092ce0633616958537ddfb34e55e48fbb3899209f956c",
+      "vkeySha256": "972a52942e7a0e7a7b88e8e156d2b5aac5e1662f3227b3254f017b6357b8ced3",
+      "circuitVersion": "1.0.0",
+      "ceremonyContribution": null,
+      "pending": false
+    },
+    "MandateBounds": {
+      "wasmSha256": "c533af0ae17ad2722c93e07f6d41f5597d7139fc27b0b7c35e58b7416c8ab1d5",
+      "zkeySha256": "548649fcddba49cd5532ba503e8796699e808d6c0f3f6cddb1b4d9760c9918c3",
+      "vkeySha256": "11c02a13ea24bb57e875076198a42b5f448c01380b45b42cea19b2afed1f3646",
+      "circuitVersion": "1.0.0",
+      "ceremonyContribution": null,
+      "pending": false
+    },
+    "Repayment": {
+      "wasmSha256": "bd56cab9ae6a03aa83d7da1c614a06213bb829b99373a72f5e6a9078dd7d5561",
+      "zkeySha256": "8292b6d276ea27e9890c0e7a39a8ef5ea8d38cf49c30e64c58349f498c672c62",
+      "vkeySha256": "d6b895566282d8464de1245b0b18347f2bc14f0661a3ed852037b1b0a53522d4",
+      "circuitVersion": "1.0.0",
+      "ceremonyContribution": null,
+      "pending": false,
+      "_pendingNote": "pending=false here means HASHES ARE RECORDED \u2014 it does NOT mean the artifact set is fully served. Web's manifest carries its own repayment.pending, which is still TRUE and means something different: the zkey is not yet served web-side (web #318 left it deliberately). The two flags are independent and neither should be flipped because the other was. See zkArtifacts._doc."
+    },
+    "YieldConsistency": {
+      "wasmSha256": "f9363264cdaabde280b3067cc0e28e961e1d06b50692ee6cca7a4c39c71fbd78",
+      "zkeySha256": "c03d8655586083adcfff19c06af8f3fcd106a990f21c0a8c6f18e12baf55c6b0",
+      "vkeySha256": "472fefc2a6342ea44bc8b13facdf513dd028bb3ecec705660449a3af5f4e4c4b",
+      "circuitVersion": "1.0.0",
+      "ceremonyContribution": null,
+      "pending": false
+    }
+  },
+  "notes": "All 3 stacks deployed on Arbitrum One. Session C (April 8 2026): Phase 1 protocol build \u2014 CreditContextView, MandateObjectiveView, RepaymentTracker, VaultRegistry, ERC4626YieldAdapter, EncumbranceRegistryV2, ProofStateRelay, NablaAccountV2 + FactoryGen2, ZKProofGateV2 type 10. All null entries pending Ledger deploy session. MandateBoundsVerifier wiring requires ZKProofGateV2_type10 deploy. Session O: settlement section added with bilateralModuleId and DvP config.",
+  "adapterErrors": {
+    "DeFiYieldAdapterV6": {
+      "address": "0x11f954a338d29903cD9cFdBF4b311A3AdfDa2598",
+      "errors": {
+        "0xf6fa5450": "ZERO_AMOUNT()",
+        "0x538ba4f9": "ZERO_ADDRESS()",
+        "0xf33d0569": "INVALID_ACTION()",
+        "0x96f8c498": "SLIPPAGE_EXCEEDED()",
+        "0x64a27e64": "PROVIDER_INELIGIBLE(bytes32)",
+        "0xa6aa2772": "SWAP_FAILED()",
+        "0x0c898576": "FEE_RATE_TOO_HIGH()",
+        "0x8edd50e5": "PORTFOLIO_VALUE_REQUIRED()",
+        "0x76c03715": "YIELD_TOKEN_PRICE_REQUIRED()",
+        "0x4da976ac": "CONCENTRATION_LIMIT_EXCEEDED(uint256,uint256)"
+      }
+    },
+    "DeFiYieldAdapter_wstETH_v6": {
+      "address": "0x1A671c549D8a9C1230fBB37b366A8E5a60EF3Ddd",
+      "errors": {
+        "0xf6fa5450": "ZERO_AMOUNT()",
+        "0x538ba4f9": "ZERO_ADDRESS()",
+        "0xf33d0569": "INVALID_ACTION()",
+        "0x96f8c498": "SLIPPAGE_EXCEEDED()",
+        "0x64a27e64": "PROVIDER_INELIGIBLE(bytes32)",
+        "0xa6aa2772": "SWAP_FAILED()",
+        "0x0c898576": "FEE_RATE_TOO_HIGH()",
+        "0x8edd50e5": "PORTFOLIO_VALUE_REQUIRED()",
+        "0x76c03715": "YIELD_TOKEN_PRICE_REQUIRED()",
+        "0x4da976ac": "CONCENTRATION_LIMIT_EXCEEDED(uint256,uint256)"
+      }
+    },
+    "DeFiYieldAdapter_wstETH_v5_superseded": {
+      "address": "0x6da7E89433431aA37E65C9Fb8CEb1BD9Ca5c2458",
+      "errors": {
+        "0xf6fa5450": "ZERO_AMOUNT()",
+        "0x538ba4f9": "ZERO_ADDRESS()",
+        "0xf33d0569": "INVALID_ACTION()",
+        "0x96f8c498": "SLIPPAGE_EXCEEDED()",
+        "0x64a27e64": "PROVIDER_INELIGIBLE(bytes32)",
+        "0xa6aa2772": "SWAP_FAILED()",
+        "0x0c898576": "FEE_RATE_TOO_HIGH()",
+        "0x8edd50e5": "PORTFOLIO_VALUE_REQUIRED()",
+        "0x76c03715": "YIELD_TOKEN_PRICE_REQUIRED()",
+        "0x4da976ac": "CONCENTRATION_LIMIT_EXCEEDED(uint256,uint256)"
+      }
+    },
+    "MorphoLendAdapter": {
+      "address": "0x733133150415b33Ad80e0fA3EF408d73c0a4316C",
+      "errors": {
+        "0xf6fa5450": "ZERO_AMOUNT()",
+        "0x538ba4f9": "ZERO_ADDRESS()",
+        "0xf33d0569": "INVALID_ACTION()",
+        "0x96f8c498": "SLIPPAGE_EXCEEDED()",
+        "0x63248a5f": "LTV_EXCEEDS_RISK_TIER_CAP(uint256,uint256)",
+        "0x0491c677": "MAX_LTV_REQUIRED()"
+      }
+    },
+    "PaymentAdapter": {
+      "address": "0x7d500dB78ED205ECeeE04B6544EB844618259FDd",
+      "errors": {
+        "0xf6fa5450": "ZERO_AMOUNT()",
+        "0x538ba4f9": "ZERO_ADDRESS()",
+        "0xd2e475cd": "PAYMENT_EXCEEDS_RISK_TIER_CAP(uint256,uint256)"
+      }
+    },
+    "BilateralModuleV3": {
+      "address": "0x15b926F7CF412b13c42ca2B1abDbD7E2f5eC9ED1",
+      "errors": {
+        "0xceca7bf0": "ASSET_ENCUMBERED()",
+        "0x0c3838f0": "POLICY_REJECTED()",
+        "0x0ddc329b": "INVALID_STATE()",
+        "0x28aba8c9": "NOT_SELLER()",
+        "0xfc14c4df": "NOT_BUYER()",
+        "0x437be863": "NOT_PARTICIPANT()",
+        "0x359eead1": "TIMEOUT_NOT_REACHED()",
+        "0x9c0dd795": "SELF_TRADE()",
+        "0xab880e89": "DEADLINE_EXCEEDED()",
+        "0x50b1f356": "INSUFFICIENT_BALANCE()",
+        "0x83eb17f4": "NOT_ROUTER()",
+        "0x538ba4f9": "ZERO_ADDRESS()",
+        "0x3e5b98e3": "TIMEOUT_TOO_LONG()",
+        "0xa3402a38": "INVALID_SIGNATURE()",
+        "0x3711ae3a": "INVALID_NONCE()",
+        "0xfc7db83c": "CONFIRM_TIMEOUT_EXCEEDED()"
+      }
+    },
+    "SettlementRouter": {
+      "address": "0xb4d6587bB3897E4e0F2De086662Eb9B8eE7b1ee3",
+      "errors": {
+        "0x6f932144": "MODULE_NOT_FOUND()",
+        "0x8d9e4851": "MODULE_NOT_ACTIVE()",
+        "0xedcbd0f3": "MODULE_NOT_PERMITTED()",
+        "0x71d78b12": "NOT_OWNER()",
+        "0x6c898107": "PROOF_REQUIRED(uint8,address)",
+        "0xb4275e66": "IAM_SETTLEMENT_NOT_PERMITTED()"
+      }
+    }
+  },
+  "operationalAccounts": {
+    "BootstrapAttestor": "0x72835b43E169e6E1e18b402816142D27BF8B6d23",
+    "EETOracleKeeper": "0xdD00a33125A4F7D0E62eD4Ec22af3fE1B969407E"
+  },
+  "nablaAccountInitCodeHash": "0xa8cf9d42439b86dbb13fbfadd2773b3cc8274f1cce093b6c0fa98a08289f6ef2",
+  "_lastUpdated": "2026-11-15T00:29:36Z",
+  "_protocolHead": "2a15489",
+  "manifestVersion": 68,
+  "eetVersionMap": {
+    "PilotEETV2": "v2",
+    "PilotEET": "v1"
+  },
+  "versionMap": {
+    "PilotEETV2": "v2",
+    "PilotEET": "v1",
+    "AccountRegistryV6": "v6",
+    "ConsumerAIMandateV4": "v4",
+    "EncumbranceRegistryV4": "v4",
+    "NablaAccountV3": "v3",
+    "GranteeVaultV2": "v2",
+    "NablaAccountV3_1": "v3.1",
+    "GranteeVault": "v1",
+    "VaultRegistryV2": "v2",
+    "ERC4626YieldAdapterV2": "v2",
+    "ActionDerivationV2": "v2",
+    "NablaRecordV2": "v2",
+    "ConsumerAIMandateV5": "v5",
+    "NablaAccountV3_2": "v3.2",
+    "ProtocolHealthGateV2": "v2",
+    "ProtocolHealthGate": "v1",
+    "ERC4626YieldAdapter": "v1",
+    "VaultRegistry": "v1",
+    "ActionDerivation": "v1",
+    "NablaRecord": "v1"
+  },
+  "permanentAccountStack": {
+    "_doc": "S181 permanent account stack, Arbitrum One (docs/architecture/factory-permanent.md \u00a712). Addresses are in .contracts under contractKeys; per-contract deploy tx and block are in deployments/contractsMeta.json. This block holds only what is not an address: provenance of the run and whether creation is open.",
+    "contractKeys": [
+      "ProtocolConfig",
+      "NablaAccountBootstrap",
+      "AccountRegistryV6",
+      "NablaAccountFactoryPermanent",
+      "ConsumerAIMandateV4",
+      "EncumbranceRegistryV4",
+      "NablaRecord",
+      "GranteeVault",
+      "ActionDerivation",
+      "AccountAsync",
+      "AccountSignatures",
+      "AccountVaults",
+      "NablaAccountV3",
+      "ProofGateV1Shim"
+    ],
+    "sourceCommit": "228634f2c3762732f8bd6875cbba9db53983eee9",
+    "deployer": "0x05Cc14bcCE05D3Cd29bF73b0e75A4e4962e0F85F",
+    "deployedAt": "2026-10-20T15:14:58Z",
+    "blockRange": [
+      516635111,
+      516635769
+    ],
+    "deployerNonceRange": [
+      248,
+      266
+    ],
+    "txCount": 19,
+    "gasUsed": 22380567,
+    "creation": "open",
+    "creationNote": "P1 EXECUTED (S182): EncumbranceRegistryV4.setTrustedFactory(NablaAccountFactoryPermanent, true). Safe tx 0x38b8cdfde03979196d50956240f1569d3f2a2b15630fe3d76703d3ce4640ea68, block 516940201, status 1; safeTxHash 0x1fcc4fa5b47478761a0b9d3ba517c9e0afd547c57e2da3c68045d3ba8eb70931, Safe nonce 146. Confirmations: 0x4B604b49375985a8F243E0a14bDe7c5509A65b37 (EOA signature) and 0x05Cc14bcCE05D3Cd29bF73b0e75A4e4962e0F85F (approveHash tx 0xd88488bd7bb180bd8c1ae666098630fa0bfcdc814f26036c1a097181f439f86c, block 516938810). verify-permanent-deploy.sh --stage authorized ALL PASS at block 517014933. Record: docs/architecture/factory-permanent.md \u00a712.8.",
+    "legacyStack": "coexisting (S181 ruling 1). NablaAccountV2 / AccountRegistryV5 / ConsumerAIMandateV3 / EncumbranceRegistryV3 stay live until the B7 web cutover, which supersedes them in one PR."
+  },
+  "testAccounts": [
+    {
+      "address": "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c",
+      "holder": "0x8A6cec15736F3072Db75514815F7470f64dF0100",
+      "purpose": "S185 live check 1",
+      "tx": "0xa19707042ac0618cf675f29f200db116f24db0809d3ed60df9453f31e4c1609e",
+      "block": 517860375,
+      "erc8004": {
+        "agentId": 1650,
+        "registerTx": "0x8b557287171326abe268a6482590bfdffa6ed6be20d051aa226368905367d6c4",
+        "registerBlock": 519134410,
+        "setAgentWalletTx": "0x74cc965764f8249c8505544d85e40e8274663cd3ee6ddfc26cc26d202d3e751a",
+        "setAgentWalletBlock": 519134578
+      }
+    }
+  ]
+}

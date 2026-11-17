@@ -56,6 +56,11 @@ export const obligationPairs = onchainTable(
   (t) => ({
     id: t.text().primaryKey(),
     ...evidence(t),
+    /**
+     * The record that emitted the entry. obligationRef = keccak256(abi.encode(subject, seq)) and each record keeps its
+     * own per-subject seq, so the same ref can occur on NablaRecord and NablaRecordV2: pairing stays within one record.
+     */
+    emitter: t.hex().notNull(),
     subject: t.hex().notNull(),
     obligationRef: t.hex().notNull(),
     role: t.text().notNull(), // OPENED | REPAY | CLOSED
@@ -67,6 +72,33 @@ export const obligationPairs = onchainTable(
     time: t.bigint().notNull(),
   }),
   (t) => ({ byRef: index().on(t.chainId, t.obligationRef) }),
+);
+
+/**
+ * NablaRecordV2 ConsentRegistered / ConsentRevoked (G1-A), one row per event. A consent lets `writer` write the
+ * listed kinds about `subject`; the matching CONSENT_GRANTED / CONSENT_REVOKED RecordEntry rows sit in record_entries.
+ */
+export const consentEvents = onchainTable(
+  "consent_events",
+  (t) => ({
+    id: t.text().primaryKey(),
+    ...evidence(t),
+    emitter: t.hex().notNull(),
+    event: t.text().notNull(), // REGISTERED | REVOKED
+    subject: t.hex().notNull(),
+    consentId: t.hex().notNull(),
+    writer: t.hex().notNull(),
+    /** REGISTERED only. */
+    kinds: t.hex().array(),
+    counterparty: t.hex(),
+    scope: t.hex(),
+    validAfter: t.bigint(),
+    validUntil: t.bigint(),
+    maxEntries: t.bigint(),
+    /** REVOKED only: entries written under the consent before it was revoked. */
+    used: t.bigint(),
+  }),
+  (t) => ({ bySubject: index().on(t.chainId, t.subject), byConsent: index().on(t.chainId, t.consentId) }),
 );
 
 /** Accounts, from NablaAccountFactoryPermanent and AccountRegistryV6 AccountCreated. */

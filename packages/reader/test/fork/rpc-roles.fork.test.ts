@@ -43,7 +43,7 @@ describe("grounding read", () => {
       const client = groundingClient(BASE, { [BASE_RPC_ENV]: indexer.url, [BASE_GROUNDING_ENV]: grounding.url });
       const agentId = BigInt(ROW.agent_id!);
       const block = BigInt(ROW.feedback_block!);
-      const from = BigInt(BASE.external.startBlocks.IdentityRegistry);
+      const from = BigInt(BASE.external.startBlocks.IdentityRegistry!);
       const candidates = await boundHistory(client, REGISTRY, agentId, from, block);
       const transfers = await transfersFrom(client, 8453, getAddress(ROW.rater!), from, block);
       await bindingsAtTransferBlocks(client, REGISTRY, agentId, transfers, candidates);

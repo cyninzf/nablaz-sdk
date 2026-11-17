@@ -5,6 +5,12 @@
 // field of every /read fact come from this module. RPC URLs stay as shell variables, never values.
 
 const RECORD = "0x80E937f9DEf48060308Ee00EC279d8448d4775b0";
+/**
+ * NablaRecordV2 (G1-A, R-S221-4), and the first block with code at it. §6.4b (still v1-only at nablaz-protocol
+ * 1ab54ec) prints only RECORD; a row emitted by V2 renders the same line with V2's address and deploy block.
+ */
+const RECORD_V2 = "0x2618c4e053E9fA8f02Cb26007Fa3c0E4951F9e57";
+const RECORD_V2_FROM = "524296058";
 const FACTORY = "0x86dbDF2570a8670b866340e9e0A1A4B1FC5508ca";
 const SPM = "0xf85210B21cC50302F477BA56686d2019dC9b67Ad";
 const DM = "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
@@ -27,7 +33,7 @@ const RECORD_ENTRY_SIG =
 const ACCOUNT_CREATED_SIG = "AccountCreated(bytes32 indexed accountId, address indexed owner, address indexed account, uint256 version)";
 const SPM_STRUCT = "(address,address,address,uint160,uint48,uint48,uint48,uint256,bytes)";
 
-export const RPC_VAR: Record<number, string> = { 42161: '"$ARB_ONE_RPC_URL"', 8453: '"$BASE_RPC_URL"' };
+export const RPC_VAR: Record<number, string> = { 42161: '"$ARB_ONE_RPC_URL"', 8453: '"$BASE_RPC_URL"', 137: '"$POLYGON_RPC_URL"' };
 
 const rpc = (chainId: number) => {
   const v = RPC_VAR[chainId];
@@ -35,11 +41,19 @@ const rpc = (chainId: number) => {
   return v;
 };
 const usdc = (chainId: number) => USDC[chainId] ?? "<USDC>";
+/** [address, from-block] of the record a row came from; refuses an address that is neither record. */
+const recordOf = (record: string | undefined): [string, string] => {
+  if (record === undefined || record.toLowerCase() === RECORD.toLowerCase()) return [RECORD, NABLA_FROM];
+  if (record.toLowerCase() === RECORD_V2.toLowerCase()) return [RECORD_V2, RECORD_V2_FROM];
+  throw new Error(`not a NablaZ record: ${record}`);
+};
 
 /** Placeholders, exactly as §6.4b writes them. Unfilled, bash refuses the line (Lesson #15(b)). */
 type V = {
   chainId: number;
   subject?: string;
+  /** The record a row came from (its emitter); unset renders §6.4b's line, which names NablaRecord. */
+  record?: string;
   vault?: string;
   tx?: string;
   owner?: string;
@@ -62,8 +76,10 @@ const creditLine = (v: V, sig: string) =>
 
 /** One renderer per §6.4b command line, in section order. Keys name the line: (section)-(what). */
 export const ONELINERS = {
-  "1-record-entries": (v: V) =>
-    `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${NABLA_FROM} --address ${RECORD} "${RECORD_ENTRY_SIG}" ${v.subject ?? "<SUBJECT>"}`,
+  "1-record-entries": (v: V) => {
+    const [address, from] = recordOf(v.record);
+    return `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${from} --address ${address} "${RECORD_ENTRY_SIG}" ${v.subject ?? "<SUBJECT>"}`;
+  },
   "2-authorization-used": (v: V) =>
     `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${NABLA_FROM} --address ${usdc(v.chainId)} "AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)" ${v.vault ?? "<VAULT>"}`,
   "2-vault-transfer": (v: V) => receiptTransfersFrom(v, "v", v.vault ?? "<VAULT>"),

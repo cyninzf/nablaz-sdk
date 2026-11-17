@@ -25,8 +25,8 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "ponder";
 import { erc20Abi, getAddress, isAddress, keccak256, type Address, type Hex, type PublicClient } from "viem";
 import { ConsumerAIMandateV4Abi, NablaAccountV3_1Abi } from "@nablaz/sdk/abis";
-import { enabledChains, externalStart, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
-import { canonicalLineage, nablaLabel, type NablaLabel } from "../labels";
+import { enabledChains, externalStart, hasExternal, hasNabla, nablaStart, sourcesOn, type EnabledChain } from "../chains";
+import { canonicalLineage, isCanonicalMandate, nablaLabel, type NablaLabel } from "../labels";
 import { withUtc } from "./utc";
 import { CLASS_HEADER, DOOR_HEADER, countDoor, doorMetricsText } from "./callers";
 import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
@@ -110,6 +110,12 @@ async function codeHash(client: PublicClient, address: Address, blockNumber: big
   return code && code !== "0x" ? keccak256(code) : null;
 }
 
+/** Code hashes of the canonical CAMs with code at the block: V4, and V5 from its deployment on. */
+async function canonicalMandateHashes(client: PublicClient, chain: { nabla: { ConsumerAIMandateV4: Address; ConsumerAIMandateV5: Address } }, blockNumber: bigint): Promise<Hex[]> {
+  const hs = await Promise.all([chain.nabla.ConsumerAIMandateV4, chain.nabla.ConsumerAIMandateV5].map((a) => codeHash(client, a, blockNumber)));
+  return hs.filter((h): h is Hex => h !== null);
+}
+
 async function controllerInput(chainId: number, account: Hex, canonicalImpl: boolean): Promise<ControllerInput> {
   const rotations = await db
     .select()
@@ -129,15 +135,20 @@ async function implementationsOf(chainId: number, account: Hex): Promise<Address
 }
 
 /** The NablaZ label of an account at the read block (lineage from Upgraded events, mandate code hash). */
-async function nablaLabelOf(client: PublicClient, chain: EnabledChain & { nabla: { ConsumerAIMandateV4: Address } }, account: Hex, asOfBlock: bigint): Promise<NablaLabel> {
+async function nablaLabelOf(
+  client: PublicClient,
+  chain: EnabledChain & { nabla: { ConsumerAIMandateV4: Address; ConsumerAIMandateV5: Address } },
+  account: Hex,
+  asOfBlock: bigint,
+): Promise<NablaLabel> {
   const implementations = await implementationsOf(chain.chainId, account);
   const deps = await client
     .readContract({ address: account, abi: NablaAccountV3_1Abi, functionName: "dependencies", blockNumber: asOfBlock })
     .catch(() => null);
   const mandate = deps ? (deps[0] as Address) : null;
-  const camV4CodeHash = (await codeHash(client, chain.nabla.ConsumerAIMandateV4, asOfBlock))!;
+  const canonicalMandateCodeHashes = await canonicalMandateHashes(client, chain, asOfBlock);
   const mandateCodeHash = mandate ? await codeHash(client, mandate, asOfBlock) : null;
-  return nablaLabel({ implementations, mandateCodeHash, camV4CodeHash });
+  return nablaLabel({ implementations, mandateCodeHash, canonicalMandateCodeHashes });
 }
 
 // Row E: the RPC legs' counters (src/rpc.ts), Prometheus text, beside Ponder's own /metrics. The reader listens on
@@ -303,9 +314,9 @@ app.get("/read/:chainId/:address", async (c) => {
       .readContract({ address: subject, abi: NablaAccountV3_1Abi, functionName: "dependencies", blockNumber: asOfBlock })
       .catch(() => null);
     const mandate = deps ? (deps[0] as Address) : null;
-    const camV4CodeHash = (await codeHash(client, chain.nabla.ConsumerAIMandateV4, asOfBlock))!;
+    const canonicalMandateCodeHashes = await canonicalMandateHashes(client, chain, asOfBlock);
     const mandateCodeHash = mandate ? await codeHash(client, mandate, asOfBlock) : null;
-    nabla = nablaLabel({ implementations, mandateCodeHash, camV4CodeHash });
+    nabla = nablaLabel({ implementations, mandateCodeHash, canonicalMandateCodeHashes });
     if (nabla.shape === "c") notes.push(`NablaZ label for ${subject}: ${nabla.label} (${nabla.reason})`);
 
     // Payments from the account: vault settlements (one per authorization, R-D2B-6) and its own PAY entries.
@@ -343,8 +354,9 @@ app.get("/read/:chainId/:address", async (c) => {
     selfDealingOut = sd.result;
     notes.push(...sd.notes);
 
-    // Exposure: per grant and token, min remaining over windows + vault balance; only on canonical CAM V4.
-    const canonicalMandate = mandateCodeHash !== null && mandateCodeHash === camV4CodeHash;
+    // Exposure: per grant and token, min remaining over windows + vault balance; only on a canonical CAM (V4 or V5,
+    // ABI-identical, so the V4 ABI reads both).
+    const canonicalMandate = isCanonicalMandate(mandateCodeHash, canonicalMandateCodeHashes);
     const gs = await db.select().from(grants).where(and(eq(grants.chainId, chainId), eq(grants.subject, a)));
     const vs = await db.select().from(vaults).where(and(eq(vaults.chainId, chainId), eq(vaults.account, a)));
     const eg: ExposureGrant[] = [];
@@ -405,10 +417,11 @@ app.get("/read/:chainId/:address", async (c) => {
     ? await db.select().from(feedbacks).where(and(eq(feedbacks.chainId, chainId), inArray(feedbacks.agentId, agentIds)))
     : [];
   const groundingFacts: Fact[] = [];
-  if (fbs.length) {
-    const registry = chain.external.IdentityRegistry;
+  // Feedback rows exist only on a chain carrying the ERC-8004 registries; the null checks narrow the types.
+  const registry = chain.external.IdentityRegistry;
+  const transfersFromBlock = externalStart(chain, "IdentityRegistry");
+  if (fbs.length && registry !== null && transfersFromBlock !== null) {
     const grounding = groundingOf(chain);
-    const transfersFromBlock = externalStart(chain, "IdentityRegistry");
     const nablaOn = hasNabla(chain) && sourcesOn().has("nabla");
     const controllerOf = async (who: Hex, block: bigint) => {
       if (!hasNabla(chain)) return null;
@@ -514,6 +527,18 @@ app.get("/read/:chainId/:address", async (c) => {
       hasNabla: hasNabla(chain),
       indexed: sourcesOn(),
       lenders: chain.external.creditLineLenders.length,
+      absent: new Set(
+        (
+          [
+            ["spm", "SpendPermissionManager"],
+            ["dm", "DelegationManager"],
+            ["agent_wallet", "IdentityRegistry"],
+            ["feedback", "ReputationRegistry"],
+          ] as const
+        )
+          .filter(([, source]) => !hasExternal(chain, source))
+          .map(([key]) => key),
+      ),
       counts: {
         record: records.length,
         vault_payment: vpay.length,

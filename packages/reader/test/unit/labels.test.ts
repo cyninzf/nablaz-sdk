@@ -24,7 +24,7 @@ import {
   type Caveat,
 } from "../../src/delegation";
 import { AgentCreditLineAbi, SpendPermissionManagerAbi } from "../../src/external-abis";
-import { LABEL, attestationLabel, canonicalLineage, nablaLabel, renderB, shapeOfDelegation, shapeOfSpm, type SpendPermission } from "../../src/labels";
+import { LABEL, attestationLabel, canonicalLineage, initialMandateOf, isCanonicalMandate, nablaLabel, renderB, shapeOfDelegation, shapeOfSpm, type SpendPermission } from "../../src/labels";
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), "utf8"));
 
@@ -259,7 +259,9 @@ describe("nablaLabel", () => {
   const V3: Address = "0x2DE2f1da0B9d47Ec417Ad10f909f8740E0b027fA";
   const V31: Address = "0x3786B747AEf4E31A7A45cc7EBBBc8C462927AcDc";
   const CAM: Hex = `0x${"ab".repeat(32)}`;
-  const base = { lineage: [V3, V31], bootstrap: BOOT, camV4CodeHash: CAM };
+  const V32: Address = "0xa581b2888AD131D42F18C2eED1051A4576Ca06B9";
+  const CAM5: Hex = `0x${"ef".repeat(32)}`;
+  const base = { lineage: [V3, V31, V32], bootstrap: BOOT, canonicalMandateCodeHashes: [CAM, CAM5] };
   it("canonical lineage and CAM V4 code hash → within mandate by construction", () => {
     expect(nablaLabel({ ...base, implementations: [BOOT, V31], mandateCodeHash: CAM }).label).toBe("(a) within mandate by construction");
     expect(nablaLabel({ ...base, implementations: [BOOT, V3, V31], mandateCodeHash: CAM }).shape).toBe("a");
@@ -272,7 +274,23 @@ describe("nablaLabel", () => {
     expect(canonicalLineage({ ...base, implementations: [V31, BOOT] }).ok).toBe(false);
     expect(canonicalLineage({ ...base, implementations: [BOOT] }).ok).toBe(false);
   });
-  it("mandate code hash ≠ CAM V4 → (c), lineage still canonical", () => {
+  it("mandate code hash neither CAM V4's nor V5's → (c), lineage still canonical", () => {
     expect(nablaLabel({ ...base, implementations: [BOOT, V31], mandateCodeHash: `0x${"cd".repeat(32)}` })).toMatchObject({ shape: "c", canonicalImpl: true });
+  });
+  it("a V3_2 account on CAM V5 (its MANDATE_PIN) → within mandate by construction", () => {
+    expect(nablaLabel({ ...base, implementations: [BOOT, V32], mandateCodeHash: CAM5 }).shape).toBe("a");
+    expect(nablaLabel({ ...base, implementations: [BOOT, V31, V32], mandateCodeHash: CAM }).shape).toBe("a");
+  });
+  it("before CAM V5 has code, only V4 is canonical", () => {
+    expect(nablaLabel({ ...base, canonicalMandateCodeHashes: [CAM], implementations: [BOOT, V31], mandateCodeHash: CAM5 }).shape).toBe("c");
+    expect(isCanonicalMandate(null, [CAM, CAM5])).toBe(false);
+    expect(isCanonicalMandate(CAM5.toUpperCase().replace("0X", "0x") as Hex, [CAM, CAM5])).toBe(true);
+  });
+  it("initialMandateOf: V5 only when the account was initialized on V3_2", () => {
+    const pins = { bootstrap: BOOT, accountV3_2: V32, camV4: "0x02D9bEfE43A9E375d5a8D2111a593A0c3d664DB2" as Address, camV5: "0x6aFD79571c641B8c5293C8A9613CA851F6Dc5EBd" as Address };
+    expect(initialMandateOf([BOOT, V32], pins)).toBe(pins.camV5);
+    expect(initialMandateOf([BOOT, V31, V32], pins)).toBe(pins.camV4);
+    expect(initialMandateOf([BOOT, V31], pins)).toBe(pins.camV4);
+    expect(initialMandateOf([], pins)).toBe(pins.camV4);
   });
 });

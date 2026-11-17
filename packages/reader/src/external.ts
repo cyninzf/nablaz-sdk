@@ -4,7 +4,7 @@
 import { ponder, type Context } from "ponder:registry";
 import { agentOwners, agentWallets, creditLineEvents, externalPayments, externalPermissions, externalRedemptions, feedbacks } from "ponder:schema";
 import { getAddress, size, type Address, type Hex } from "viem";
-import { chainById } from "./chains";
+import { sourceStart } from "./chains";
 import { delegationHash, erc20TransfersFrom, hopOf, type Delegation, type ReceiptLogLike } from "./delegation";
 import { ethGetLogs, rowId } from "./derive";
 import { SPM_LABEL, attestationLabel, shapeJson, shapeOfDelegation } from "./labels";
@@ -52,7 +52,7 @@ const spmTerms = (p: SpendPermissionArgs) => ({
 async function onSpmApprovedOrRevoked(event: any, context: Context, status: "approved" | "revoked") {
   const chainId = context.chain.id;
   const p = event.args.spendPermission as SpendPermissionArgs;
-  const from = chainById(chainId).external.startBlocks.SpendPermissionManager;
+  const from = sourceStart(chainId, "SpendPermissionManager");
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render(status === "approved" ? "4-spm-approved" : "4-spm-revoked", { chainId, account: p.account, from }));
   const id = `${chainId}-spm-${lc(event.args.hash)}`;
   const row = await context.db.find(externalPermissions, { id });
@@ -81,7 +81,7 @@ ponder.on("SpendPermissionManager:SpendPermissionRevoked", async ({ event, conte
 ponder.on("SpendPermissionManager:SpendPermissionUsed", async ({ event, context }) => {
   const chainId = context.chain.id;
   const { hash, account, spender, token, periodSpend } = event.args;
-  const from = chainById(chainId).external.startBlocks.SpendPermissionManager;
+  const from = sourceStart(chainId, "SpendPermissionManager");
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("4-spm-used", { chainId, account, from }));
   const id = `${chainId}-spm-${lc(hash)}`;
   const row = await context.db.find(externalPermissions, { id });
@@ -128,7 +128,7 @@ ponder.on("DelegationManager:RedeemedDelegation", async ({ event, context }) => 
   const d = event.args.delegation as unknown as Delegation;
   const hash = delegationHash(d);
   const shape = shapeOfDelegation(d.caveats);
-  const from = chainById(chainId).external.startBlocks.DelegationManager;
+  const from = sourceStart(chainId, "DelegationManager");
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("5-redeemed-delegation", { chainId, rootDelegator, from }));
 
   // A redemption is not a payment. Only an ERC-20 Transfer from the delegator, or the root delegator, in the
@@ -201,7 +201,7 @@ async function onCreditLine(event: any, context: Context, kind: "borrowed" | "re
   const chainId = context.chain.id;
   const a = event.args;
   const lender = event.log.address as Address;
-  const from = chainById(chainId).external.startBlocks.creditLineLenders;
+  const from = sourceStart(chainId, "creditLineLenders");
   const line = kind === "borrowed" ? "6-borrowed" : kind === "repaid" ? "6-repaid" : "6-defaulted";
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render(line, { chainId, lender, agentId: a.agentId.toString(), from }));
   await context.db.insert(creditLineEvents).values({
@@ -230,7 +230,7 @@ ponder.on("CreditLine:Defaulted", async ({ event, context }) => onCreditLine(eve
 ponder.on("ReputationRegistry:NewFeedback", async ({ event, context }) => {
   const chainId = context.chain.id;
   const { agentId, clientAddress, feedbackIndex } = event.args;
-  const from = chainById(chainId).external.startBlocks.ReputationRegistry;
+  const from = sourceStart(chainId, "ReputationRegistry");
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("7-new-feedback", { chainId, agentId: agentId.toString(), from }));
   await context.db.insert(feedbacks).values({ id: rowId(chainId, ev.txHash, ev.logIndex), ...ev, agentId, client: clientAddress, feedbackIndex: BigInt(feedbackIndex) });
 });
@@ -239,7 +239,7 @@ ponder.on("IdentityRegistry:MetadataSet", async ({ event, context }) => {
   if (event.log.topics[2]?.toLowerCase() !== AGENT_WALLET_KEY_TOPIC) return;
   const chainId = context.chain.id;
   const { agentId, metadataValue } = event.args;
-  const from = chainById(chainId).external.startBlocks.IdentityRegistry;
+  const from = sourceStart(chainId, "IdentityRegistry");
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("10-agentwallet-history", { chainId, agentId: agentId.toString(), from }));
   // abi.encodePacked(address): 20 bytes; empty bytes clear the wallet (IdentityRegistryUpgradeable :177-178, :194-195).
   const wallet = size(metadataValue) === 20 ? getAddress(metadataValue) : null;
@@ -249,7 +249,7 @@ ponder.on("IdentityRegistry:MetadataSet", async ({ event, context }) => {
 ponder.on("IdentityRegistry:Transfer", async ({ event, context }) => {
   const chainId = context.chain.id;
   const { to, tokenId } = event.args;
-  const from = chainById(chainId).external.startBlocks.IdentityRegistry;
+  const from = sourceStart(chainId, "IdentityRegistry");
   const ev = evidence(chainId, event.block, event.transaction.hash, event.log, render("11-identity-transfers", { chainId, agentId: tokenId.toString(), from }));
   await context.db.insert(agentOwners).values({ id: rowId(chainId, ev.txHash, ev.logIndex), ...ev, agentId: tokenId, owner: to === "0x0000000000000000000000000000000000000000" ? null : to });
 });

@@ -41,7 +41,7 @@ async function accountShape(account: Address): Promise<string> {
   return nablaLabel({
     implementations: impls.map((r) => r.implementation as Address),
     mandateCodeHash: mandate ? await code(mandate) : null,
-    camV4CodeHash: (await code(chain!.nabla.ConsumerAIMandateV4!)) as Hex,
+    canonicalMandateCodeHashes: (await Promise.all([chain!.nabla.ConsumerAIMandateV4!, chain!.nabla.ConsumerAIMandateV5!].map(code))).filter((h): h is Hex => h !== null),
   }).shape;
 }
 

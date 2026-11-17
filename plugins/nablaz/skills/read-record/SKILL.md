@@ -1,6 +1,6 @@
 ---
 name: read-record
-description: Read what an address was allowed to spend, what it spent and under which terms, from the NablaZ reader's GET /read, through the `read_subject` MCP tool or over HTTP. Use when asked what permissions, payments, redemptions or record entries are indexed for an address on Arbitrum One or Base, and to cite each one.
+description: Read what an address was allowed to spend, what it spent and under which terms, from the NablaZ reader's GET /read, through the `read_subject` MCP tool or over HTTP. Use when asked what permissions, payments, redemptions or record entries are indexed for an address on Arbitrum One, Base or Polygon, and to cite each one.
 ---
 
 # Read the record
@@ -21,8 +21,9 @@ of the address.
 - Someone needs a citation for a payment or a permission: block, transaction hash, log index, and a
   command to reproduce it.
 
-Chains: Arbitrum One (42161) and Base (8453). The NablaZ contracts exist on Arbitrum One only. On Base the
-reader indexes only the third-party sources (`packages/reader/src/chains.ts`, R-S189-1). Any other chain
+Chains: Arbitrum One (42161), Base (8453) and Polygon (137). The NablaZ contracts exist on Arbitrum One only. On
+Base the reader indexes only the third-party sources, and on Polygon only the MetaMask DelegationManager; a read
+there names every other source as not on that chain (`packages/reader/src/chains.ts`, R-S189-1, R-S221-8). Any other chain
 id returns HTTP 404 with `{"error":"chain <id> is not read here"}`.
 
 ## How to call it

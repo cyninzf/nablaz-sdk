@@ -17,7 +17,7 @@ import {
   vaultSettlementsInReceipt,
   type ReceiptLog,
 } from "../../src/derive";
-import { CHAINS, enabledChains, hasNabla, startBlockOf } from "../../src/chains";
+import { CHAINS, enabledChains, externalStart, hasExternal, hasNabla, startBlockOf } from "../../src/chains";
 import { ARBITRUM_ONE, PROTO_SHA } from "@nablaz/sdk/addresses";
 import { ABI_PROTO_SHA } from "@nablaz/sdk/abis";
 
@@ -30,6 +30,15 @@ describe("kinds", () => {
     expect(kindName(keccak256(stringToHex("VAULT_SWEPT")))).toBe("VAULT_SWEPT");
     expect(kindName(KIND.OBLIGATION_OPENED)).toBe("OBLIGATION_OPENED");
     expect(kindName(keccak256(stringToHex("NOT_A_KIND")))).toBeNull();
+  });
+
+  it("labels the G1-A / G1-E kinds and kind 0 as UNPRICEABLE (R-S221-4)", () => {
+    for (const n of ["CONSENT_GRANTED", "CONSENT_REVOKED", "HOOK_SURFACE_SET", "GUARDIAN_SET", "RECOVERY_INITIATED", "RECOVERY_CANCELLED", "RISK_TIER_SET", "DESCRIPTOR_SET"] as const)
+      expect(kindName(keccak256(stringToHex(n))), n).toBe(n);
+    expect(kindName(pad("0x0", { size: 32 }))).toBe("UNPRICEABLE");
+    expect(KIND.UNPRICEABLE).toBe(pad("0x0", { size: 32 }));
+    // UNPRICEABLE is the zero word, not the hash of its label.
+    expect(kindName(keccak256(stringToHex("UNPRICEABLE")))).toBeNull();
   });
 });
 
@@ -120,8 +129,8 @@ describe("envelope (R-S184-2)", () => {
 });
 
 describe("chains", () => {
-  it("has Arbitrum and Base enabled; NablaZ sources on Arbitrum only (R-S189-1)", () => {
-    expect(enabledChains(CHAINS, "").map((c) => c.chainId)).toEqual([8453, 42161]);
+  it("has Polygon, Base and Arbitrum enabled; NablaZ sources on Arbitrum only (R-S189-1)", () => {
+    expect(enabledChains(CHAINS, "").map((c) => c.chainId)).toEqual([137, 8453, 42161]);
     expect(hasNabla(CHAINS[42161]!)).toBe(true);
     expect(hasNabla(CHAINS[8453]!)).toBe(false);
     expect(Object.values(CHAINS[8453]!.nabla).every((v) => v === null)).toBe(true);
@@ -129,11 +138,35 @@ describe("chains", () => {
   it("Base starts at the earliest external deployment block", () => {
     expect(startBlockOf(CHAINS[8453]!)).toBe(23499060);
   });
-  it("refuses an enabled chain with a null external address", () => {
+  it("refuses an external source whose address and start block disagree", () => {
     const base = CHAINS[8453]!;
     expect(() =>
       enabledChains({ 8453: { ...base, external: { ...base.external, DelegationManager: null } } }, ""),
-    ).toThrow(/external DelegationManager has no address/);
+    ).toThrow(/external DelegationManager has an address without a start block/);
+    const poly = CHAINS[137]!;
+    expect(() =>
+      enabledChains({ 137: { ...poly, external: { ...poly.external, SpendPermissionManager: base.external.SpendPermissionManager } } }, ""),
+    ).toThrow(/external SpendPermissionManager/);
+  });
+  it("refuses an enabled chain that carries no source", () => {
+    const poly = CHAINS[137]!;
+    const none = { ...poly.external, DelegationManager: null, startBlocks: { ...poly.external.startBlocks, DelegationManager: null } };
+    expect(() => enabledChains({ 137: { ...poly, external: none } }, "")).toThrow(/carries no source/);
+  });
+  it("Polygon carries the MetaMask DelegationManager v1.3.0 only, from its deployment block (R-S221-8)", () => {
+    const poly = CHAINS[137]!;
+    expect(poly.external.DelegationManager).toBe(CHAINS[42161]!.external.DelegationManager);
+    expect(poly.external.startBlocks.DelegationManager).toBe(69623266);
+    expect(hasExternal(poly, "DelegationManager")).toBe(true);
+    for (const s of ["SpendPermissionManager", "ReputationRegistry", "IdentityRegistry", "creditLineLenders"] as const) {
+      expect(hasExternal(poly, s)).toBe(false);
+      expect(externalStart(poly, s, {})).toBeNull();
+    }
+    expect(hasNabla(poly)).toBe(false);
+    expect(startBlockOf(poly)).toBe(69623266);
+    // The names are written out only in src/chains.ts (env-names guard); same pattern as Base's.
+    const base = CHAINS[8453]!;
+    expect([poly.rpcEnv, poly.groundingRpcEnv]).toEqual([base.rpcEnv.replace("BASE", "POLYGON"), base.groundingRpcEnv.replace("BASE", "POLYGON")]);
   });
   it("refuses a partial NablaZ source set", () => {
     const base = CHAINS[8453]!;

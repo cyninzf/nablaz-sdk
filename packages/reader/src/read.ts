@@ -157,8 +157,8 @@ export type ExposureGrant = {
 export function exposure(canonicalMandate: boolean, grants: ExposureGrant[], asOfBlock: bigint) {
   if (!canonicalMandate)
     return {
-      result: { computable: false, reason: `${NOT_DETERMINABLE}: dependencies().mandate is not CAM V4 by code hash`, outstandingAuthorizations: OUTSTANDING_AUTHORIZATIONS },
-      notes: [`exposure: ${NOT_DETERMINABLE} (mandate is not CAM V4 by code hash)`],
+      result: { computable: false, reason: `${NOT_DETERMINABLE}: dependencies().mandate is neither CAM V4 nor CAM V5 by code hash`, outstandingAuthorizations: OUTSTANDING_AUTHORIZATIONS },
+      notes: [`exposure: ${NOT_DETERMINABLE} (mandate is neither CAM V4 nor CAM V5 by code hash)`],
     };
   const rows = grants.map((g) => {
     const window = g.remaining.length === 0 ? null : g.remaining.reduce((m, x) => (x < m ? x : m));
@@ -187,9 +187,10 @@ export function recordFacts(rows: Row[], nabla: NablaLabel | null): Fact[] {
       source: "nablaz:record",
       label: own ? nabla!.label : attestationLabel(r.writer),
       shape: own ? nabla!.shape : "e",
-      terms: plain(r, ["kindName", "kind", "writer", "writerAuth", "counterparty", "counterpartyAuth", "policyHash", "policyVersion", "asset", "amount", "obligationRef", "seq"]),
+      // seq is per record (NablaRecord and NablaRecordV2 each keep their own), so the fact names its emitter.
+      terms: plain(r, ["emitter", "kindName", "kind", "writer", "writerAuth", "counterparty", "counterpartyAuth", "policyHash", "policyVersion", "asset", "amount", "obligationRef", "seq"]),
       cite: cite(r),
-      reproduce: render("1-record-entries", { chainId: r.chainId, subject: r.subject }),
+      reproduce: render("1-record-entries", { chainId: r.chainId, subject: r.subject, record: r.emitter }),
     };
   });
 }
@@ -289,10 +290,13 @@ export function emptySourceNotes(x: {
   lenders: number;
   counts: Record<string, number>;
   ranges: Record<string, IndexedRange>;
+  /** Keys of third-party sources this chain does not carry (Polygon: all but "dm", R-S221-8); default none. */
+  absent?: Set<string>;
 }): string[] {
   const notes: string[] = [];
   const say = (key: string, text: string) => {
-    if ((x.counts[key] ?? 0) === 0) notes.push(rangeNote(text, x.ranges[key] ?? { from: null, to: 0n }));
+    if (x.absent?.has(key)) notes.push(`${text}: not a source on chain ${x.chainId}, so nothing is reported`);
+    else if ((x.counts[key] ?? 0) === 0) notes.push(rangeNote(text, x.ranges[key] ?? { from: null, to: 0n }));
   };
   if (!x.hasNabla) notes.push(`no NablaZ source on chain ${x.chainId} (R-S189-1)`);
   else if (!x.indexed.has("nabla")) notes.push("NablaZ sources: not indexed by this instance (READER_SOURCES), so no NablaZ fact is reported");

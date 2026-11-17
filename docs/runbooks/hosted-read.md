@@ -14,12 +14,14 @@ set in `fly.toml`.
 | `READER_ARBITRUM_GROUNDING_RPC_URL` | Alchemy, chain 42161: backfill `eth_getLogs` and grounding reads |
 | `READER_BASE_RPC_URL` | Chainstack, chain 8453 |
 | `READER_BASE_GROUNDING_RPC_URL` | Alchemy, chain 8453 |
+| `READER_POLYGON_RPC_URL` | Chainstack, chain 137 (R-S221-8: DelegationManager only). Founder-created Polygon node; must be set before the bundle deploy, or `scripts/reader-start.sh` refuses to start |
+| `READER_POLYGON_GROUNDING_RPC_URL` | Alchemy, chain 137: the Hosted Reader app with Polygon enabled (same key as the other grounding legs) |
 | `MCP_CLIENT_IP_HEADER` | `Fly-Client-IP`, the client-IP header Fly's edge sets |
 | `DATABASE_URL` | set by `fly mpg attach nablaz-reader-db -a nablaz-reader`, not in `fly.toml` |
 | `MCP_RATE_LIMIT_PER_MIN` | optional, default 60 |
 | `NABLAZ_FEED` | `on` since 2026-11-15 (S221), set as machine env by `flyctl machine update --env` (below). Unset, GET /feed is off; never a default in code or `fly.toml` |
 
-The first five are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
+The first seven are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
 `FLY_IMAGE_REF` is set by Fly. Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES`,
 `READER_START_BLOCK` and `READER_END_BLOCK` unset: every source starts at its deployment block. The start
 script refuses to start without the four RPC variables, `MCP_CLIENT_IP_HEADER`, `DATABASE_URL`, `PORT` and

@@ -161,7 +161,8 @@ export const PROTOCOL_CONFIG = lineageJson.protocolConfig.address as Address;
 
 /**
  * The sub-label "within mandate by construction" only when the implementation is in the currentAccountImpl
- * lineage per its Upgraded events and dependencies().mandate's code hash equals CAM V4's.
+ * lineage per its Upgraded events and dependencies().mandate's code hash is a canonical CAM's: V4's, or V5's
+ * (G1-B; NablaAccountV3_2 pins V5 as its mandate, so every V3_2 account carries it).
  */
 export type NablaCanonicalInput = {
   /** Every implementation the account has had, per Upgraded events, oldest first. */
@@ -172,7 +173,8 @@ export type NablaCanonicalInput = {
   bootstrap?: Address;
   /** extcodehash of dependencies().mandate, or null if it could not be read. */
   mandateCodeHash: Hex | null;
-  camV4CodeHash: Hex;
+  /** extcodehash of each canonical CAM with code at the read block: V4, and V5 from its deployment on. */
+  canonicalMandateCodeHashes: readonly Hex[];
 };
 
 export type NablaLabel = { shape: "a" | "c"; label: string; canonicalImpl: boolean; reason?: string };
@@ -190,12 +192,31 @@ export function canonicalLineage(x: Pick<NablaCanonicalInput, "implementations" 
   return { ok: true };
 }
 
+/** True when the mandate's code hash is one of the canonical CAMs' (V4, V5). */
+export function isCanonicalMandate(mandateCodeHash: Hex | null, canonical: readonly Hex[]): boolean {
+  return mandateCodeHash !== null && canonical.some((h) => h.toLowerCase() === mandateCodeHash.toLowerCase());
+}
+
+/**
+ * The mandate an account was initialized with, from its Upgraded history (oldest first): CAM V5 when the first
+ * implementation after the bootstrap is NablaAccountV3_2 (its initializer requires MANDATE_PIN = V5), else CAM V4.
+ * An account upgraded from V3_1 to V3_2 keeps the V4 it was initialized with; a DEPENDENCY_SET overrides either.
+ */
+export function initialMandateOf(
+  implementations: readonly Address[],
+  x: { bootstrap?: Address; accountV3_2: Address; camV4: Address; camV5: Address },
+): Address {
+  const bootstrap = (x.bootstrap ?? NABLA_ACCOUNT_BOOTSTRAP).toLowerCase();
+  const first = implementations.find((i) => i.toLowerCase() !== bootstrap);
+  return first !== undefined && first.toLowerCase() === x.accountV3_2.toLowerCase() ? x.camV5 : x.camV4;
+}
+
 export function nablaLabel(x: NablaCanonicalInput): NablaLabel {
   const lin = canonicalLineage(x);
   if (!lin.ok) return { shape: "c", label: LABEL.c, canonicalImpl: false, reason: lin.reason };
   if (x.mandateCodeHash === null)
     return { shape: "c", label: LABEL.c, canonicalImpl: true, reason: "dependencies().mandate could not be read" };
-  if (x.mandateCodeHash.toLowerCase() !== x.camV4CodeHash.toLowerCase())
-    return { shape: "c", label: LABEL.c, canonicalImpl: true, reason: "dependencies().mandate code hash is not CAM V4's" };
+  if (!isCanonicalMandate(x.mandateCodeHash, x.canonicalMandateCodeHashes))
+    return { shape: "c", label: LABEL.c, canonicalImpl: true, reason: "dependencies().mandate code hash is neither CAM V4's nor CAM V5's" };
   return { shape: "a", label: LABEL.withinMandate, canonicalImpl: true };
 }

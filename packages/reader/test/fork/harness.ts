@@ -24,6 +24,7 @@ export const UPSTREAM_BASE_GROUNDING = process.env[BASE_GROUNDING_ENV];
 export const TABLES = [
   "record_entries",
   "obligation_pairs",
+  "consent_events",
   "accounts",
   "grants",
   "vaults",
