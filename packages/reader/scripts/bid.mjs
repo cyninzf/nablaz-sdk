@@ -22,8 +22,10 @@
 // unchanged.
 //
 // Usage, from packages/reader, with DATABASE_URL unset and the RPC variables set to any URL (they are not hashed):
-// (bash brace expansion gives the four names of src/chains.ts):
-//   env -u DATABASE_URL READER_{ARBITRUM,BASE}{,_GROUNDING}_RPC_URL=http://127.0.0.1:1 node scripts/bid.mjs <rev>...
+// ALL SIX names of src/chains.ts (two per chain: Arbitrum, Base, Polygon) must be set, or evaluating
+// ponder.config.ts fails; placeholders are fine, a Codespace that carries only some of them as secrets still works.
+// Bash brace expansion gives the six:
+//   env -u DATABASE_URL READER_{ARBITRUM,BASE,POLYGON}{,_GROUNDING}_RPC_URL=http://127.0.0.1:1 node scripts/bid.mjs <rev>...
 // Compare with the id Ponder recorded: `select value->>'build_id' from "<schema>"._ponder_meta where key = 'app'`.
 
 import { createHash } from "node:crypto";

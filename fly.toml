@@ -23,4 +23,4 @@ primary_region = "iad"
 
 [[vm]]
   size = "performance-1x"
-  memory = "2gb"
+  memory = "4gb"                   # R-S222-9: the machine runs 4096 MB since S222; fly.toml outranked --vm-memory at that deploy

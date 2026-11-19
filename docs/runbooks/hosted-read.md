@@ -64,13 +64,29 @@ Timings on record (`/ready` 503 until the index is ready):
   quick restart: Ponder's crash recovery drops and rebuilds every user index of the schema (below), and the window
   grows with row count. Measured points, 24 indexes: S217 (2026-11-13, resume): ~22 min, a 16-min index rebuild
   (the four `*_feed` on ~3.06M and ~1.81M rows included) then ~6 min of head-gate catch-up (inferred); S221
-  (2026-11-15, same-image `machine update`, the same crash recovery): 29m16s to public `/ready` 200, rebuild 22m25s.
-  Before the schema event (20 indexes): ~13 min, three times (2026-11-04, and two resumes on 2026-11-10).
+  (2026-11-15, same-image `machine update`, the same crash recovery): 29m16s to public `/ready` 200, rebuild 22m25s;
+  S222 (the pinned deploy): 33m20s to public `/ready` 200. Before the schema event (20 indexes): ~13 min,
+  three times (2026-11-04, and two resumes on 2026-11-10).
 - Per-chain finality is read from the `Indexed` lines of the reader's log (`Indexed block chain=<name>
   number=<block>`), one chain per line.
 - New image, new schema (a full index from the RPC cache): no duration is carried (R-S208-1). It is computed at
   dispatch, per chain, from that chain's head gap (blocks) × its observed indexing time per block; `/ready` flips
-  at the maximum across chains. It is bound by the indexing handlers, not by the RPCs.
+  at the maximum across chains. It is bound by the indexing handlers, not by the RPCs. A chain with no cache is
+  sized differently (R-S222-8, "Never-indexed chain" below).
+
+Measured points by KIND (each kind is its own series; a point never stands in for another kind's):
+
+| Kind | When | Window | Notes |
+| --- | --- | --- | --- |
+| Resume / same-schema rebuild | S217 2026-11-13 | ~22 min | 24 indexes; catch-up inferred |
+| Resume / same-schema rebuild | S221 2026-11-15 | 29m16s | `machine update` flip; rebuild 22m25s |
+| Resume / same-schema rebuild | S222 | 33m20s | the pinned deploy |
+| FULL REINDEX (new schema) | 2026-11-17 → 2026-11-19 | 41h33m39s (−60s) | deploy 20:25:49Z Nov 17 → first public `/ready` 200 13:59:28Z Nov 19; three chains (42161, 137, 8453); Polygon 0% RPC cache; external_payments ~4.93M rows, external_permissions ~2.89M |
+
+Method note (full reindex): the deploy's own logs rotated out long before the end, and two Codespace losses cut the
+local capture, so the READY edge is read from the Sentry uptime monitor on `/ready` (monitor 10912822: the first
+check that answered 200), a server-side record that survives both. Its 60 s check interval is the −60s: the true
+edge lies up to 60 s before the recorded one.
 
 ### Resuming a schema (R-S202-4, S202)
 
@@ -143,9 +159,15 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
    `*_feed`); `Created database views` (schema `reader`), immediately before `is_ready` is set. Record the
    timestamp of each, then the first public `/ready` 200 (the head gate, B1, may hold it a little after).
 5. S213-L1 on production rows, before any flip: from an ephemeral console (above), plain `EXPLAIN` of each of the
-   four GET /feed queries (`src/api/index.ts`, `/feed`) in the new schema. Each plan must be an index scan on its table's
-   `*_feed` index; any `Seq Scan` stops the flip and is reported. The PR records the
-   synthetic-row plans this gate repeats.
+   four GET /feed queries (`src/api/index.ts`, `/feed`) in the new schema: `node scripts/explain.mjs` from the repo
+   root (it runs itself in a throwaway console, prints the four plans with row estimates, then fails unless exactly
+   ONE machine remains). The gate, in the R-S217-1 form: every table of a million rows or more must be read through
+   its `*_feed` index, and that is a PASS; a `Seq Scan` on a table that fits in about one feed page (S224:
+   `record_entries` ~4 rows, `vault_payments` ~1) is the planner's cost choice, reported, not a stop. A multi-megarow
+   table off its `*_feed` index stops the flip and is reported. ~~Any `Seq Scan` stops the flip~~: superseded by
+   R-S217-1. The PR records the synthetic-row plans this gate repeats. Plans of record, S224 (2026-11-19 18:11Z,
+   live schema `deployment-01m7njzvx0jw0bxzvwh0zqmpp3`): `external_payments` ~4,931,362 rows and
+   `external_permissions` ~2,891,871 rows, each `Index Scan Backward using <table>_feed`; verdict PASS.
 6. Deploy-day flag flip, only after step 5 passes and on the word: `NABLAZ_FEED=on`, exactly `on` (the reader and
    the front both test `=== "on"`; `true` or `1` leaves /feed off), as machine env, never `fly deploy` (no new
    schema) and not a Fly secret. The form that ran on 2026-11-15 (S221):
@@ -155,7 +177,87 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
    recovery rebuilds every index, 29m16s of `/ready` 503 (Timings on record), so capture logs through it as in
    step 2. Off again (not yet run): flyctl 0.5.7's `machine update` has no flag to unset an env var, so
    `--env NABLAZ_FEED=off` in the same form; any value other than `on` is off, and it costs the same restart.
+   (Observed on flyctl 0.5.7; re-check `machine update --help` on the installed version before relying on it.)
+6a. Full-reindex deploy with the feed already on (R-S222-7): `NABLAZ_FEED` is machine env and CARRIES through a
+   `fly deploy` (read S224: after the Nov 17 full-reindex deploy the machine's env still holds `NABLAZ_FEED=on`), so the new schema serves
+   /feed the moment it is ready, with no flip step. Therefore:
+   1. EXPLAIN (step 5) is the FIRST post-ready check, before any other read of the new schema is reported.
+   2. Its fallback is stated BEFORE the deploy: if EXPLAIN fails, turn the feed off with the step-6 off form
+      (`machine update … --env NABLAZ_FEED=off`, a same-schema restart, Timings on record), then report.
+   3. Machine env that a deploy is meant NOT to carry is named in the deploy order: in particular a deliberate drop
+      of `READER_SCHEMA` (a resume override that must not survive into a full reindex) is written as its own line,
+      never left implied.
 7. Afterwards: the replaced schema is kept as the fallback and dropped only under R-S208-1's two gates.
+
+### Never-indexed chain (R-S222-8)
+
+A chain the RPC cache has never held (Polygon at the Nov 17 reindex: 0% cache) indexes from its providers, not from
+`ponder_rpc_cache_1`. Its window is sized by SPEND, not time: the order states the provider budget (requests or
+compute units on the grounding and indexer legs) the backfill may consume, read against the provider's usage
+dashboard, and no duration is promised. Exactly two stop conditions, and no others:
+
+1. The spend detector fires: a 402 or 429 on one of that chain's legs (`scripts/rpc-limit-detector.mjs` over the
+   captured log, "Spend/limit detector" below).
+2. The stated budget is reached on the provider's own usage reading before `/ready` 200.
+
+Either one stops the pass and is reported; slowness alone is not a stop.
+
+### VM memory: fly.toml is the source (R-S222-9)
+
+`fly.toml` `[[vm]] memory` outranked `flyctl deploy --vm-memory` at the S222 deploy, while the file still said
+`2gb` and the machine was meant to run 4096 MB. Since S224 `fly.toml` says `memory = "4gb"`, the size
+the machine runs. `fly.toml` is not a build-id input (the id hashes only `packages/reader`'s `src/` outside `src/api/`,
+`ponder.schema.ts` and the evaluated `ponder.config.ts`; `packages/reader/scripts/bid.mjs`), so this keeps the id.
+After every deploy, verify the guest block:
+
+1. `~/.fly/bin/flyctl machines list -a nablaz-reader --json`: exactly one machine.
+2. Its `config.guest`: `cpu_kind` `performance`, `cpus` 1, `memory_mb` 4096.
+3. Its `config.env`: `NABLAZ_FEED` as ordered, `READER_SCHEMA` present or absent as ordered (R-S222-7).
+4. Any mismatch: stop and report before the next step; do not correct it in the same pass.
+
+Version note: the precedence was observed on flyctl 0.5.7; this Codespace has 0.5.13 (S224). The precedence is
+flyctl behavior and may change between versions, so the verify above, not the version, is what proves the size.
+
+### Spend/limit detector (standing form, S224)
+
+`scripts/rpc-limit-detector.mjs <log.txt>` flags a line ONLY when a 402 or 429 is written as a status:
+`status=402|429`, `HTTP 402|429`, or `code 402|429` (`code=`/`code:` too). A bare 402 or 429 elsewhere (block
+numbers, hashes, durations, JSON-RPC codes such as -32005) is not a hit. Its red fixtures (lines that must flag) and
+green fixtures (lines that must not) run in CI (`--self-test`); a change to the pattern changes the fixtures in the
+same commit.
+
+### Non-terminal-resident check (S224; the watcher-loss class, sixth occurrence)
+
+Six captures or watchers have been lost with the terminal or machine that held them, two of them Codespace
+deletions within 24 h (Nov 18–19). The rule: nothing load-bearing lives in a terminal or a home directory.
+
+- Load-bearing records are server-side or scheduled: the READY edge is the Sentry uptime monitor on `/ready`
+  (60 s, monitor 10912822); counters are `/metrics/reader`, scraped at both ends of a window; the plans of record
+  are in the PR that ran them.
+- The log/UA capture (`scripts/fly-log-poll.mjs`) and the `/ready` watch (`scripts/ready-watch.mjs`) are committed
+  scripts, so a lost Codespace costs a restage, not a rebuild. They remain conveniences: a window that a loss
+  interrupts is a gap, stated with its bounds, never stitched.
+- Open design row: a server-side log sink (a Fly log-shipper app forwarding `nablaz-reader`'s logs to a durable
+  store) would make the UA capture itself non-resident. Until it exists, the UA config (`caller-ua.json`) is
+  populated only from a stated, uninterrupted multi-day window (R-S221-1).
+
+### Cold reboot (S224, from two rebuilds in 24 h)
+
+A deleted and recreated Codespace keeps the repository's committed files and the repository secrets (re-injected at
+creation, `FLY_API_TOKEN` among them, checked by name only), and loses everything else. One command restores it:
+
+```bash
+cd /workspaces/nablaz-sdk && scripts/arm.sh /workspaces/captures/<session>
+```
+
+1. User-level attribution: `~/.claude/settings.json` `"attribution": {"commit": "", "pr": ""}`, and `.claude/` in
+   `.git/info/exclude`: both lost; `arm.sh` restores them.
+2. Repository secrets: re-injected automatically; `arm.sh` lists the `READER_*` names and checks `FLY_API_TOKEN`.
+   The Codespace carries some of the six reader names only; `bid.mjs` needs all six set, placeholders fine (its header).
+3. Fly auth state: lost with the home directory; flyctl authenticates from `FLY_API_TOKEN`, and `arm.sh` installs
+   flyctl if missing and checks `flyctl auth whoami`.
+4. Pollers and staged scripts: lost; `arm.sh` re-arms the log/UA poller and the `/ready` watch from the committed
+   scripts and prints their output paths. `node scripts/explain.mjs` replaces any staged EXPLAIN kit.
 
 ## Health: /live and /ready
 
@@ -293,7 +395,10 @@ rebuild. Notes:
   1. `x-nablaz-caller` when the value is exactly one of `fixture`, `ci`, `watcher`, `cto`, `site` or `se`; any
      other value is ignored.
   2. Otherwise `ingester` when the user-agent contains a pattern in `packages/mcp/src/caller-ua.json`. That list
-     is empty at first. An entry is added only from a user-agent seen in the log lines below, never guessed.
+     is empty at first. An entry is added only from a user-agent seen in the log lines below, never guessed, and
+     only from a stated multi-day CLEAN capture window (R-S221-1). S224: no such window exists (the captures were
+     lost with two Codespace deletions in 24 h, Nov 18–19); the list stays empty, and population is its own later
+     micro-PR naming its window.
   3. Otherwise `unclassified`.
 - What the instrument records:
   - The front logs one line per door request: `caller {"t","door","class","status","ua"}`. The user-agent is cut
