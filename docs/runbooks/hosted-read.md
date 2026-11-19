@@ -65,7 +65,8 @@ Timings on record (`/ready` 503 until the index is ready):
   grows with row count. Measured points, 24 indexes: S217 (2026-11-13, resume): ~22 min, a 16-min index rebuild
   (the four `*_feed` on ~3.06M and ~1.81M rows included) then ~6 min of head-gate catch-up (inferred); S221
   (2026-11-15, same-image `machine update`, the same crash recovery): 29m16s to public `/ready` 200, rebuild 22m25s;
-  S222 (the pinned deploy): 33m20s to public `/ready` 200. Before the schema event (20 indexes): ~13 min,
+  S222 (2026-11-17, the pinned deploy, sdk #32, earlier the same day as the reindex deploy): 33m20s to public
+  `/ready` 200. Before the schema event (20 indexes): ~13 min,
   three times (2026-11-04, and two resumes on 2026-11-10).
 - Per-chain finality is read from the `Indexed` lines of the reader's log (`Indexed block chain=<name>
   number=<block>`), one chain per line.
@@ -80,7 +81,7 @@ Measured points by KIND (each kind is its own series; a point never stands in fo
 | --- | --- | --- | --- |
 | Resume / same-schema rebuild | S217 2026-11-13 | ~22 min | 24 indexes; catch-up inferred |
 | Resume / same-schema rebuild | S221 2026-11-15 | 29m16s | `machine update` flip; rebuild 22m25s |
-| Resume / same-schema rebuild | S222 | 33m20s | the pinned deploy |
+| Resume / same-schema rebuild | S222 2026-11-17 | 33m20s | the pinned deploy (sdk #32), earlier the same day as the reindex deploy |
 | FULL REINDEX (new schema) | 2026-11-17 → 2026-11-19 | 41h33m39s (−60s) | deploy 20:25:49Z Nov 17 → first public `/ready` 200 13:59:28Z Nov 19; three chains (42161, 137, 8453); Polygon 0% RPC cache; external_payments ~4.93M rows, external_permissions ~2.89M |
 
 Method note (full reindex): the deploy's own logs rotated out long before the end, and two Codespace losses cut the
@@ -192,20 +193,21 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
 ### Never-indexed chain (R-S222-8)
 
 A chain the RPC cache has never held (Polygon at the Nov 17 reindex: 0% cache) indexes from its providers, not from
-`ponder_rpc_cache_1`. Its window is sized by SPEND, not time: the order states the provider budget (requests or
-compute units on the grounding and indexer legs) the backfill may consume, read against the provider's usage
-dashboard, and no duration is promised. Exactly two stop conditions, and no others:
+`ponder_rpc_cache_1`. Its window is sized by SPEND, not time: the providers' own caps bound it, and no duration is
+promised. Exactly two stop conditions, and no others (R-S222-8):
 
-1. The spend detector fires: a 402 or 429 on one of that chain's legs (`scripts/rpc-limit-detector.mjs` over the
-   captured log, "Spend/limit detector" below).
-2. The stated budget is reached on the provider's own usage reading before `/ready` 200.
+1. The reader's startup fails closed ("reader-start fails closed").
+2. A provider cap fires ("provider cap fires"), instrumented by the 402/429 detector (`scripts/rpc-limit-detector.mjs`
+   over the captured log, "Spend/limit detector" below).
 
-Either one stops the pass and is reported; slowness alone is not a stop.
+There is no separate manual spend-budget condition: the provider caps ARE the spend bound ("provider caps fail loudly
+by construction"). There is no time-based abort; slowness alone is not a stop.
 
 ### VM memory: fly.toml is the source (R-S222-9)
 
-`fly.toml` `[[vm]] memory` outranked `flyctl deploy --vm-memory` at the S222 deploy, while the file still said
-`2gb` and the machine was meant to run 4096 MB. Since S224 `fly.toml` says `memory = "4gb"`, the size
+`fly.toml` `[[vm]] memory` outranked `flyctl deploy --vm-memory`: the 2026-11-17 20:25:49Z full-reindex deploy
+(flyctl 0.5.7) came up on `fly.toml`'s `2gb` although the flag asked for 4096; it was corrected by
+`fly machine update` to 4096 at 20:28:40Z, about three minutes into backfill. Since S224 `fly.toml` says `memory = "4gb"`, the size
 the machine runs. `fly.toml` is not a build-id input (the id hashes only `packages/reader`'s `src/` outside `src/api/`,
 `ponder.schema.ts` and the evaluated `ponder.config.ts`; `packages/reader/scripts/bid.mjs`), so this keeps the id.
 After every deploy, verify the guest block:
