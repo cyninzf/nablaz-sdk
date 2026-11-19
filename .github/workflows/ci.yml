@@ -49,6 +49,9 @@ jobs:
       # The reader's four RPC env names live in packages/reader/src/chains.ts; a literal anywhere else fails.
       - name: reader env-names guard
         run: scripts/check-env-names.sh --self-test && scripts/check-env-names.sh
+      # The spend/limit detector's standing form (S224): status=/HTTP /code + 402/429 only; its red fixtures must flag.
+      - name: rpc limit detector red fixtures
+        run: node scripts/rpc-limit-detector.mjs --self-test
       - name: no Solidity source in this repo
         run: |
           if git ls-files | grep -iE '\.sol$'; then echo "Solidity source found"; exit 1; fi
