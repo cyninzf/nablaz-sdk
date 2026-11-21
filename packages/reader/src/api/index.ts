@@ -33,6 +33,7 @@ import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
 import { boundedLag, chainLag, endBlockOf, headCache, type IndexedBlock } from "./head";
 import { actorIdentityAt, type BindingRow } from "./actor-identity";
 import { FEED_RECORD_KINDS, externalPaymentItems, feedEnabled, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
+import { readTx, txEnabled, type TxDeps } from "./tx";
 import { bindingsAtTransferBlocks, boundHistoryAndMint, transfersFrom, walletAt } from "../grounding-rpc";
 import { groundingClient, rpcMetricsText } from "../rpc";
 import {
@@ -153,7 +154,7 @@ async function nablaLabelOf(
 
 // Row E: the RPC legs' counters (src/rpc.ts), Prometheus text, beside Ponder's own /metrics. The reader listens on
 // 127.0.0.1 only and the front relays /read, /feed and /ready (as /ready/head) alone, so this is never public.
-// P-GTM-4 (R-S217-7, R-S221-5): followed by nablaz_door_requests_total, read attempts and reads served at the three
+// P-GTM-4 (R-S217-7, R-S221-5): followed by nablaz_door_requests_total, read attempts and reads served at the four
 // public doors by caller class (src/api/callers.ts); MCP discovery calls and 429s are not in it (the front's log lines
 // only).
 app.get("/metrics/reader", (c) => c.text(rpcMetricsText() + doorMetricsText(), 200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" }));
@@ -258,6 +259,61 @@ async function withActorIdentity(items: { chainId: number; kind: string; subject
     }
   }
 }
+
+// P-GTM-4 (R-S221-5 pattern): the any-hash door's reads served, counted as /read's and /feed's (src/api/callers.ts).
+app.use("/read/:chainId/tx/:txHash", async (c, next) => {
+  await next();
+  if (c.res.status === 200) countDoor("served", c.req.header(DOOR_HEADER), c.req.header(CLASS_HEADER));
+});
+
+// R-S219-6, R-S226-4: GET /read/:chainId/tx/:txHash, the any-hash door (src/api/tx.ts). Off (503 {"ready":false}, no
+// statement) unless NABLAZ_TX=on, until the next schema event ships the tx_hash indexes its queries need. Registered
+// before /read/:chainId/:address; the two never overlap (four path segments against three).
+app.get("/read/:chainId/tx/:txHash", async (c) => {
+  const deps = (chainId: number): TxDeps => {
+    const chain = enabledChains().find((x) => x.chainId === chainId)!;
+    const client = (publicClients as Record<string, PublicClient>)[chain.name]!;
+    return {
+      asOfBlock: () => indexedBlock(c.req.url, chain),
+      rows: async (h) => {
+        const [records, vaultPayments_, permissions, payments, redemptions, creditLines] = await Promise.all([
+          db.select().from(recordEntries).where(and(eq(recordEntries.chainId, chainId), eq(recordEntries.txHash, h))),
+          db.select().from(vaultPayments).where(and(eq(vaultPayments.chainId, chainId), eq(vaultPayments.txHash, h))),
+          db.select().from(externalPermissions).where(and(eq(externalPermissions.chainId, chainId), eq(externalPermissions.txHash, h))),
+          db.select().from(externalPayments).where(and(eq(externalPayments.chainId, chainId), eq(externalPayments.txHash, h))),
+          db.select().from(externalRedemptions).where(and(eq(externalRedemptions.chainId, chainId), eq(externalRedemptions.txHash, h))),
+          db.select().from(creditLineEvents).where(and(eq(creditLineEvents.chainId, chainId), eq(creditLineEvents.txHash, h))),
+        ]);
+        const permIds = [...new Set(payments.map(permissionIdOf).filter((x): x is string => !!x))];
+        const perms = permIds.length ? await db.select().from(externalPermissions).where(inArray(externalPermissions.id, permIds)) : [];
+        return { records, vaultPayments: vaultPayments_, permissions, payments, redemptions, creditLines, paymentPermissions: new Map(perms.map((p) => [p.id, p])) };
+      },
+      // As the subject page: a label only for an indexed NablaZ account on a chain carrying NablaZ.
+      labelOf: async (a, asOfBlock) => {
+        if (!hasNabla(chain)) return null;
+        const [acct] = await db.select().from(accounts).where(eq(accounts.id, `${chainId}-${a}`));
+        return acct ? nablaLabelOf(client, chain, a, asOfBlock) : null;
+      },
+      txBlock: async (h) => {
+        try {
+          const t = await client.getTransaction({ hash: h });
+          return t.blockNumber ?? "pending";
+        } catch (e) {
+          // By name: Ponder's viem and this file's may be two module instances, so instanceof is not reliable.
+          if ((e as Error)?.name === "TransactionNotFoundError") return null;
+          // To the server log only (the answer says not-determinable); the transport has already redacted URLs.
+          console.error(`tx lookup failed for ${chain.name}: ${String((e as Error)?.message ?? e).split("\n")[0]}`);
+          throw e;
+        }
+      },
+    };
+  };
+  const a = await readTx(
+    { chainId: c.req.param("chainId"), txHash: c.req.param("txHash") },
+    { enabled: txEnabled(), chainIds: enabledChains().map((x) => x.chainId), deps },
+  );
+  return c.body(json(a.body), a.status, { "content-type": "application/json" });
+});
 
 // P-GTM-4: a read served at a door, counted after the answer when it is a 200 the front tagged (src/api/callers.ts).
 app.use("/read/:chainId/:address", async (c, next) => {

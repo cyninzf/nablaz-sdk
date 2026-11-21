@@ -20,6 +20,7 @@ set in `fly.toml`.
 | `DATABASE_URL` | set by `fly mpg attach nablaz-reader-db -a nablaz-reader`, not in `fly.toml` |
 | `MCP_RATE_LIMIT_PER_MIN` | optional, default 60 |
 | `NABLAZ_FEED` | `on` since 2026-11-15 (S221), set as machine env by `flyctl machine update --env` (below). Unset, GET /feed is off; never a default in code or `fly.toml` |
+| `NABLAZ_TX` | unset (R-S226-4). Unset, GET /read/:chainId/tx/:txHash is off; set to `on` only after the schema event that ships its `tx_hash` indexes and the EXPLAIN on them, in the `NABLAZ_FEED` form; never a default in code or `fly.toml` |
 
 The first seven are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
 `FLY_IMAGE_REF` is set by Fly. Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES`,
@@ -290,6 +291,20 @@ cd /workspaces/nablaz-sdk && scripts/arm.sh /workspaces/captures/<session>
   running app's `is_ready`. An empty record from an unready schema is absence, not a record (R-S189-6). Evidence:
   the S202 public probe at 15:48Z, on an image whose `/ready` was 503, returned `facts: []` with
   `asOfBlock` 445102197 in 66 to 71 s, and an intermittent 500.
+- Any-hash door (R-S219-6, R-S226-4): `GET /read/:chainId/tx/:txHash` resolves a transaction hash to the facts it
+  anchors in `record_entries`, `vault_payments`, `external_permissions` (a permission's first log),
+  `external_payments`, `external_redemptions` and `credit_line_events`, built by the subject page's own fact builders
+  (`packages/reader/src/api/tx.ts`), so each fact's source, label, citation and one-liner are the subject page's.
+  ERC-8004 feedback grounding is read on the subject page only. OFF unless `NABLAZ_TX` is exactly `on`, in the
+  reader and the front alike: off, the front routes it and answers 503 `{"ready":false}` at once, asking no reader,
+  and the reader issues no statement. On, it is gated as `/read` (R-S202-4). It stays off until the next schema
+  event ships a `tx_hash` index on each of those six tables: without one every lookup is a sequential scan, and
+  `external_payments` (~4.9M rows) and `external_permissions` (~2.9M) are over the R-S217-1 million-row bar.
+  A hash the record does not hold is a 404 whose body says why (S222), in `reason`: `not-indexed` (the chain has
+  it above the indexed block, or pending), `no-fact` (at or below the indexed block, anchoring no fact here),
+  `unknown-hash` (the chain has no such transaction) or `not-determinable` (that chain lookup, one
+  `eth_getTransactionByHash` on the indexer leg, failed). An unread chain answers `/read`'s own
+  `{"error":"chain N is not read here"}`.
 - Open row: serve reads through the reader views. `/read` reads Ponder's `db` from `ponder:api`, which is the
   running deployment's own schema, not the `reader` views that point at the live one; until it does, a new
   deployment has nothing to serve before it is ready, and the gate above answers `{"ready":false}`.
@@ -392,8 +407,9 @@ rebuild. Notes:
   per chain and leg `nablaz_rpc_requests_total`, `nablaz_rpc_errors_total`, `nablaz_rpc_rate_limited_total`,
   `nablaz_rpc_rate_limited_recent` (1 for 60 s after a 429), `nablaz_rpc_last_error_timestamp_seconds` and
   `nablaz_rpc_last_rate_limited_timestamp_seconds`. Counters start at 0 on each start. The front never relays it.
-- Outside-read instrument (P-GTM-4, R-S214-11, R-S217-7, R-S221-5). Every request at the three read doors,
-  GET /read, GET /feed (since R-S221-5: public since the S221 flip) and /mcp, gets a caller class in the front (`packages/mcp/src/caller.ts`), at request time, from its headers:
+- Outside-read instrument (P-GTM-4, R-S214-11, R-S217-7, R-S221-5). Every request at the four read doors,
+  GET /read, GET /feed (since R-S221-5: public since the S221 flip), GET /read/:chainId/tx/:txHash (door `tx`,
+  R-S226-4, the same pattern) and /mcp, gets a caller class in the front (`packages/mcp/src/caller.ts`), at request time, from its headers:
   1. `x-nablaz-caller` when the value is exactly one of `fixture`, `ci`, `watcher`, `cto`, `site` or `se`; any
      other value is ignored.
   2. Otherwise `ingester` when the user-agent contains a pattern in `packages/mcp/src/caller-ua.json`. That list
@@ -406,11 +422,11 @@ rebuild. Notes:
   - The front logs one line per door request: `caller {"t","door","class","status","ua"}`. The user-agent is cut
     to 160 characters, and the line carries no IP.
   - `/metrics/reader` adds `nablaz_door_requests_total{door,class,stage}`. Stage `attempt` counts read attempts.
-    Stage `served` counts reads (a `/read` answer or a `/feed` page) the reader answered 200.
+    Stage `served` counts reads (a `/read` answer, a `/feed` page or a tx answer) the reader answered 200.
   - The front passes the class to the reader as the internal headers `x-nablaz-door` and `x-nablaz-class`, on its
     own loopback fetches only. A caller's copy of those headers is never forwarded.
-- Population, stated before any number: the counters cover read attempts and reads served at the three doors. MCP
-  discovery calls (initialize, tools/list), 429s and a `/feed` answered 503 while `NABLAZ_FEED` is off appear only
+- Population, stated before any number: the counters cover read attempts and reads served at the four doors. MCP
+  discovery calls (initialize, tools/list), 429s and a `/feed` or tx answered 503 while its flag is off appear only
   in the front's log lines. Until the site's proxy (`/api/sky` for the feed) sends `x-nablaz-caller: site` (a later
   web PR), site reads sit in `unclassified`.
 - Counters start at 0 on every start, so a monthly reading is a scrape at each end of the window, with any reset
@@ -616,6 +632,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 | Front rate limit | 60 per IP per minute | Set: `DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`. |
 | Front relay fetch timeout | none | Accepted: a hung reader holds that request's socket only; the per-IP limit bounds how many one client can hold, and `/live` no longer calls the reader. |
 | GET /feed | on (`NABLAZ_FEED=on`, machine env, S221) | Set: off in code unless `NABLAZ_FEED` is exactly `on` (`feedEnabled`, S213-SE7); flipped on 2026-11-15 after the R-S217-1 EXPLAIN gate (schema event, step 6). |
+| GET /read/:chainId/tx/:txHash | off (`NABLAZ_TX` unset) | Set: off in code unless `NABLAZ_TX` is exactly `on` (`txEnabled`, R-S226-4); stays off until the schema event that ships its `tx_hash` indexes and an EXPLAIN on them. |
 
 ## Deployment schemas (row J)
 

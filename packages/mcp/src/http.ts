@@ -1,18 +1,20 @@
 // The HTTP front of one instance with two doors (R-S192-1). POST /mcp: Streamable HTTP onto the same read
 // server, stateless, one fresh server and transport per request, the same single read_subject tool. GET
-// /read/:chainId/:address, GET /feed and GET /ready: relayed to the reader, so the reader itself need not be public; a
+// /read/:chainId/:address, GET /read/:chainId/tx/:txHash, GET /feed and GET /ready: relayed to the reader, so the reader itself need not be public; a
 // reader-authored answer unchanged (status, content type, body bytes), a 5xx with a fixed body (relay below). GET /read
 // and GET /feed answer 503 {"ready":false} with nothing read until the reader's readiness is 200 (R-S202-4, the check
 // shared with the MCP tool). GET /feed is OFF unless feedEnabled (NABLAZ_FEED=on, S213-SE7): off, it answers 503
-// {"ready":false} at once, with no readiness check and nothing relayed, until the index its queries need ships. GET /ready is the reader's /ready/head (S213 B1): 200 only when the index is ready AND
+// {"ready":false} at once, with no readiness check and nothing relayed, until the index its queries need ships. GET
+// /read/:chainId/tx/:txHash, the any-hash door (R-S219-6, R-S226-4), is routed always and OFF the same way unless
+// txEnabled (NABLAZ_TX=on), until the tx_hash indexes its queries need ship; on, it is gated as GET /read. GET /ready is the reader's /ready/head (S213 B1): 200 only when the index is ready AND
 // current with both chain heads. GET /live: 200 when the front is up and the reader process runs
 // (by PID when readerPid is set, off the reader's event loop; else its /health answers), 503 otherwise, whatever the index progress (deploy health; /ready is index readiness). Every request is rate-limited per IP in process so the limit holds
 // whatever sits in front. The IP is the socket peer, or, when MCP_CLIENT_IP_HEADER names a header the edge
 // overwrites (Fly-Client-IP on Fly), that header's value. No CORS headers, no counts or metrics endpoint.
-// P-GTM-4 (R-S214-11, R-S217-7, R-S221-5): every request at the three read doors (GET /read/*, GET /feed, /mcp) gets
+// P-GTM-4 (R-S214-11, R-S217-7, R-S221-5): every request at the four read doors (GET /read/*, GET /feed, the tx door, /mcp) gets
 // a caller class from its own headers (caller.ts), in memory, before anything else; one log line per such request on
 // stderr (door, class, status, truncated user-agent, time; no IP); and the class rides the front's own loopback
-// fetches to the reader (the readiness check and the /read and /feed relays) as internal headers, which the reader counts on /metrics/reader. Nothing of it
+// fetches to the reader (the readiness check and the /read, /feed and tx relays) as internal headers, which the reader counts on /metrics/reader. Nothing of it
 // is in any response: status, headers and body bytes are what they were.
 // GET /.well-known/agent-registration.json: the ERC-8004 registration file at EIP-8004's own path (also its
 // endpoint-domain verification artifact; packages/mcp/static/), the bytes read once at start-up. GET /favicon.ico: the
@@ -35,9 +37,10 @@ const REGISTRATION_FILE = readFileSync(new URL("../static/agent-registration.jso
  * checked before commit), read once at module load like the registration file. */
 export const FAVICON_PATH = "/favicon.ico";
 const FAVICON_PNG = readFileSync(new URL("../static/nablaz-icon-256.png", import.meta.url));
-/** The reader paths the front relays: the read (READ_PATH), the feed (FEED_PATH, with its query) and the readiness
- * probe /ready (the reader's READER_READY_PATH). Nothing else of the reader is public. */
+/** The reader paths the front relays: the read (READ_PATH), the any-hash read (TX_PATH), the feed (FEED_PATH, with its
+ * query) and the readiness probe /ready (the reader's READER_READY_PATH). Nothing else of the reader is public. */
 const READ_PATH = /^\/read\/[^/]+\/[^/]+$/;
+export const TX_PATH = /^\/read\/[^/]+\/tx\/[^/]+$/;
 export const FEED_PATH = "/feed";
 
 export type HttpServerOptions = ReadServerOptions & {
@@ -56,10 +59,17 @@ export type HttpServerOptions = ReadServerOptions & {
    * reader is not asked. main.ts sets it from FEED_ENV ("on" only), the variable the reader's own /feed reads.
    */
   feedEnabled?: boolean;
+  /**
+   * GET /read/:chainId/tx/:txHash is served (R-S226-4). Default false: every such request answers 503 {"ready":false}
+   * at once and the reader is not asked. main.ts sets it from TX_ENV ("on" only), the variable the reader's own door reads.
+   */
+  txEnabled?: boolean;
 };
 
 /** The variable that turns GET /feed on, here and in the reader (packages/reader/src/api/feed.ts). */
 export const FEED_ENV = "NABLAZ_FEED";
+/** The variable that turns the any-hash door on, here and in the reader (packages/reader/src/api/tx.ts). */
+export const TX_ENV = "NABLAZ_TX";
 
 /** The rate-limit key: the named header's value when one is named and present, else the socket peer. */
 export function clientIp(req: IncomingMessage, clientIpHeader?: string): string {
@@ -111,7 +121,7 @@ const json = (res: ServerResponse, status: number, body: unknown) => res.writeHe
 const notReady = (res: ServerResponse) => res.writeHead(503, { "content-type": "application/json" }).end(NOT_READY_BODY);
 
 /**
- * GET /read/* and GET /feed behind the readiness gate (R-S202-4): the shared readerReadiness check first, the read
+ * GET /read/*, the tx door and GET /feed behind the readiness gate (R-S202-4): the shared readerReadiness check first, the read
  * relayed only when the index is ready; otherwise 503 {"ready":false} and nothing read. `path` may carry a query.
  */
 async function gatedRead(res: ServerResponse, readerUrl: string, path: string, get: typeof fetch) {
@@ -144,7 +154,7 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
   const allow = rateLimiter(opts.rateLimitPerMin ?? DEFAULT_RATE_LIMIT_PER_MIN);
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // P-GTM-4: header parsing only (no I/O); the line is written when the response closes, 429s included.
-    const door = doorOf(req.method, req.url, READ_PATH, MCP_PATH, FEED_PATH);
+    const door = doorOf(req.method, req.url, READ_PATH, MCP_PATH, FEED_PATH, TX_PATH);
     const cls = door ? classify(req.headers) : null;
     if (door && cls) {
       const ua = req.headers["user-agent"];
@@ -160,6 +170,8 @@ export function readHttpServer(opts: HttpServerOptions = {}): Server {
     if (req.method === "GET" && path === REGISTRATION_PATH) return res.writeHead(200, { "content-type": "application/json" }).end(REGISTRATION_FILE);
     if (req.method === "GET" && path === FAVICON_PATH) return res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=31536000, immutable" }).end(FAVICON_PNG);
     if (req.method === "GET" && READ_PATH.test(path)) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, path, tagged(opts.fetch ?? fetch, "read", cls ?? "unclassified"));
+    if (req.method === "GET" && TX_PATH.test(path) && !opts.txEnabled) return notReady(res);
+    if (req.method === "GET" && TX_PATH.test(path)) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, path, tagged(opts.fetch ?? fetch, "tx", cls ?? "unclassified"));
     if (req.method === "GET" && path === FEED_PATH && !opts.feedEnabled) return notReady(res);
     if (req.method === "GET" && path === FEED_PATH) return gatedRead(res, opts.readerUrl ?? DEFAULT_READER_URL, `${path}${url.search}`, tagged(opts.fetch ?? fetch, "feed", cls ?? "unclassified"));
     if (req.method === "GET" && path === "/ready") return relay(res, opts.readerUrl ?? DEFAULT_READER_URL, READER_READY_PATH, opts.fetch ?? fetch);

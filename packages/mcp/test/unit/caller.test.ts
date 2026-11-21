@@ -1,5 +1,5 @@
-// P-GTM-4 (R-S214-11, R-S217-7, R-S221-5): the front's caller classifier (src/caller.ts) and its wiring at the three
-// read doors. The header allowlist, an unknown value ignored, the user-agent config, the default "unclassified"; the
+// P-GTM-4 (R-S214-11, R-S217-7, R-S221-5): the front's caller classifier (src/caller.ts) and its wiring at the four
+// read doors (the tx door since R-S226-4). The header allowlist, an unknown value ignored, the user-agent config, the default "unclassified"; the
 // internal loopback headers the reader counts (set by the front, never a caller's copy); one log line per door request, no IP; and every
 // answer byte-identical with and without x-nablaz-caller.
 
@@ -22,13 +22,14 @@ import {
   doorOf,
   tagged,
 } from "../../src/caller.ts";
-import { FEED_PATH, MCP_PATH, readHttpServer } from "../../src/http.ts";
+import { FEED_PATH, MCP_PATH, TX_PATH, readHttpServer } from "../../src/http.ts";
 import { READER_READY_PATH } from "../../src/server.ts";
 import * as reader from "../../../reader/src/api/callers.ts";
 
 const TEST = "0x8E65fa412e14c1859a9a278fdEFDE89A3c15b11c";
 const BODY = `{"subject":"${TEST}","chainId":42161,"asOfBlock":"1","facts":[]}`;
 const READ_PATH = /^\/read\/[^/]+\/[^/]+$/;
+const HASH = `0x${"ab".repeat(32)}`;
 
 describe("classify", () => {
   it("an allowlisted x-nablaz-caller value is its own class, whatever the user-agent", () => {
@@ -72,8 +73,15 @@ describe("classify", () => {
 });
 
 describe("doorOf, callerLogLine, tagged", () => {
-  it("only GET /read/*, GET /feed and /mcp are doors (R-S221-5); /ready, /live and the rest are not", () => {
-    const door = (m: string, p: string) => doorOf(m, p, READ_PATH, MCP_PATH, FEED_PATH);
+  it("only GET /read/*, GET /feed, the tx door and /mcp are doors (R-S221-5, R-S226-4); /ready, /live and the rest are not", () => {
+    const door = (m: string, p: string) => doorOf(m, p, READ_PATH, MCP_PATH, FEED_PATH, TX_PATH);
+    expect([...DOORS]).toEqual(["read", "mcp", "feed", "tx"]);
+    expect(door("GET", `/read/42161/tx/${HASH}`)).toBe("tx");
+    expect(door("GET", `/read/8453/tx/${HASH}?x=1`)).toBe("tx");
+    expect(door("GET", "/read/1/tx/not-a-hash")).toBe("tx"); // the reader answers it; the front only routes
+    expect(door("POST", `/read/42161/tx/${HASH}`)).toBeNull();
+    expect(door("GET", `/read/42161/tx/${HASH}/x`)).toBeNull();
+    expect(door("GET", `/read/42161/${TEST}/tx`)).toBeNull();
     expect(door("GET", `/read/42161/${TEST}`)).toBe("read");
     expect(door("GET", `/read/42161/${TEST}?x=1`)).toBe("read");
     expect(door("POST", `/read/42161/${TEST}`)).toBeNull();
@@ -128,7 +136,7 @@ describe("both doors, through the front", () => {
     vi.restoreAllMocks();
   });
 
-  async function front(opts: { rateLimitPerMin?: number; feedEnabled?: boolean } = {}) {
+  async function front(opts: { rateLimitPerMin?: number; feedEnabled?: boolean; txEnabled?: boolean } = {}) {
     const s = readHttpServer({ readerUrl: base, ...opts });
     await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
     return { url: `http://127.0.0.1:${(s.address() as { port: number }).port}`, close: () => new Promise<void>((r) => s.close(() => r())) };
@@ -269,15 +277,71 @@ describe("both doors, through the front", () => {
     }
   });
 
+  it("GET /read/:chainId/tx/:txHash (on): the readiness check and the relay carry door tx and the class; logged as door tx", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await front({ txEnabled: true });
+    try {
+      const r = await fetch(`${f.url}/read/42161/tx/${HASH}`, { headers: { [CALLER_HEADER]: "cto", [DOOR_HEADER]: "read", [CLASS_HEADER]: "se", "user-agent": "cto-probe/1" } });
+      expect([r.status, await r.text()]).toEqual([200, BODY]);
+      await (await fetch(`${f.url}/read/42161/tx/${HASH}`, { headers: { "user-agent": "outside/1" } })).text();
+      expect(tags()).toEqual([
+        [READER_READY_PATH, "tx", "cto"],
+        [`/read/42161/tx/${HASH}`, "tx", "cto"],
+        [READER_READY_PATH, "tx", "unclassified"],
+        [`/read/42161/tx/${HASH}`, "tx", "unclassified"],
+      ]);
+      await settle();
+      expect(callerLines(log).map((l) => [l.door, l.class, l.status, l.ua])).toEqual([
+        ["tx", "cto", 200, "cto-probe/1"],
+        ["tx", "unclassified", 200, "outside/1"],
+      ]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("the tx door while not ready (on): 503 {\"ready\":false}, one tagged attempt, nothing read", async () => {
+    ready = false;
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await front({ txEnabled: true });
+    try {
+      const r = await fetch(`${f.url}/read/42161/tx/${HASH}`, { headers: { [CALLER_HEADER]: "watcher" } });
+      expect([r.status, r.headers.get("content-type"), await r.text()]).toEqual([503, "application/json", `{"ready":false}`]);
+      expect(tags()).toEqual([[READER_READY_PATH, "tx", "watcher"]]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("the tx door (off, the default): 503 {\"ready\":false}, ready or not, logged with its class, reaches no reader", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await front();
+    try {
+      for (const r0 of [true, false]) {
+        ready = r0;
+        const r = await fetch(`${f.url}/read/42161/tx/${HASH}`, { headers: { [CALLER_HEADER]: "ci" } });
+        expect([r.status, r.headers.get("content-type"), await r.text()]).toEqual([503, "application/json", `{"ready":false}`]);
+      }
+      expect(hits).toEqual([]);
+      await settle();
+      expect(callerLines(log).map((l) => [l.door, l.class, l.status])).toEqual([
+        ["tx", "ci", 503],
+        ["tx", "ci", 503],
+      ]);
+    } finally {
+      await f.close();
+    }
+  });
+
   it("every door answer is byte-identical with and without x-nablaz-caller (status, content type, body)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const f = await front({ feedEnabled: true });
+    const f = await front({ feedEnabled: true, txEnabled: true });
     const answer = async (h: Record<string, string>, path = `/read/42161/${TEST}`) => {
       const r = await fetch(`${f.url}${path}`, { headers: h });
       return [r.status, r.headers.get("content-type"), await r.text(), [...r.headers.keys()].filter((k) => k !== "date").sort()];
     };
     try {
-      for (const path of [`/read/42161/${TEST}`, "/feed?limit=5"]) {
+      for (const path of [`/read/42161/${TEST}`, "/feed?limit=5", `/read/42161/tx/${HASH}`]) {
         ready = true;
         const plain = await answer({}, path);
         expect(plain[2]).toBe(BODY);
