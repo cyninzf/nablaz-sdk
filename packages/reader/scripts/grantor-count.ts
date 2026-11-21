@@ -7,15 +7,43 @@
 // src/chains.ts), on each target network's Alchemy host; no new key (the four-step rule). A network the key's app
 // cannot reach is reported as NO ENDPOINT and skipped, never worked around. URLs never reach the output (redactUrls).
 //
-// Before counting, each target's code hash must equal the indexed chains' (every enabled chain carrying that
-// source in src/chains.ts); a mismatch is reported and that target is not counted.
+// Before counting, the bytecode gate (R-S226-7), in order; any failure is reported and that target is not counted:
+//   1. The target's runtime code is byte-identical to the indexed chains' (every enabled chain carrying that source
+//      in src/chains.ts) outside the MASK: the positions where the indexed chains already differ from each other.
+//   2. The masked bytes verify as the chain-dependent values they claim to be:
+//      - each 2-byte masked run is the low end of a 32-byte word that MUST equal the target's chain id (uint256);
+//      - each 32-byte masked run SHOULD equal the EIP-712 domain separator recomputed for that contract, on that
+//        chain, at that address: keccak256(abi.encode(EIP712Domain typehash, keccak(name), keccak(version), chainId,
+//        address)), with name and version read from the contract's own eip712Domain() (EIP-5267). If that read is
+//        unavailable the word is reported as INFERRED, and the chain-id check plus the mask carry the gate.
+//      The same two checks run on every indexed chain first, so the method proves itself on known deployments.
+// For the record (R-S226-7): each target sits at the SAME canonical CREATE2 address as the indexed chains. A CREATE2
+// address binds the initcode, so the runtime code can differ only by values computed at construction from the
+// chain (chain id, the cached domain separator); those positions are exactly what the mask covers.
 //
 //   node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/grantor-count.ts [--days 30] [target ...]
 //   target = <contract>@<network>, contract dm | spm, network optimism | linea | gnosis (default: the four CTO hits)
 //
 // Falsifier (the dive's, pre-stated): a chain under 500 distinct grantors in 30 days does not join.
 
-import { createPublicClient, decodeEventLog, http, keccak256, toEventSelector, type Address, type Hex, type Log, type PublicClient } from "viem";
+import {
+  bytesToHex,
+  createPublicClient,
+  decodeEventLog,
+  encodeAbiParameters,
+  hexToBytes,
+  http,
+  keccak256,
+  numberToBytes,
+  parseAbi,
+  parseAbiParameters,
+  toEventSelector,
+  toHex,
+  type Address,
+  type Hex,
+  type Log,
+  type PublicClient,
+} from "viem";
 import { CHAINS } from "../src/chains.ts";
 import { DelegationManagerAbi, decodeRedeemedDelegation } from "../src/delegation.ts";
 import { SpendPermissionManagerAbi } from "../src/external-abis.ts";
@@ -61,10 +89,53 @@ function referenceClients(source: "DelegationManager" | "SpendPermissionManager"
     .map((ch) => ({ chainId: ch.chainId, url: process.env[ch.groundingRpcEnv]!, c: client(process.env[ch.groundingRpcEnv]!) }));
 }
 
-const codeHash = async (c: PublicClient, a: Address) => {
+const codeOf = async (c: PublicClient, a: Address): Promise<Uint8Array | null> => {
   const code = await c.getCode({ address: a });
-  return code && code !== "0x" ? keccak256(code) : null;
+  return code && code !== "0x" ? hexToBytes(code) : null;
 };
+
+/** Maximal runs [start, end] of consecutive positions. */
+const runsOf = (ps: number[]) => ps.reduce<[number, number][]>((out, p) => (out.length && out.at(-1)![1] === p - 1 ? (out.at(-1)![1] = p, out) : [...out, [p, p]]), []);
+const fmtRuns = (rs: [number, number][]) => rs.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(", ");
+const word = (code: Uint8Array, end: number) => bytesToHex(code.slice(end - 31, end + 1));
+
+const EIP712_DOMAIN_TYPEHASH = keccak256(toHex("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"));
+const EIP5267 = parseAbi(["function eip712Domain() view returns (bytes1 fields, string name, string version, uint256 chainId, address verifyingContract, bytes32 salt, uint256[] extensions)"]);
+
+/** The domain separator recomputed from the contract's own name and version, for `chainId` and `address`; null if unreadable. */
+async function domainSeparator(c: PublicClient, address: Address, chainId: number): Promise<{ sep: Hex; name: string; version: string } | null> {
+  try {
+    const [fields, name, version] = await c.readContract({ address, abi: EIP5267, functionName: "eip712Domain" });
+    if (fields !== "0x0f") return null; // only the name/version/chainId/verifyingContract domain is recomputed here
+    const sep = keccak256(encodeAbiParameters(parseAbiParameters("bytes32, bytes32, bytes32, uint256, address"), [EIP712_DOMAIN_TYPEHASH, keccak256(toHex(name)), keccak256(toHex(version)), BigInt(chainId), address]));
+    return { sep, name, version };
+  } catch {
+    return null;
+  }
+}
+
+/** Gate step 2 for one deployment: every masked run verified. Returns the failures and the inferred notes. */
+async function verifyMask(c: PublicClient, address: Address, chainId: number, code: Uint8Array, runs: [number, number][]): Promise<{ fail: string[]; notes: string[] }> {
+  const fail: string[] = [];
+  const notes: string[] = [];
+  const chainWord = bytesToHex(numberToBytes(BigInt(chainId), { size: 32 }));
+  let dom: Awaited<ReturnType<typeof domainSeparator>> | undefined;
+  for (const [a, b] of runs) {
+    const len = b - a + 1;
+    if (len <= 2) {
+      const w = word(code, b);
+      if (w !== chainWord) fail.push(`bytes ${a}-${b}: word ${w} is not chain id ${chainId}`);
+      else notes.push(`bytes ${a}-${b}: chain id ${chainId} (0x${chainId.toString(16).padStart(4, "0")}) VERIFIED`);
+    } else if (len <= 32) {
+      const w = word(code, a + 31);
+      dom ??= await domainSeparator(c, address, chainId);
+      if (!dom) notes.push(`bytes ${a}-${b}: 32-byte word INFERRED as the domain separator (eip712Domain() unreadable)`);
+      else if (w !== dom.sep) fail.push(`bytes ${a}-${b}: word ${w} is not the recomputed domain separator ${dom.sep} ("${dom.name}" v${dom.version})`);
+      else notes.push(`bytes ${a}-${b}: EIP-712 domain separator ("${dom.name}" v${dom.version}, chain ${chainId}, ${address}) VERIFIED`);
+    } else fail.push(`bytes ${a}-${b}: a masked run of ${len} bytes is not a chain id or a domain separator`);
+  }
+  return { fail, notes };
+}
 
 /** The first block whose timestamp is at or after `ts` (binary search on block timestamps). */
 async function blockAt(c: PublicClient, ts: bigint, latest: bigint): Promise<bigint> {
@@ -113,14 +184,38 @@ for (const t of targets) {
     continue;
   }
 
-  // 2. Code hash equal to every indexed chain's.
-  const here = await codeHash(c, ct.address);
-  const refs = await Promise.all(referenceClients(ct.name).map(async (r) => ({ chainId: r.chainId, h: await codeHash(r.c, ct.address).catch((e) => `error: ${clean(e, r.url)}`) })));
-  console.log(`   code hash ${here ?? "NO CODE"}; indexed: ${refs.map((r) => `${r.chainId} ${r.h}`).join(", ")}`);
-  if (!here || refs.length === 0 || refs.some((r) => r.h !== here)) {
-    console.log(`   CODE HASH MISMATCH (or no code / no indexed reference): not counted`);
+  // 2. The bytecode gate (R-S226-7; header).
+  const here = await codeOf(c, ct.address);
+  const refs = await Promise.all(referenceClients(ct.name).map(async (r) => ({ ...r, code: await codeOf(r.c, ct.address) })));
+  if (!here || refs.length < 2 || refs.some((r) => !r.code || r.code.length !== here.length)) {
+    console.log(`   GATE FAIL: no code, fewer than two indexed references, or a length mismatch (target ${here?.length ?? 0} bytes; indexed ${refs.map((r) => `${r.chainId} ${r.code?.length ?? 0}`).join(", ")}); not counted`);
     continue;
   }
+  const mask = new Set<number>();
+  for (let i = 0; i < here.length; i++) if (refs.some((r) => r.code![i] !== refs[0]!.code![i])) mask.add(i);
+  const runs = runsOf([...mask]);
+  const outside: number[] = [];
+  for (let i = 0; i < here.length; i++) if (!mask.has(i) && here[i] !== refs[0]!.code![i]) outside.push(i);
+  const differ = [...Array(here.length).keys()].filter((i) => here[i] !== refs[0]!.code![i]);
+  console.log(`   code: ${here.length} bytes; mask (indexed ${refs.map((r) => r.chainId).join(" vs ")} differ): ${mask.size} bytes at ${fmtRuns(runs)}`);
+  console.log(`   gate 1: target differs from ${refs[0]!.chainId} at ${differ.length} bytes (${fmtRuns(runsOf(differ))}); outside the mask: ${outside.length}${outside.length ? ` (${fmtRuns(runsOf(outside))})` : ""}`);
+  if (outside.length) {
+    console.log(`   GATE FAIL (1): bytes differ outside the mask; not counted`);
+    continue;
+  }
+  const checks = [...refs.map((r) => ({ label: `indexed ${r.chainId}`, c: r.c, chainId: r.chainId, code: r.code! })), { label: `target ${nw.chainId}`, c, chainId: nw.chainId, code: here }];
+  let gate2 = true;
+  for (const k of checks) {
+    const v = await verifyMask(k.c, ct.address, k.chainId, k.code, runs);
+    for (const n of v.notes) console.log(`   gate 2 ${k.label}: ${n}`);
+    for (const f of v.fail) console.log(`   gate 2 ${k.label}: FAIL ${f}`);
+    if (v.fail.length) gate2 = false;
+  }
+  if (!gate2) {
+    console.log(`   GATE FAIL (2): a masked value does not verify; not counted`);
+    continue;
+  }
+  console.log(`   gate: PASS`);
 
   // 3. The window, by block timestamps.
   const latest = await c.getBlock({ blockTag: "latest" });
