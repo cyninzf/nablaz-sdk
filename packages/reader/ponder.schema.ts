@@ -7,6 +7,9 @@ import { index, onchainTable, type PgColumnsBuilders } from "ponder";
 // Explicit names under 63 characters (Ponder's derived names would be truncated). No partial or kind_name index: a
 // partial index would hard-code the feed kinds; revisit if the records page measures above 50 ms in production.
 // /feed stays off (NABLAZ_FEED) until a plain EXPLAIN shows these used (S213-L1).
+// tx (R-S226-4): (chain_id, tx_hash) on the six tables GET /read/:chainId/tx/:txHash searches (src/api/tx.ts,
+// TX_SEARCHED); its queries are equality on both. Explicit names, as feed. The door stays off (NABLAZ_TX) until a plain
+// EXPLAIN shows these used (scripts/explain.mjs).
 
 const evidence = (t: PgColumnsBuilders) => ({
   chainId: t.integer().notNull(),
@@ -47,7 +50,7 @@ export const recordEntries = onchainTable(
     /** tx.from of the transaction that carried the entry. */
     submitter: t.hex().notNull(),
   }),
-  (t) => ({ bySubject: index().on(t.chainId, t.subject, t.seq), feed: index("record_entries_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex) }),
+  (t) => ({ bySubject: index().on(t.chainId, t.subject, t.seq), feed: index("record_entries_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex), tx: index("record_entries_tx").on(t.chainId, t.txHash) }),
 );
 
 /** OBLIGATION_OPENED / REPAY / OBLIGATION_CLOSED, one row per entry, grouped by obligationRef. */
@@ -203,7 +206,7 @@ export const vaultPayments = onchainTable(
     calls: t.bigint(),
     callsStatus: t.text().notNull(),
   }),
-  (t) => ({ byAccount: index().on(t.chainId, t.account), feed: index("vault_payments_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex) }),
+  (t) => ({ byAccount: index().on(t.chainId, t.account), feed: index("vault_payments_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex), tx: index("vault_payments_tx").on(t.chainId, t.txHash) }),
 );
 
 /** Implementation per account: ERC-1967 Upgraded on the proxy and the record's IMPLEMENTATION_CHANGED. */
@@ -270,6 +273,7 @@ export const externalPermissions = onchainTable(
     bySubject: index().on(t.chainId, t.subject),
     byGrantee: index().on(t.chainId, t.grantee),
     feed: index("external_permissions_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex),
+    tx: index("external_permissions_tx").on(t.chainId, t.txHash),
   }),
 );
 
@@ -293,6 +297,7 @@ export const externalPayments = onchainTable(
     byPayer: index().on(t.chainId, t.payer),
     byPayee: index().on(t.chainId, t.payee),
     feed: index("external_payments_feed").on(t.blockTimestamp, t.chainId, t.blockNumber, t.logIndex),
+    tx: index("external_payments_tx").on(t.chainId, t.txHash),
   }),
 );
 
@@ -318,6 +323,7 @@ export const externalRedemptions = onchainTable(
     byRoot: index().on(t.chainId, t.rootDelegator),
     byDelegator: index().on(t.chainId, t.delegator),
     byDelegate: index().on(t.chainId, t.delegate),
+    tx: index("external_redemptions_tx").on(t.chainId, t.txHash),
   }),
 );
 
@@ -338,7 +344,7 @@ export const creditLineEvents = onchainTable(
     dueAt: t.bigint(),
     label: t.text().notNull(),
   }),
-  (t) => ({ byAgent: index().on(t.chainId, t.agentId), byParty: index().on(t.chainId, t.party) }),
+  (t) => ({ byAgent: index().on(t.chainId, t.agentId), byParty: index().on(t.chainId, t.party), tx: index("credit_line_events_tx").on(t.chainId, t.txHash) }),
 );
 
 /**

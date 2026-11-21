@@ -12,6 +12,9 @@
 //
 // Verdict (R-S217-1): a table of 1M rows or more must be read through its `*_feed` index: PASS, else FAIL. A Seq
 // Scan on a table that fits in about one page of the feed is the planner's cost choice, reported as NOTE, not FAIL.
+// R-S226-4: then the any-hash door's lookup on each table it searches (src/api/tx.ts TX_SEARCHED), in the shape
+// src/api/index.ts issues (chain_id = N and tx_hash = H, a synthetic hash): a table of 1M rows or more must be read
+// through its `*_tx` index, under the same verdict rule. Both sets gate: NABLAZ_TX stays off on any FAIL.
 // Exit 0 on PASS, 1 on any FAIL. Nothing is written to the database.
 
 import { execFileSync } from "node:child_process";
@@ -30,6 +33,10 @@ const TABLES = [
   { table: "vault_payments", extra: "" },
   { table: "external_payments", extra: "" },
 ];
+
+// The any-hash door's tables (R-S226-4; the six of src/api/tx.ts TX_SEARCHED) and the hash its plans use.
+const TX_TABLES = ["record_entries", "vault_payments", "external_permissions", "external_payments", "external_redemptions", "credit_line_events"];
+const TX_PROBE = `0x${"ab".repeat(32)}`;
 
 if (process.argv[2] === "--inside") await inside();
 else outside();
@@ -79,7 +86,18 @@ async function inside() {
       console.log(`\n== ${table}  ~${rows} rows  ${verdict}`);
       for (const l of plan) console.log(`   ${l}`);
     }
-    console.log(`\nverdict ${fail ? `FAIL (${fail} table(s) of >= ${BIG_TABLE} rows off their *_feed index)` : "PASS"}`);
+    for (const table of TX_TABLES) {
+      const rows = Number((await c.query(`select reltuples::bigint as n from pg_class where oid = $1::regclass`, [`"${schema}".${table}`])).rows[0].n);
+      const sql = `select * from "${schema}".${table} where chain_id = ${CHAINS[0]} and tx_hash = '${TX_PROBE}'`;
+      const plan = (await c.query(`explain ${sql}`)).rows.map((r) => r["QUERY PLAN"]);
+      const ix = plan.some((l) => l.includes(`${table}_tx`));
+      const seq = plan.some((l) => /Seq Scan/.test(l));
+      const verdict = ix ? "PASS" : rows >= BIG_TABLE ? "FAIL" : seq ? "NOTE (small-table Seq Scan = planner cost, R-S217-1)" : "NOTE";
+      if (verdict === "FAIL") fail++;
+      console.log(`\n== tx ${table}  ~${rows} rows  ${verdict}`);
+      for (const l of plan) console.log(`   ${l}`);
+    }
+    console.log(`\nverdict ${fail ? `FAIL (${fail} table(s) of >= ${BIG_TABLE} rows off their *_feed or *_tx index)` : "PASS"}`);
   } finally {
     await c.end();
   }

@@ -4,6 +4,7 @@
 // query into a scan of the chain's rows (S198: external_redemptions, 59 s on Arbitrum, past the 30 s limit).
 import { describe, expect, it } from "vitest";
 import * as s from "../../ponder.schema";
+import { TX_SEARCHED } from "../../src/api/tx";
 
 type Col = { name: string; primary?: boolean };
 type Table = Record<string | symbol, unknown>;
@@ -61,4 +62,25 @@ describe("/read always-run filters are index-covered", () => {
     expect(indexesOf(s.recordEntries as never)).toContainEqual(["chain_id", "subject", "seq"]);
     expect(indexesOf(s.accounts as never)).toEqual([["id"]]);
   });
+});
+
+// R-S226-4: GET /read/:chainId/tx/:txHash filters each searched table on (chain_id, tx_hash) equality; every one of
+// them has an index leading with exactly those columns, and the list is the door's own (src/api/tx.ts TX_SEARCHED).
+describe("the any-hash door's filters are index-covered", () => {
+  const TX_TABLES: Record<string, Table & { chainId: Col; txHash: Col }> = {
+    record_entries: s.recordEntries as never,
+    vault_payments: s.vaultPayments as never,
+    external_permissions: s.externalPermissions as never,
+    external_payments: s.externalPayments as never,
+    external_redemptions: s.externalRedemptions as never,
+    credit_line_events: s.creditLineEvents as never,
+  };
+  it("covers every table the door searches, no more and no fewer", () => {
+    expect(Object.keys(TX_TABLES).sort()).toEqual([...TX_SEARCHED].sort());
+  });
+  for (const name of TX_SEARCHED)
+    it(`${name} (chain_id, tx_hash)`, () => {
+      const t = TX_TABLES[name]!;
+      expect(covered(t, [t.chainId, t.txHash]), `no index on ${name} leads with chain_id, tx_hash`).toBe(true);
+    });
 });

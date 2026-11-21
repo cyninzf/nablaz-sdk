@@ -20,7 +20,7 @@ set in `fly.toml`.
 | `DATABASE_URL` | set by `fly mpg attach nablaz-reader-db -a nablaz-reader`, not in `fly.toml` |
 | `MCP_RATE_LIMIT_PER_MIN` | optional, default 60 |
 | `NABLAZ_FEED` | `on` since 2026-11-15 (S221), set as machine env by `flyctl machine update --env` (below). Unset, GET /feed is off; never a default in code or `fly.toml` |
-| `NABLAZ_TX` | unset (R-S226-4). Unset, GET /read/:chainId/tx/:txHash is off; set to `on` only after the schema event that ships its `tx_hash` indexes and the EXPLAIN on them, in the `NABLAZ_FEED` form; never a default in code or `fly.toml` |
+| `NABLAZ_TX` | unset (R-S226-4). Unset, GET /read/:chainId/tx/:txHash is off; set to `on` only after the schema event that ships its `*_tx` indexes (R-S226-4) and the EXPLAIN on them (`scripts/explain.mjs`, step 5), in the `NABLAZ_FEED` form; never a default in code or `fly.toml` |
 
 The first seven are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
 `FLY_IMAGE_REF` is set by Fly. Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES`,
@@ -158,7 +158,8 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
    unchanged build id only; with this image it crash-loops ("previously used by a different Ponder app").
 4. Ponder-ready timestamp, from the stream, in order (Ponder 0.18.6 `runtime/multichain.js`): `Completed backfill
    indexing across all chains`; `Created database indexes` with `count` 24 (20 before this event, plus the four
-   `*_feed`); `Created database views` (schema `reader`), immediately before `is_ready` is set. Record the
+   `*_feed`); R-S226-4 schema event: `count` 32 (26 declared at 611fbc7, after the G1 bundle, plus the six `*_tx`);
+   `Created database views` (schema `reader`), immediately before `is_ready` is set. Record the
    timestamp of each, then the first public `/ready` 200 (the head gate, B1, may hold it a little after).
 5. S213-L1 on production rows, before any flip: from an ephemeral console (above), plain `EXPLAIN` of each of the
    four GET /feed queries (`src/api/index.ts`, `/feed`) in the new schema: `node scripts/explain.mjs` from the repo
@@ -167,7 +168,9 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
    its `*_feed` index, and that is a PASS; a `Seq Scan` on a table that fits in about one feed page (S224:
    `record_entries` ~4 rows, `vault_payments` ~1) is the planner's cost choice, reported, not a stop. A multi-megarow
    table off its `*_feed` index stops the flip and is reported. ~~Any `Seq Scan` stops the flip~~: superseded by
-   R-S217-1. The PR records the synthetic-row plans this gate repeats. Plans of record, S224 (2026-11-19 18:11Z,
+   R-S217-1. The PR records the synthetic-row plans this gate repeats. Since R-S226-4 the same run also plans the
+   any-hash door's lookup on its six tables (`chain_id = N and tx_hash = H`), under the same rule against each
+   `*_tx` index; `NABLAZ_TX` stays off on any FAIL. Plans of record, S224 (2026-11-19 18:11Z,
    live schema `deployment-01m7njzvx0jw0bxzvwh0zqmpp3`): `external_payments` ~4,931,362 rows and
    `external_permissions` ~2,891,871 rows, each `Index Scan Backward using <table>_feed`; verdict PASS.
 6. Deploy-day flag flip, only after step 5 passes and on the word: `NABLAZ_FEED=on`, exactly `on` (the reader and
