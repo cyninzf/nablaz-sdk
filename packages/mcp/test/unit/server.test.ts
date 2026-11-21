@@ -27,6 +27,10 @@ const NOT_READ = `{"error":"chain 1 is not read here"}`;
 const FEED = `{"asOfBlock":{"42161":"523296543", "8453":"56076154"},"items":[],"nextBefore":null}`;
 // The body the hosted reader served on S198 (Ponder's pg statement timeout), path and all.
 const UPSTREAM_500 = `error: canceling statement due to statement timeout occurred in '/app/node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.1/node_modules/pg-pool/index.js:45:11' while handling a 'GET' request to the route '/read/42161/${TEST}'`;
+// The any-hash door (R-S226-4): a hash, and the reader's 404 for one the record does not hold (the body says why).
+const HASH = `0x${"cd".repeat(32)}`;
+const UNKNOWN_HASH = `0x${"ef".repeat(32)}`;
+const TX_404 = `{"error":"chain 42161 has no transaction ${UNKNOWN_HASH}", "reason":"unknown-hash","txHash":"${UNKNOWN_HASH}","chainId":42161,"asOfBlock":"7","txBlock":null,"notes":[]}`;
 const MAIN = fileURLToPath(new URL("../../src/main.ts", import.meta.url));
 const NODE_ARGS = ["--experimental-strip-types", "--disable-warning=ExperimentalWarning"];
 
@@ -44,6 +48,7 @@ beforeAll(async () => {
       return res.writeHead(503, { "content-type": "text/plain; charset=UTF-8" }).end("Historical indexing is not complete.");
     }
     if (req.url!.startsWith("/feed")) return res.writeHead(200, { "content-type": "application/json" }).end(FEED);
+    if (req.url === `/read/42161/tx/${UNKNOWN_HASH}`) return res.writeHead(404, { "content-type": "application/json" }).end(TX_404);
     const m = req.url!.match(/^\/read\/(\d+)\/(.+)$/);
     if (!m) return res.writeHead(404).end();
     if (m[1] !== "42161") return res.writeHead(404, { "content-type": "application/json" }).end(NOT_READ);
@@ -303,10 +308,12 @@ async function overStdio(readerUrl: string) {
 }
 
 /** Spawns main.ts --transport http on a free port; resolves once it logs the port it bound. */
-async function overHttp(readerUrl: string, feed?: string) {
+async function overHttp(readerUrl: string, feed?: string, tx?: string) {
   const env = { ...process.env };
   delete env.NABLAZ_FEED;
+  delete env.NABLAZ_TX;
   if (feed !== undefined) env.NABLAZ_FEED = feed;
+  if (tx !== undefined) env.NABLAZ_TX = tx;
   const child = spawn(process.execPath, [...NODE_ARGS, MAIN, "--transport", "http", "--port", "0", "--reader-url", readerUrl], {
     stdio: ["ignore", "ignore", "pipe"],
     env,
@@ -365,6 +372,39 @@ describe("entry points", () => {
       expect([r.status, await r.text()]).toEqual([200, FEED]);
       expect(seen).toEqual([READY, "/feed?limit=5"]);
     } finally {
+      await on.stop();
+    }
+  }, 60_000);
+
+  it("NABLAZ_TX=on, and only \"on\", serves GET /read/:chainId/tx/:txHash (R-S226-4); unset or anything else answers 503 {\"ready\":false} without asking the reader", async () => {
+    isReady = 1;
+    for (const tx of [undefined, "", "off", "true", "1", "ON"]) {
+      const http = await overHttp(base, undefined, tx);
+      try {
+        seen.length = 0;
+        const r = await fetch(`http://127.0.0.1:${http.port}/read/42161/tx/${HASH}`);
+        expect([r.status, r.headers.get("content-type"), await r.text()], String(tx)).toEqual([503, "application/json", `{"ready":false}`]);
+        expect(seen, String(tx)).toEqual([]);
+      } finally {
+        await http.stop();
+      }
+    }
+    const on = await overHttp(base, undefined, "on");
+    try {
+      // A hit, an unknown hash and an unread chain: each the reader's own answer, status and body bytes unchanged.
+      const answer = async (path: string) => {
+        seen.length = 0;
+        const r = await fetch(`http://127.0.0.1:${on.port}${path}`);
+        return [r.status, r.headers.get("content-type"), await r.text(), [...seen]];
+      };
+      expect(await answer(`/read/42161/tx/${HASH}`)).toEqual([200, "application/json", BODY, [READY, `/read/42161/tx/${HASH}`]]);
+      expect(await answer(`/read/42161/tx/${UNKNOWN_HASH}`)).toEqual([404, "application/json", TX_404, [READY, `/read/42161/tx/${UNKNOWN_HASH}`]]);
+      expect(await answer(`/read/1/tx/${HASH}`)).toEqual([404, "application/json", NOT_READ, [READY, `/read/1/tx/${HASH}`]]);
+      // Not ready: {"ready":false}, nothing read (R-S202-4).
+      isReady = 0;
+      expect(await answer(`/read/42161/tx/${HASH}`)).toEqual([503, "application/json", `{"ready":false}`, [READY]]);
+    } finally {
+      isReady = 1;
       await on.stop();
     }
   }, 60_000);
@@ -498,9 +538,9 @@ describe("entry points", () => {
   });
 
   it("HTTP sends no CORS headers and serves nothing of the reader but /read, /feed and /ready", async () => {
-    const http = await overHttp(base);
+    const http = await overHttp(base, "on", "on");
     try {
-      for (const path of ["/", "/metrics", "/metrics/reader", "/stats", "/status", "/health", "/graphql", "/sql/x", "/read", "/read/42161", `/read/42161/${TEST}/x`, "/read/../metrics", READY, "/feed/x", "/feeds"]) {
+      for (const path of ["/", "/metrics", "/metrics/reader", "/stats", "/status", "/health", "/graphql", "/sql/x", "/read", "/read/42161", `/read/42161/${TEST}/x`, "/read/../metrics", READY, "/feed/x", "/feeds", `/read/42161/tx/${HASH}/x`]) {
         const r = await fetch(`http://127.0.0.1:${http.port}${path}`, { headers: { origin: "https://example.com" } });
         expect(r.status).toBe(404);
         expect(r.headers.get("access-control-allow-origin")).toBeNull();
