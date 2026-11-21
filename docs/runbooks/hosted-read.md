@@ -20,7 +20,7 @@ set in `fly.toml`.
 | `DATABASE_URL` | set by `fly mpg attach nablaz-reader-db -a nablaz-reader`, not in `fly.toml` |
 | `MCP_RATE_LIMIT_PER_MIN` | optional, default 60 |
 | `NABLAZ_FEED` | `on` since 2026-11-15 (S221), set as machine env by `flyctl machine update --env` (below). Unset, GET /feed is off; never a default in code or `fly.toml` |
-| `NABLAZ_TX` | unset (R-S226-4). Unset, GET /read/:chainId/tx/:txHash is off; set to `on` only after the schema event that ships its `*_tx` indexes (R-S226-4) and the EXPLAIN on them (`scripts/explain.mjs`, step 5), in the `NABLAZ_FEED` form; never a default in code or `fly.toml` |
+| `NABLAZ_TX` | unset (R-S226-4). Unset, GET /read/:chainId/tx/:txHash is off; set to `on` only when BOTH flip gates hold (R-S226-4): (1) the EXPLAIN on its `*_tx` indexes passes (`scripts/explain.mjs`, step 5); (2) a stated per-IP bound on the door's RPC path, which spends one `eth_getTransactionByHash` per miss, so a public door is not a spend lever, in the `NABLAZ_FEED` form; never a default in code or `fly.toml` |
 
 The first seven are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
 `FLY_IMAGE_REF` is set by Fly. Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES`,
@@ -635,7 +635,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 | Front rate limit | 60 per IP per minute | Set: `DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`. |
 | Front relay fetch timeout | none | Accepted: a hung reader holds that request's socket only; the per-IP limit bounds how many one client can hold, and `/live` no longer calls the reader. |
 | GET /feed | on (`NABLAZ_FEED=on`, machine env, S221) | Set: off in code unless `NABLAZ_FEED` is exactly `on` (`feedEnabled`, S213-SE7); flipped on 2026-11-15 after the R-S217-1 EXPLAIN gate (schema event, step 6). |
-| GET /read/:chainId/tx/:txHash | off (`NABLAZ_TX` unset) | Set: off in code unless `NABLAZ_TX` is exactly `on` (`txEnabled`, R-S226-4); stays off until the schema event that ships its `tx_hash` indexes and an EXPLAIN on them. |
+| GET /read/:chainId/tx/:txHash | off (`NABLAZ_TX` unset) | Set: off in code unless `NABLAZ_TX` is exactly `on` (`txEnabled`, R-S226-4). Flip gates, both: the EXPLAIN on its `*_tx` indexes passes, AND a per-IP bound on its RPC path (one `eth_getTransactionByHash` per miss) is stated; until then it stays off. |
 
 ## Deployment schemas (row J)
 

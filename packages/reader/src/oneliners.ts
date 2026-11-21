@@ -1,13 +1,14 @@
 // The s3 §6.4b one-liners (R-D2B-1: the ground truth), rendered per chain with the subject substituted.
-// Every line of §6.4b at nablaz-protocol 51c1379622ec837375e5d8ddf42b29032990b997 has one renderer here;
+// Every line of §6.4b at nablaz-protocol 9ece0f1964cc0de6e8ac53d901ce6cad4190ab93 (proto #333, S224) has a renderer
+// here; a renderer for one of the two-record lines (1) and (8) prints one command per record, newline-joined.
 // test/unit/oneliners.test.ts renders each with its placeholders and diffs against
 // test/fixtures/s3-6.4b-oneliners.txt. The `reproduce` column of the external tables and the `reproduce`
 // field of every /read fact come from this module. RPC URLs stay as shell variables, never values.
 
 const RECORD = "0x80E937f9DEf48060308Ee00EC279d8448d4775b0";
 /**
- * NablaRecordV2 (G1-A, R-S221-4), and the first block with code at it. §6.4b (still v1-only at nablaz-protocol
- * 1ab54ec) prints only RECORD; a row emitted by V2 renders the same line with V2's address and deploy block.
+ * NablaRecordV2 (G1-A, R-S221-4), and its CREATE2 block. §6.4b (1) and (8) at 9ece0f19 print a line per record,
+ * v1 then V2; a row renders its own emitter's line only (item-10 rider, S224 ruling, R-S226-4).
  */
 const RECORD_V2 = "0x2618c4e053E9fA8f02Cb26007Fa3c0E4951F9e57";
 const RECORD_V2_FROM = "524296058";
@@ -41,18 +42,27 @@ const rpc = (chainId: number) => {
   return v;
 };
 const usdc = (chainId: number) => USDC[chainId] ?? "<USDC>";
-/** [address, from-block] of the record a row came from; refuses an address that is neither record. */
-const recordOf = (record: string | undefined): [string, string] => {
-  if (record === undefined || record.toLowerCase() === RECORD.toLowerCase()) return [RECORD, NABLA_FROM];
-  if (record.toLowerCase() === RECORD_V2.toLowerCase()) return [RECORD_V2, RECORD_V2_FROM];
-  throw new Error(`not a NablaZ record: ${record}`);
+/** Both records, as §6.4b (1) and (8) print them: [address, from-block], v1 first. */
+const RECORDS: [string, string][] = [
+  [RECORD, NABLA_FROM],
+  [RECORD_V2, RECORD_V2_FROM],
+];
+/**
+ * [address, from-block] of each record a line reads: the row's own emitter when given (a fact names its emitter),
+ * else both, per emitter (§6.4b (1) and (8)). Refuses an address that is neither record.
+ */
+const recordsOf = (record: string | undefined): [string, string][] => {
+  if (record === undefined) return RECORDS;
+  const r = RECORDS.find(([a]) => a.toLowerCase() === record.toLowerCase());
+  if (!r) throw new Error(`not a NablaZ record: ${record}`);
+  return [r];
 };
 
 /** Placeholders, exactly as §6.4b writes them. Unfilled, bash refuses the line (Lesson #15(b)). */
 type V = {
   chainId: number;
   subject?: string;
-  /** The record a row came from (its emitter); unset renders §6.4b's line, which names NablaRecord. */
+  /** The record a row came from (its emitter); unset renders §6.4b's line for each record, v1 then V2. */
   record?: string;
   vault?: string;
   tx?: string;
@@ -76,10 +86,10 @@ const creditLine = (v: V, sig: string) =>
 
 /** One renderer per §6.4b command line, in section order. Keys name the line: (section)-(what). */
 export const ONELINERS = {
-  "1-record-entries": (v: V) => {
-    const [address, from] = recordOf(v.record);
-    return `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${from} --address ${address} "${RECORD_ENTRY_SIG}" ${v.subject ?? "<SUBJECT>"}`;
-  },
+  "1-record-entries": (v: V) =>
+    recordsOf(v.record)
+      .map(([address, from]) => `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${from} --address ${address} "${RECORD_ENTRY_SIG}" ${v.subject ?? "<SUBJECT>"}`)
+      .join("\n"),
   "2-authorization-used": (v: V) =>
     `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${NABLA_FROM} --address ${usdc(v.chainId)} "AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)" ${v.vault ?? "<VAULT>"}`,
   "2-vault-transfer": (v: V) => receiptTransfersFrom(v, "v", v.vault ?? "<VAULT>"),
@@ -100,8 +110,12 @@ export const ONELINERS = {
     creditLine(v, "Defaulted(uint256 indexed loanId, uint256 indexed agentId, address indexed owner, uint256 principal)"),
   "7-new-feedback": (v: V) =>
     `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${f(v)} --address ${REPUTATION} "NewFeedback(uint256 indexed agentId, address indexed clientAddress, uint64 feedbackIndex, int128 value, uint8 valueDecimals, string indexed indexedTag1, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)" ${v.agentId ?? "<AGENT_ID>"}`,
+  // The latest self-written CONTROLLER_ROTATED is taken across BOTH records, by (block, log index) (§6.4b (8)).
   "8-controller-rotated-by-self": (v: V) =>
-    `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${NABLA_FROM} --address ${RECORD} "${RECORD_ENTRY_SIG}" ${v.account ?? "<ACCOUNT>"} ${CONTROLLER_ROTATED} ${v.account ?? "<ACCOUNT>"}`,
+    RECORDS.map(
+      ([address, from]) =>
+        `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${from} --address ${address} "${RECORD_ENTRY_SIG}" ${v.account ?? "<ACCOUNT>"} ${CONTROLLER_ROTATED} ${v.account ?? "<ACCOUNT>"}`,
+    ).join("\n"),
   "8-account-created-by-account": (v: V) =>
     `cast logs --rpc-url ${rpc(v.chainId)} --from-block ${NABLA_FROM} --address ${FACTORY} "${ACCOUNT_CREATED_SIG}" "" "" ${v.account ?? "<ACCOUNT>"}`,
   "9-identity-registered": (v: V) =>
