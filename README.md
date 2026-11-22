@@ -183,7 +183,7 @@ schedule.
 
 ### Using the hosted reader from Claude
 
-Read NablaZ's open record: agent actions under permission, cited onchain. Evidence, not a verdict.
+Read NablaZ's open record: agent actions under permission, cited. Evidence, not a verdict.
 
 **Setup.** In Claude, Settings → Connectors → Add custom connector → `https://read.nablaz.io/mcp` → No sign-in
 (the server is keyless). The same read is available over plain HTTP:
