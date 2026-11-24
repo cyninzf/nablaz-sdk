@@ -20,7 +20,7 @@ set in `fly.toml`.
 | `DATABASE_URL` | set by `fly mpg attach nablaz-reader-db -a nablaz-reader`, not in `fly.toml` |
 | `MCP_RATE_LIMIT_PER_MIN` | optional, default 60 |
 | `NABLAZ_FEED` | `on` since 2026-11-15 (S221), set as machine env by `flyctl machine update --env` (below). Unset, GET /feed is off; never a default in code or `fly.toml` |
-| `NABLAZ_TX` | unset (R-S226-4). Unset, GET /read/:chainId/tx/:txHash is off; set to `on` only when BOTH flip gates hold (R-S226-4): (1) the EXPLAIN on its `*_tx` indexes passes (`scripts/explain.mjs`, step 5); (2) a stated per-IP bound on the door's RPC path, which spends one `eth_getTransactionByHash` per miss, so a public door is not a spend lever, in the `NABLAZ_FEED` form; never a default in code or `fly.toml` |
+| `NABLAZ_TX` | `on` since 2026-11-24 (S228), set as machine env by `flyctl machine update --env` in the carry-all form (every existing machine env passed explicitly, verified after). Both flip gates held first (R-S226-4): (1) the EXPLAIN on its `*_tx` indexes passed on 42161, 8453 and 137 (`scripts/explain.mjs`, step 5); (2) the per-IP bound on the door's RPC path, which spends one `eth_getTransactionByHash` per miss, is the front's shared window, 60 per IP per minute (`DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`; ruled no change at S228 until tx-door 429s or outside-read traffic say otherwise). Unset or anything but `on`, the door answers 503 `{"ready":false}`; never a default in code or `fly.toml` |
 
 The first seven are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
 `FLY_IMAGE_REF` is set by Fly. Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES`,
@@ -57,7 +57,10 @@ no other flags. It ran 14:00:34Z to 14:02:21Z, exit 0, no prompt, and produced
 
 Timings on record (`/ready` 503 until the index is ready):
 - Same image, same schema (a `machine update` or restart, Ponder replays from its own schema): crash recovery, so the
-  same index rebuild as a resume. Measured 2026-11-15 (S221, the `NABLAZ_FEED=on` flip, 24 indexes): 29m16s of
+  same index rebuild as a resume. Latest, and the figure to plan against: 2026-11-24 (S228, the `NABLAZ_TX=on` flip,
+  32 indexes): 42m42s of `/ready` 503, `machine update` 17:47:47Z to first public `/ready` 200 at 18:30:29Z (polled
+  every 15 s; `/live` 200 throughout); the rebuild/head-gate split was not captured (the log lines had rotated out
+  before they were read). It supersedes the 29m16s below. Earlier: 2026-11-15 (S221, the `NABLAZ_FEED=on` flip, 24 indexes): 29m16s of
   `/ready` 503, `machine update` 20:54:02Z to first public `/ready` 200 at 21:23:18Z; `Created database indexes
   count=24 (22m 25s)` at 21:16:38Z, views 21:16:40Z, then 6m38s to `/ready` 200 (head gate). The earlier ~13 min
   (2026-11-04, 16:05:24Z to 16:18:15Z) was with 20 indexes.
@@ -83,6 +86,7 @@ Measured points by KIND (each kind is its own series; a point never stands in fo
 | Resume / same-schema rebuild | S217 2026-11-13 | ~22 min | 24 indexes; catch-up inferred |
 | Resume / same-schema rebuild | S221 2026-11-15 | 29m16s | `machine update` flip; rebuild 22m25s |
 | Resume / same-schema rebuild | S222 2026-11-17 | 33m20s | the pinned deploy (sdk #32), earlier the same day as the reindex deploy |
+| Resume / same-schema rebuild | S228 2026-11-24 | 42m42s | `machine update` flip (`NABLAZ_TX=on`), 32 indexes; 17:47:47Z → first public `/ready` 200 18:30:29Z, 15 s polling; rebuild split not captured. Supersedes S221's 29m16s as the figure to plan against |
 | FULL REINDEX (new schema) | 2026-11-17 → 2026-11-19 | 41h33m39s (−60s) | deploy 20:25:49Z Nov 17 → first public `/ready` 200 13:59:28Z Nov 19; three chains (42161, 137, 8453); Polygon 0% RPC cache; external_payments ~4.93M rows, external_permissions ~2.89M |
 
 Method note (full reindex): the deploy's own logs rotated out long before the end, and two Codespace losses cut the
@@ -179,7 +183,7 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
    `~/.fly/bin/flyctl machine update 850dd3a4113e78 -a nablaz-reader --env NABLAZ_FEED=on --yes < /dev/null`.
    Read `flyctl machine status -d` before and after: the only change is `NABLAZ_FEED`, and `READER_SCHEMA`, the
    image and the VM size are unchanged. The update restarts the machine on the same image and schema: crash
-   recovery rebuilds every index, 29m16s of `/ready` 503 (Timings on record), so capture logs through it as in
+   recovery rebuilds every index, 42m42s of `/ready` 503 at S228 (32 indexes; Timings on record), so capture logs through it as in
    step 2. Off again (not yet run): flyctl 0.5.7's `machine update` has no flag to unset an env var, so
    `--env NABLAZ_FEED=off` in the same form; any value other than `on` is off, and it costs the same restart.
    (Observed on flyctl 0.5.7; re-check `machine update --help` on the installed version before relying on it.)
@@ -635,7 +639,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 | Front rate limit | 60 per IP per minute | Set: `DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`. |
 | Front relay fetch timeout | none | Accepted: a hung reader holds that request's socket only; the per-IP limit bounds how many one client can hold, and `/live` no longer calls the reader. |
 | GET /feed | on (`NABLAZ_FEED=on`, machine env, S221) | Set: off in code unless `NABLAZ_FEED` is exactly `on` (`feedEnabled`, S213-SE7); flipped on 2026-11-15 after the R-S217-1 EXPLAIN gate (schema event, step 6). |
-| GET /read/:chainId/tx/:txHash | off (`NABLAZ_TX` unset) | Set: off in code unless `NABLAZ_TX` is exactly `on` (`txEnabled`, R-S226-4). Flip gates, both: the EXPLAIN on its `*_tx` indexes passes, AND a per-IP bound on its RPC path (one `eth_getTransactionByHash` per miss) is stated; until then it stays off. |
+| GET /read/:chainId/tx/:txHash | on (`NABLAZ_TX=on` machine env since 2026-11-24, S228) | Set: off in code unless `NABLAZ_TX` is exactly `on` (`txEnabled`, R-S226-4). Flip gates, both held at S228: the EXPLAIN on its `*_tx` indexes passed on all three chains, AND the per-IP bound on its RPC path (one `eth_getTransactionByHash` per miss) is stated: the shared front window, 60 per IP per minute, ruled no change. |
 
 ## Deployment schemas (row J)
 
