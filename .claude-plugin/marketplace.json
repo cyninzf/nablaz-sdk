@@ -7,7 +7,7 @@
     {
       "name": "nablaz",
       "source": "./plugins/nablaz",
-      "description": "Read NablaZ's open record: agent actions under permission, cited onchain. Evidence, not a verdict."
+      "description": "Read NablaZ's open record: agent actions under permission, cited. Evidence, not a verdict."
     }
   ]
 }

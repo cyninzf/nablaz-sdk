@@ -80,3 +80,45 @@ describe("copy discipline in both files (DoR §10)", () => {
     expect(SERVER_JSON.repository).toEqual({ url: "https://github.com/cyninzf/nablaz-sdk", source: "github" });
   });
 });
+
+// S227 strings event (retro-sweep: the record is the whole AI agent economy, on and off chain; today's citation
+// home is an instrument fact, never a definition). Supersession, kept here only so the change is legible:
+//   MCP description, was:          "Read NablaZ's open record: agent actions under permission, cited onchain. Evidence, not a verdict."
+//   registration description, was: "...the actions an account took under permission with onchain citations, readable by anyone..."
+// Ruled strings: byte-exact, no case or punctuation latitude.
+describe("ruled description bytes (S227)", () => {
+  const MCP_DESCRIPTION = "Read NablaZ's open record: agent actions under permission, cited. Evidence, not a verdict.";
+  const REGISTRATION_DESCRIPTION =
+    "NablaZ is the open record for the AI agent economy. Your agent acts under the permission you gave it; the record it leaves is credit you own. This identity's record is served by the NablaZ open reader: the actions an account took under permission with citations, readable by anyone over HTTP and MCP. Evidence, not a verdict.";
+
+  const read = (rel: string) => readFileSync(new URL(`../../../../${rel}`, import.meta.url), "utf8");
+  const marketplace = JSON.parse(read(".claude-plugin/marketplace.json")) as { plugins: { name: string; description?: string }[] };
+  /** README: the one line under "### Using the hosted reader from Claude", after its blank line. */
+  const readmeLine = (() => {
+    const lines = read("README.md").split("\n");
+    const h = lines.indexOf("### Using the hosted reader from Claude");
+    expect(h, "README heading").toBeGreaterThanOrEqual(0);
+    expect(lines[h + 1]).toBe("");
+    return lines[h + 2];
+  })();
+  const homes: [string, unknown][] = [
+    ["server.json", SERVER_JSON.description],
+    [".claude-plugin/marketplace.json", marketplace.plugins.find((p) => p.name === "nablaz")?.description],
+    ["README.md", readmeLine],
+  ];
+
+  it("the MCP description is byte-identical across its three homes and is the ruled string", () => {
+    for (const [home, s] of homes) expect(s, home).toBe(MCP_DESCRIPTION);
+    expect(new Set(homes.map(([, s]) => s)).size).toBe(1);
+  });
+
+  it("the registration description is the ruled string", () => {
+    const reg = JSON.parse(FILE.toString("utf8")) as { description: string };
+    expect(reg.description).toBe(REGISTRATION_DESCRIPTION);
+  });
+
+  it("no home carries the onchain scope word", () => {
+    for (const [home, s] of [...homes, ["agent-registration.json", (JSON.parse(FILE.toString("utf8")) as { description: string }).description] as const])
+      expect(s, home).not.toMatch(/onchain/i);
+  });
+});
