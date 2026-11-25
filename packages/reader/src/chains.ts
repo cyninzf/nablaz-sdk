@@ -7,8 +7,8 @@ import erc8004 from "./generated/erc8004.json" with { type: "json" };
  *
  * `nabla`: NablaZ contracts. Null means no NablaZ source on this chain (R-S189-1: NablaZ entries stay
  * Arbitrum-only). `external`: third-party sources (s3 §6.4c), pasted from nablaz-protocol
- * script/expected/external-{arbitrum,base}.txt at 4ace372840989469430996afd7f4668cab046e8e (Arbitrum, Base) and
- * from MetaMask's own deployment list (Polygon, below). An external source a chain does not carry is null in both
+ * script/expected/external-{arbitrum,base}.txt at 4ace372840989469430996afd7f4668cab046e8e (Arbitrum, Base),
+ * from MetaMask's own deployment list (Polygon, below), and at the same canonical addresses (Optimism, Linea; S230). An external source a chain does not carry is null in both
  * its address and its start block (R-S221-8: Polygon carries the DelegationManager only); an enabled chain with
  * one of the two set and not the other is refused.
  */
@@ -86,6 +86,16 @@ const DEPLOYED = {
   42161: { SpendPermissionManager: 283144909, DelegationManager: 320575464, ReputationRegistry: 428895450, IdentityRegistry: 428895443 },
   8453: { SpendPermissionManager: 23499060, DelegationManager: 28207787, ReputationRegistry: 41663784, IdentityRegistry: 41663783 },
   137: { DelegationManager: 69623266 },
+  // S230 chain join (S230-SE2), same method, 2026-11-25, read-only on the Alchemy grounding key's opt-mainnet and
+  // linea-mainnet hosts (record: docs/runbooks/s230-chain-join-measurements.md):
+  //   Optimism DelegationManager 133803172: eth_getCode empty at 133803171, 11,503 bytes at 133803172; first log
+  //   same block (tx 0x835aafefbbcc5072ac320a76873169dfec237c5d03b249675cae5a16249c904b, logIndex 75, OwnershipTransferred).
+  //   Optimism SpendPermissionManager 129095661: empty at 129095660, 12,610 bytes at 129095661; first log 129214148
+  //   (tx 0xbe1a4d3b1c8fd7ca9e4f88dbdb5eda3b7cb65fdb8e68a6277a3d9251a6795bc4, logIndex 68).
+  //   Linea DelegationManager 17474505: empty at 17474504, 11,503 bytes at 17474505; first log same block
+  //   (tx 0xd23a15a0a715899d6854587e39942d80b2e9974f7667bb5799eea1ff24141772, logIndex 0, OwnershipTransferred).
+  10: { SpendPermissionManager: 129095661, DelegationManager: 133803172 },
+  59144: { DelegationManager: 17474505 },
 } as const;
 
 /** ERC-8004 registries per chain, from src/generated/erc8004.json (scripts/gen-erc8004.ts). */
@@ -101,6 +111,8 @@ const SPM: Address = "0xf85210B21cC50302F477BA56686d2019dC9b67Ad";
  * empty at 69623265 and 11,503 bytes at 69623266 (archive RPC, 2026-11-16). Its runtime code equals Arbitrum's and
  * Base's except the immutables (chain id and cached EIP-712 domain separator), so the one decoder serves all three.
  * Polygon also has v1.0.0 and v1.1.0 managers at other addresses; like Arbitrum and Base, only v1.3.0 is indexed.
+ * Optimism and Linea (S230): the same address; scripts/grantor-count.ts's bytecode gate (R-S226-7) holds the same
+ * claim for each before it counts (record: docs/runbooks/s230-chain-join-measurements.md).
  */
 const DM: Address = "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
 
@@ -202,6 +214,78 @@ export const CHAINS: Record<number, ChainSources> = {
       startBlocks: {
         SpendPermissionManager: null,
         DelegationManager: DEPLOYED[137].DelegationManager,
+        creditLineLenders: null,
+        ReputationRegistry: null,
+        IdentityRegistry: null,
+      },
+    },
+  },
+  // OP Mainnet (S230 chain join): the SpendPermissionManager and the MetaMask DelegationManager. No NablaZ contract
+  // (R-S189-1), no ERC-8004 registry or credit-line source. Join measurement, DelegationManager: 503 distinct
+  // grantors over 30 days (scripts/grantor-count.ts, falsifier 500; docs/runbooks/s230-chain-join-measurements.md).
+  10: {
+    chainId: 10,
+    name: "optimism",
+    enabled: true,
+    rpcEnv: "READER_OPTIMISM_RPC_URL",
+    groundingRpcEnv: "READER_OPTIMISM_GROUNDING_RPC_URL",
+    usdc: null,
+    nabla: {
+      NablaRecord: null,
+      NablaRecordV2: null,
+      NablaAccountFactoryPermanent: null,
+      AccountRegistryV6: null,
+      ConsumerAIMandateV4: null,
+      ConsumerAIMandateV5: null,
+      NablaAccountV3_2: null,
+      startBlock: null,
+      recordV2StartBlock: null,
+    },
+    external: {
+      SpendPermissionManager: SPM,
+      DelegationManager: DM,
+      ReputationRegistry: null,
+      IdentityRegistry: null,
+      creditLineLenders: [],
+      startBlocks: {
+        SpendPermissionManager: DEPLOYED[10].SpendPermissionManager,
+        DelegationManager: DEPLOYED[10].DelegationManager,
+        creditLineLenders: null,
+        ReputationRegistry: null,
+        IdentityRegistry: null,
+      },
+    },
+  },
+  // Linea (S230 chain join): the MetaMask DelegationManager only (the join scope of record). No NablaZ contract
+  // (R-S189-1), no SpendPermissionManager (eth_getCode at its canonical address is empty on Linea, 2026-11-25),
+  // ERC-8004 registry or credit-line source.
+  59144: {
+    chainId: 59144,
+    name: "linea",
+    enabled: true,
+    rpcEnv: "READER_LINEA_RPC_URL",
+    groundingRpcEnv: "READER_LINEA_GROUNDING_RPC_URL",
+    usdc: null,
+    nabla: {
+      NablaRecord: null,
+      NablaRecordV2: null,
+      NablaAccountFactoryPermanent: null,
+      AccountRegistryV6: null,
+      ConsumerAIMandateV4: null,
+      ConsumerAIMandateV5: null,
+      NablaAccountV3_2: null,
+      startBlock: null,
+      recordV2StartBlock: null,
+    },
+    external: {
+      SpendPermissionManager: null,
+      DelegationManager: DM,
+      ReputationRegistry: null,
+      IdentityRegistry: null,
+      creditLineLenders: [],
+      startBlocks: {
+        SpendPermissionManager: null,
+        DelegationManager: DEPLOYED[59144].DelegationManager,
         creditLineLenders: null,
         ReputationRegistry: null,
         IdentityRegistry: null,

@@ -16,13 +16,17 @@ set in `fly.toml`.
 | `READER_BASE_GROUNDING_RPC_URL` | Alchemy, chain 8453 |
 | `READER_POLYGON_RPC_URL` | Chainstack, chain 137 (R-S221-8: DelegationManager only). Founder-created Polygon node; must be set before the bundle deploy, or `scripts/reader-start.sh` refuses to start |
 | `READER_POLYGON_GROUNDING_RPC_URL` | Alchemy, chain 137: the Hosted Reader app with Polygon enabled (same key as the other grounding legs) |
+| `READER_OPTIMISM_RPC_URL` | Chainstack, chain 10 (S230: SpendPermissionManager and DelegationManager). Must be set before the join deploy, or `scripts/reader-start.sh` refuses to start |
+| `READER_OPTIMISM_GROUNDING_RPC_URL` | Alchemy, chain 10: the Hosted Reader app with OP Mainnet enabled (same key as the other grounding legs) |
+| `READER_LINEA_RPC_URL` | Chainstack, chain 59144 (S230: DelegationManager only). Must be set before the join deploy, or `scripts/reader-start.sh` refuses to start |
+| `READER_LINEA_GROUNDING_RPC_URL` | Alchemy, chain 59144: the Hosted Reader app with Linea enabled (same key as the other grounding legs) |
 | `MCP_CLIENT_IP_HEADER` | `Fly-Client-IP`, the client-IP header Fly's edge sets |
 | `DATABASE_URL` | set by `fly mpg attach nablaz-reader-db -a nablaz-reader`, not in `fly.toml` |
 | `MCP_RATE_LIMIT_PER_MIN` | optional, default 60 |
 | `NABLAZ_FEED` | `on` since 2026-11-15 (S221), set as machine env by `flyctl machine update --env` (below). Unset, GET /feed is off; never a default in code or `fly.toml` |
 | `NABLAZ_TX` | `on` since 2026-11-24 (S228), set as machine env by `flyctl machine update --env` in the carry-all form (every existing machine env passed explicitly, verified after). Both flip gates held first (R-S226-4): (1) the EXPLAIN on its `*_tx` indexes passed on 42161, 8453 and 137 (`scripts/explain.mjs`, step 5); (2) the per-IP bound on the door's RPC path, which spends one `eth_getTransactionByHash` per miss, is the front's shared window, 60 per IP per minute (`DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`; ruled no change at S228 until tx-door 429s or outside-read traffic say otherwise). Unset or anything but `on`, the door answers 503 `{"ready":false}`; never a default in code or `fly.toml` |
 
-The first seven are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
+The first eleven are Fly secrets. `PORT` is pinned to 3042 in `fly.toml`, equal to `internal_port`.
 `FLY_IMAGE_REF` is set by Fly. Leave `READER_EXTERNAL_FROM`, `READER_CHAINS`, `READER_SOURCES`,
 `READER_START_BLOCK` and `READER_END_BLOCK` unset: every source starts at its deployment block. The start
 script refuses to start without the four RPC variables, `MCP_CLIENT_IP_HEADER`, `DATABASE_URL`, `PORT` and

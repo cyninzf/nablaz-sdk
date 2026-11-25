@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Reader env-names guard: the reader's six RPC env names (two per chain: Arbitrum, Base, Polygon) live in one place, packages/reader/src/chains.ts
+# Reader env-names guard: the reader's ten RPC env names (two per chain: Arbitrum, Base, Polygon, Optimism, Linea) live in one place, packages/reader/src/chains.ts
 # (CHAINS[<id>].rpcEnv and .groundingRpcEnv); everything else imports them from there.
-# Fails on any literal occurrence of one of the six names in a tracked *.ts, *.mts, *.mjs, *.js or *.sh file
+# Fails on any literal occurrence of one of the ten names in a tracked *.ts, *.mts, *.mjs, *.js or *.sh file
 # (comments included), outside:
 #   - packages/reader/src/chains.ts, the canonical module;
 #   - scripts/reader-start.sh, the one allowlisted file: shell cannot import the module, and its fail-closed
-#     ${VAR:?} checks on the six names are the production start path.
+#     ${VAR:?} checks on the ten names are the production start path.
 # *.md files and the workflow (.github/workflows/ci.yml maps the Actions secrets into the names) are not scanned.
-# The canonical module must still hold all six names.
+# The canonical module must still hold all ten names.
 #   scripts/check-env-names.sh
 #   scripts/check-env-names.sh --self-test
 set -euo pipefail
 
 # A pattern, not a literal: this file must pass its own check.
-NAMES='READER_(ARBITRUM|BASE|POLYGON)(_GROUNDING)?_RPC_URL'
+NAMES='READER_(ARBITRUM|BASE|POLYGON|OPTIMISM|LINEA)(_GROUNDING)?_RPC_URL'
 CANONICAL='packages/reader/src/chains.ts'
 ALLOW=("$CANONICAL" 'scripts/reader-start.sh')
 
@@ -31,8 +31,8 @@ check() {
       bad=1
     fi
   done
-  if [ ! -f "$CANONICAL" ] || [ "$(grep -oE "$NAMES" -- "$CANONICAL" | sort -u | wc -l)" -ne 6 ]; then
-    echo "$CANONICAL no longer holds the six reader RPC env names"
+  if [ ! -f "$CANONICAL" ] || [ "$(grep -oE "$NAMES" -- "$CANONICAL" | sort -u | wc -l)" -ne 10 ]; then
+    echo "$CANONICAL no longer holds the ten reader RPC env names"
     bad=1
   fi
   if [ "$bad" -ne 0 ]; then
@@ -47,10 +47,10 @@ if [ "${1:-}" = "--self-test" ]; then
   trap 'rm -rf "$tmp"' EXIT
   git -C "$tmp" init -q
   mkdir -p "$tmp/packages/reader/src" "$tmp/scripts" "$tmp/lib"
-  # The six names, assembled so that no literal appears in this file.
+  # The ten names, assembled so that no literal appears in this file.
   n() { printf 'READER_%s_RPC_URL' "$1"; }
   {
-    for x in ARBITRUM ARBITRUM_GROUNDING BASE BASE_GROUNDING POLYGON POLYGON_GROUNDING; do printf 'export const e = "%s";\n' "$(n "$x")"; done
+    for x in ARBITRUM ARBITRUM_GROUNDING BASE BASE_GROUNDING POLYGON POLYGON_GROUNDING OPTIMISM OPTIMISM_GROUNDING LINEA LINEA_GROUNDING; do printf 'export const e = "%s";\n' "$(n "$x")"; done
   } >"$tmp/packages/reader/src/chains.ts"
   printf ': "${%s:?}"\n' "$(n BASE)" >"$tmp/scripts/reader-start.sh"
   printf 'export const ok = CHAINS[8453]!.rpcEnv;\n' >"$tmp/lib/clean.ts"
