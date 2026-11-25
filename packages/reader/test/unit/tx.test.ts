@@ -2,7 +2,7 @@
 // chain lookups. The queries themselves need the tx_hash indexes of the next schema event; the door is off until then.
 
 import { describe, expect, it } from "vitest";
-import { NOT_READY, TX_ENV, TX_HASH, TX_SCOPE_NOTE, TX_SEARCHED, readTx, txEnabled, type TxDeps, type TxRows } from "../../src/api/tx";
+import { NOT_READY, TX_ENV, TX_HASH, TX_SCOPE_NOTE, TX_SEARCHED, TX_SUBJECT_FIELD, readTx, subjectOf, txEnabled, type TxDeps, type TxRows } from "../../src/api/tx";
 import { creditLineFacts, paymentFacts, permissionFacts, recordFacts, redemptionFacts, vaultPaymentFacts } from "../../src/read";
 import { withUtc } from "../../src/api/utc";
 import type { NablaLabel } from "../../src/labels";
@@ -40,6 +40,8 @@ function fake(o: { rows?: TxRows; asOf?: bigint | null; block?: bigint | "pendin
 }
 const run = (f: ReturnType<typeof fake>, chainId = "42161", txHash = H, enabled = true) =>
   readTx({ chainId, txHash }, { enabled, chainIds: [42161, 8453, 137], deps: () => f.deps });
+/** A served fact without the door's subject fields: the GET /read fact (R-S231-8). */
+const strip = ({ subject: _s, subjectField: _f, ...rest }: Record<string, unknown>) => rest;
 const ser = (x: unknown) => JSON.parse(JSON.stringify(x, (_, v) => (typeof v === "bigint" ? v.toString() : v)));
 
 describe("flag", () => {
@@ -94,7 +96,8 @@ describe("hit", () => {
       ...redemptionFacts(rows.redemptions),
       ...recordFacts(rows.records, null),
     ]);
-    expect(ser(body.facts)).toEqual(ser(expected));
+    // The GET /read facts unchanged; the door adds only subject and subjectField (R-S231-8).
+    expect(ser(body.facts).map(strip)).toEqual(ser(expected));
     expect(body.facts.map((x) => x.cite.logIndex)).toEqual([0, 1, 2, 3, 4, 5]);
     for (const x of body.facts as unknown as { cite: { tx: string; block: string; chainId: number } }[]) expect(x.cite).toMatchObject({ tx: H, block: "100", chainId: 42161 });
     // UTC siblings as on the subject page (R-S205-5).
@@ -109,8 +112,60 @@ describe("hit", () => {
     const rows = { ...NONE, records: [record(0, A)] };
     const a = await run(fake({ rows, label: c }));
     const body = a.body as { facts: unknown[]; notes: string[] };
-    expect(ser(body.facts)).toEqual(ser(withUtc(recordFacts(rows.records, c))));
+    expect(ser(body.facts).map(strip)).toEqual(ser(withUtc(recordFacts(rows.records, c))));
+    expect(ser(body.facts)[0]).toMatchObject({ subject: A, subjectField: "subject" });
     expect(body.notes).toContain(`NablaZ label for 0x00000000000000000000000000000000000000AA: (c) not determinable (no Upgraded event seen for the account)`);
+  });
+});
+
+// R-S231-8: each kind's subject is a column of its own cited row, lower-case; always present.
+const M = "0x00000000000000000000000000000000000000Cc"; // mixed case: served lower-case
+const R = "0x00000000000000000000000000000000000000dd"; // a root delegator that is not this hop's delegator
+describe("subject (R-S231-8)", () => {
+  const p = { ...perm(1), subject: M };
+  const rows: TxRows = {
+    records: [{ ...record(5, W), subject: M }],
+    vaultPayments: [{ ...vpay(3), account: M }],
+    permissions: [p],
+    payments: [{ ...xpay(2, "0xp1"), payer: M }],
+    redemptions: [{ ...red(4), rootDelegator: R, delegator: M }],
+    creditLines: [{ ...credit(0), party: M }],
+    paymentPermissions: new Map([[p.id, p]]),
+  };
+  const served = async () => ((await run(fake({ rows, label: LABEL }))).body as { facts: Record<string, unknown>[] }).facts;
+
+  it("every kind: subject is the ruled column, lower-case, and subjectField names it", async () => {
+    const want: Record<string, string> = {
+      agent_credit_lines: "party",
+      "coinbase:spend_permission": "subject",
+      "coinbase:spend_permission_payment": "payer",
+      "nablaz:vault_payment": "account",
+      "metamask:redemption": "delegator",
+      "nablaz:record": "subject",
+    };
+    const facts = await served();
+    expect(facts.map((f) => [f.source, f.subject, f.subjectField])).toEqual(facts.map((f) => [f.source, M.toLowerCase(), want[f.source as string]]));
+    expect(facts).toHaveLength(6);
+  });
+
+  it("redemption: this hop's delegator, never the root delegator (R-S231-4)", async () => {
+    const red = (await served()).find((f) => f.source === "metamask:redemption")!;
+    expect(red.subject).toBe(M.toLowerCase());
+    expect(red.subject).not.toBe(R);
+    expect(TX_SUBJECT_FIELD.redemptions).toBe("delegator");
+  });
+
+  it("two-party kinds take /feed's choice (src/api/feed.ts): permission subject, payment payer", () => {
+    expect([TX_SUBJECT_FIELD.permissions, TX_SUBJECT_FIELD.payments, TX_SUBJECT_FIELD.records, TX_SUBJECT_FIELD.vaultPayments]).toEqual(["subject", "payer", "subject", "account"]);
+  });
+
+  it("a kind without a subject column: null for both fields and a reason, never an absent field", () => {
+    expect(subjectOf({ x: 1 }, null, "the feedback names an agentId, not an account")).toEqual({ subject: null, subjectField: null, subjectReason: "the feedback names an agentId, not an account" });
+    expect(subjectOf({}, null)).toEqual({ subject: null, subjectField: null, subjectReason: "this kind names no subject account" });
+    expect(subjectOf({ party: null }, "party")).toEqual({ subject: null, subjectField: null, subjectReason: "the cited row has no party address" });
+    expect(subjectOf({ party: "0x05" }, "party")).toMatchObject({ subject: null, subjectField: null });
+    // Serialized, the null keys stay: JSON keeps null, unlike undefined.
+    expect(JSON.stringify(subjectOf({}, null))).toContain('"subject":null');
   });
 });
 

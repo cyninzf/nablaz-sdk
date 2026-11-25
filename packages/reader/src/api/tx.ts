@@ -14,6 +14,12 @@
 //   unknown-hash    the chain has no such transaction;
 //   not-determinable  the chain lookup failed, so which of the three is not known.
 // An unread chain answers GET /read's own {"error":"chain N is not read here"}, unchanged.
+//
+// Subject (R-S231-8): every fact names the address whose GET /read page carries it, taken from a column of its own
+// cited row that GET /read selects that table on (src/api/index.ts), lower-case as /feed. `subjectField` names the
+// column, so the link is read off the citation, not asserted. Both are always present; a kind without such a column
+// serves null for both and a `subjectReason`, never an absent field. Here, not in src/read.ts: src/api/** is outside
+// Ponder's build id (scripts/bid.mjs), so this changes no index.
 
 import { getAddress, type Hex } from "viem";
 import type { NablaLabel } from "../labels";
@@ -66,6 +72,42 @@ export type TxDeps = {
   txBlock: (txHash: Hex) => Promise<bigint | "pending" | null>;
 };
 
+/**
+ * The subject column of each searched table (R-S231-8; docs/reader/s231-tx-fact-subject.md). Records, vault payments
+ * and credit lines have one column GET /read selects on; permissions and payments take /feed's choice (subject, payer);
+ * a redemption takes THIS HOP's delegator, the column a delegation's subject comes from, never rootDelegator
+ * (R-S231-4).
+ */
+export const TX_SUBJECT_FIELD = {
+  records: "subject",
+  vaultPayments: "account",
+  permissions: "subject",
+  payments: "payer",
+  redemptions: "delegator",
+  creditLines: "party",
+} as const satisfies Record<Exclude<keyof TxRows, "paymentPermissions">, string>;
+
+export type TxSubject = { subject: Hex; subjectField: string } | { subject: null; subjectField: null; subjectReason: string };
+/** A fact as the door serves it: the GET /read fact, unchanged, plus its subject. */
+export type TxFact = Fact & TxSubject;
+
+/** The subject of a cited row: `field`'s value, lower-case; null with the reason when the kind has no such column (field null) or the row lacks it. */
+export function subjectOf(row: Row, field: string | null, reason?: string): TxSubject {
+  if (field === null) return { subject: null, subjectField: null, subjectReason: reason ?? "this kind names no subject account" };
+  const v = row[field];
+  if (typeof v !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(v)) return { subject: null, subjectField: null, subjectReason: `the cited row has no ${field} address` };
+  return { subject: lc(v), subjectField: field };
+}
+
+/** Each row's one fact (every builder maps one row to one fact, src/read.ts), with that row's subject. */
+function paired(rows: Row[], build: (row: Row) => Fact[], field: string | null): TxFact[] {
+  return rows.map((r) => {
+    const fs = build(r);
+    if (fs.length !== 1) throw new Error(`a fact builder made ${fs.length} facts from one row`);
+    return { ...fs[0]!, ...subjectOf(r, field) };
+  });
+}
+
 export type TxAnswer = { status: 200 | 400 | 404 | 503; body: unknown };
 
 export const NOT_READY = { ready: false } as const;
@@ -93,13 +135,14 @@ export async function readTx(
   const notes: string[] = [];
   for (const [a, l] of labels) if (l?.shape === "c") notes.push(`NablaZ label for ${getAddress(a)}: ${l.label} (${l.reason})`);
 
-  const facts: Fact[] = [
-    ...r.records.flatMap((e) => recordFacts([e], labels.get(lc(e.subject)) ?? null)),
-    ...r.vaultPayments.flatMap((p) => vaultPaymentFacts([p], labels.get(lc(p.account)) ?? null)),
-    ...permissionFacts(r.permissions),
-    ...paymentFacts(r.payments, r.paymentPermissions),
-    ...redemptionFacts(r.redemptions),
-    ...creditLineFacts(r.creditLines),
+  const F = TX_SUBJECT_FIELD;
+  const facts: TxFact[] = [
+    ...paired(r.records, (e) => recordFacts([e], labels.get(lc(e.subject)) ?? null), F.records),
+    ...paired(r.vaultPayments, (p) => vaultPaymentFacts([p], labels.get(lc(p.account)) ?? null), F.vaultPayments),
+    ...paired(r.permissions, (p) => permissionFacts([p]), F.permissions),
+    ...paired(r.payments, (p) => paymentFacts([p], r.paymentPermissions), F.payments),
+    ...paired(r.redemptions, (d) => redemptionFacts([d]), F.redemptions),
+    ...paired(r.creditLines, (c) => creditLineFacts([c]), F.creditLines),
   ].sort((a, b) => (BigInt(a.cite.block) === BigInt(b.cite.block) ? a.cite.logIndex - b.cite.logIndex : BigInt(a.cite.block) < BigInt(b.cite.block) ? -1 : 1));
 
   if (facts.length) {

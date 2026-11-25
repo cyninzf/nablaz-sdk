@@ -1,6 +1,7 @@
 # S231: a per-fact `subject` on tx reads (recon and one proposal)
 
-Proposal only; the CTO rules, and the build is its own later vehicle. Read from `origin/main` 79b09b4 on 2026-11-25.
+Recon read from `origin/main` 79b09b4 on 2026-11-25. **Ruled R-S231-8** (relayed): the recon was accepted, the shape
+adopted, and the build authorized in `src/api/tx.ts` only, on this PR. Deploy is separate, after reader-ready.
 Paths are `packages/reader/` unless stated.
 
 **Finding (web side).** `GET /read/:chainId/tx/:txHash` serves facts from the GET /read builders (`src/api/tx.ts:96-103`),
@@ -19,7 +20,7 @@ below is `notNull` in `ponder.schema.ts`.
 | `nablaz:vault_payment` | `account` (`index.ts:339`) | `account` | **no** (`read.ts:205`) | unambiguous; /feed already uses it (`api/feed.ts:146`) |
 | `coinbase:spend_permission`, `metamask:delegation` | `subject` or `grantee` (`index.ts:343`) | `subject` (the grantor: SPM `account`, DM `delegator`; `src/external.ts:67,96,167`) | yes, `terms.subject` (`read.ts:219`) | two parties; /feed rules `subject` (`api/feed.ts:138`) |
 | `*_payment` (SPM, DM) | `payer` or `payee` (`index.ts:347`) | `payer` | yes, `terms.payer` (`read.ts:234`) | two parties; /feed rules `payer` (`api/feed.ts:162`) |
-| `metamask:redemption` | `rootDelegator`, `delegator` or `delegate` (`index.ts:354`) | `delegator` (this hop's grantor; the same column a delegation's `subject` comes from, `external.ts:149,167`) | yes, `terms.delegator` (`read.ts:263`) | **ambiguous**: three parties, no /feed precedent, and `rootDelegator` differs from `delegator` on multi-hop chains. Needs a ruling |
+| `metamask:redemption` | `rootDelegator`, `delegator` or `delegate` (`index.ts:354`) | **`delegator`, this hop's** (ruled R-S231-4, relayed): the same column a delegation's `subject` comes from (`external.ts:149,167`); `rootDelegator` is never substituted, and the chain stays the reader's recompute, hop by hop | yes, `terms.delegator` (`read.ts:263`) | three parties, no /feed precedent; settled by the ruling |
 | `agent_credit_lines` | `party` (`index.ts:357`) | `party` | yes, `terms.party` (`read.ts:278`) | unambiguous |
 | `erc8004:feedback_grounding` | not served on the tx door (`api/tx.ts:41-42`) | (the page's address) | n/a | out of scope: subject-page only |
 
@@ -48,7 +49,7 @@ evaluated `ponder.config.ts` (`scripts/bid.mjs:3-8`). It hashes raw text, so a c
 - **MCP front:** no change. The front relays the tx door's body (`packages/mcp/src/http.ts:43`). The MCP read tool
   takes an address and never serves tx facts.
 
-## Proposal (one)
+## Proposal (one) — adopted, R-S231-8
 
 Add two fields to every fact on the tx door, always present:
 
@@ -60,4 +61,11 @@ cited log, and the answer says which one. A future kind with no such column serv
 `subjectField: null` and a `subjectReason` string. The field is never absent: an absent field cannot be told apart
 from an older server, and the reader's rule is that what it cannot state is said, not omitted (R-S189-6).
 
-Open for the ruling: redemption's subject is `delegator` (proposed) or `rootDelegator`.
+## Build (R-S231-8)
+
+- `src/api/tx.ts`: `TX_SUBJECT_FIELD` (the table's column per searched table); `subjectOf` (the column's value,
+  lower-case, or `null` + `subjectReason`); `TxFact = Fact & TxSubject`. Each row is paired with its one fact before
+  the sort. `src/read.ts` is untouched.
+- Tests: `test/unit/tx.test.ts` covers each kind's subject, the redemption ruling and the null + reason branch, and
+  checks that the GET /read facts are otherwise unchanged. `test/unit/build-id.test.ts` pins Ponder's build id at
+  `fe32cfae51`, the id of the S230 reindex, recomputed by `scripts/bid.mjs` from HEAD.
