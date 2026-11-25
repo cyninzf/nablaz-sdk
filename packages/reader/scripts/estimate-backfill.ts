@@ -35,7 +35,7 @@ import { CHAINS, hasNabla, type ChainSources } from "../src/chains.ts";
 const CU = { eth_getLogs: 60, eth_getBlockByNumber: 20, eth_blockNumber: 10 } as const;
 const PONDER_START_RANGE = 500;
 const PONDER_GROWTH = 1.05;
-const POLL_SECONDS: Record<number, number> = { 42161: 1, 8453: 2, 137: 2 };
+const POLL_SECONDS: Record<number, number> = { 42161: 1, 8453: 2, 137: 2, 10: 2, 59144: 2 };
 const SAMPLE_BLOCKS = 100_000n;
 
 function flag(name: string, fallback: number): number {

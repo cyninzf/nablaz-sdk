@@ -129,11 +129,19 @@ describe("envelope (R-S184-2)", () => {
 });
 
 describe("chains", () => {
-  it("has Polygon, Base and Arbitrum enabled; NablaZ sources on Arbitrum only (R-S189-1)", () => {
-    expect(enabledChains(CHAINS, "").map((c) => c.chainId)).toEqual([137, 8453, 42161]);
+  it("has OP Mainnet, Polygon, Base, Arbitrum and Linea enabled; NablaZ sources on Arbitrum only (R-S189-1)", () => {
+    expect(enabledChains(CHAINS, "").map((c) => c.chainId)).toEqual([10, 137, 8453, 42161, 59144]);
     expect(hasNabla(CHAINS[42161]!)).toBe(true);
-    expect(hasNabla(CHAINS[8453]!)).toBe(false);
-    expect(Object.values(CHAINS[8453]!.nabla).every((v) => v === null)).toBe(true);
+    for (const id of [8453, 137, 10, 59144]) {
+      expect(hasNabla(CHAINS[id]!)).toBe(false);
+      expect(Object.values(CHAINS[id]!.nabla).every((v) => v === null)).toBe(true);
+    }
+  });
+  it("S230 join: OP Mainnet carries SPM and DM, Linea DM only, from their measured deployment blocks", () => {
+    expect(CHAINS[10]!.external.startBlocks).toEqual({ SpendPermissionManager: 129095661, DelegationManager: 133803172, creditLineLenders: null, ReputationRegistry: null, IdentityRegistry: null });
+    expect(startBlockOf(CHAINS[10]!)).toBe(129095661);
+    expect(CHAINS[59144]!.external.SpendPermissionManager).toBeNull();
+    expect(CHAINS[59144]!.external.startBlocks).toEqual({ SpendPermissionManager: null, DelegationManager: 17474505, creditLineLenders: null, ReputationRegistry: null, IdentityRegistry: null });
   });
   it("Base starts at the earliest external deployment block", () => {
     expect(startBlockOf(CHAINS[8453]!)).toBe(23499060);

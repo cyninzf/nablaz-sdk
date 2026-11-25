@@ -34,7 +34,13 @@ const RECORD_ENTRY_SIG =
 const ACCOUNT_CREATED_SIG = "AccountCreated(bytes32 indexed accountId, address indexed owner, address indexed account, uint256 version)";
 const SPM_STRUCT = "(address,address,address,uint160,uint48,uint48,uint48,uint256,bytes)";
 
-export const RPC_VAR: Record<number, string> = { 42161: '"$ARB_ONE_RPC_URL"', 8453: '"$BASE_RPC_URL"', 137: '"$POLYGON_RPC_URL"' };
+export const RPC_VAR: Record<number, string> = {
+  42161: '"$ARB_ONE_RPC_URL"',
+  8453: '"$BASE_RPC_URL"',
+  137: '"$POLYGON_RPC_URL"',
+  10: '"$OPTIMISM_RPC_URL"',
+  59144: '"$LINEA_RPC_URL"',
+};
 
 const rpc = (chainId: number) => {
   const v = RPC_VAR[chainId];

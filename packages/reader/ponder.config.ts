@@ -37,7 +37,9 @@ const endOverride = envBlock("READER_END_BLOCK");
 
 const chainsOn = enabledChains();
 // Polygon PoS: ~2 s blocks; one poll per block, like Base's interval (R-S221-8 #2 steady-state basis).
-const POLLING_MS: Record<number, number> = { 8453: 2_000, 137: 2_000 };
+// OP Mainnet: 2 s blocks (S230 re-read window: 1,296,000 blocks in 30 days). Linea: Base's 2 s interval (S230 chain
+// join; its block time was not measured).
+const POLLING_MS: Record<number, number> = { 8453: 2_000, 137: 2_000, 10: 2_000, 59144: 2_000 };
 const sources = sourcesOn();
 
 /** One entry per chain that `pick` accepts; each with its own start block unless overridden. */
