@@ -25,7 +25,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const APP = "nablaz-reader";
-const CHAINS = [42161, 8453, 137];
+const CHAINS = [42161, 8453, 137, 10, 59144];
 const LIMIT = 100 + 3; // FEED_DEFAULT_LIMIT + the 3 rows src/api/index.ts adds for cursor ties
 const BIG_TABLE = 1_000_000;
 const TABLES = [

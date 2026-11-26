@@ -30,7 +30,7 @@ import { canonicalLineage, isCanonicalMandate, nablaLabel, type NablaLabel } fro
 import { withUtc } from "./utc";
 import { CLASS_HEADER, DOOR_HEADER, countDoor, doorMetricsText } from "./callers";
 import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
-import { boundedLag, chainLag, endBlockOf, headCache, type IndexedBlock } from "./head";
+import { boundedLag, endBlockOf, frontierLags, headCache, type IndexedBlock } from "./head";
 import { actorIdentityAt, type BindingRow } from "./actor-identity";
 import { FEED_RECORD_KINDS, externalPaymentItems, feedEnabled, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
 import { readTx, txEnabled, type TxDeps } from "./tx";
@@ -160,7 +160,8 @@ async function nablaLabelOf(
 app.get("/metrics/reader", (c) => c.text(rpcMetricsText() + doorMetricsText(), 200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" }));
 
 // B1 (S213): readiness with the head gate. 200 (empty body, as Ponder's /ready) only when Ponder's /ready is 200 and
-// every enabled chain's indexed block is current with its head (src/api/head.ts); 503 otherwise. Loopback only: the
+// every enabled chain's indexed block is current with the omnichain frontier, no chain head stalled (src/api/head.ts,
+// R-S232-2); 503 otherwise. Loopback only: the
 // front relays it as the public /ready and maps the 503 to {"ready":false}.
 app.get("/ready/head", async (c) => {
   // P-GTM-4: one read attempt at a door when the front tagged this check (src/api/callers.ts); in memory, no I/O.
@@ -170,9 +171,10 @@ app.get("/ready/head", async (c) => {
   const status = await indexedStatus(c.req.url);
   if (!status) return c.text("Indexed head not readable.", 503);
   const end = endBlockOf();
-  const lags = await Promise.all(
-    enabledChains().map(async (ch) => (end !== undefined ? boundedLag(ch.name, status[ch.name], end) : chainLag(ch.name, status[ch.name], await heads.head(ch.name)))),
-  );
+  const lags =
+    end !== undefined
+      ? enabledChains().map((ch) => boundedLag(ch.name, status[ch.name], end))
+      : frontierLags(await Promise.all(enabledChains().map(async (ch) => ({ chain: ch.name, indexed: status[ch.name], head: await heads.head(ch.name) }))), Date.now());
   const behind = lags.filter((l) => !l.current);
   if (behind.length) return c.text(`Indexed head is not current: ${behind.map((l) => `${l.chain}: ${"reason" in l ? l.reason : ""}`).join("; ")}`, 503);
   return c.text("", 200);
