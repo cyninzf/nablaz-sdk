@@ -267,7 +267,7 @@ cd /workspaces/nablaz-sdk && scripts/arm.sh /workspaces/captures/<session>
 1. User-level attribution: `~/.claude/settings.json` `"attribution": {"commit": "", "pr": ""}`, and `.claude/` in
    `.git/info/exclude`: both lost; `arm.sh` restores them.
 2. Repository secrets: re-injected automatically; `arm.sh` lists the `READER_*` names and checks `FLY_API_TOKEN`.
-   The Codespace carries some of the six reader names only; `bid.mjs` needs all six set, placeholders fine (its header).
+   The Codespace carries some of the ten reader names only; `bid.mjs` needs all ten set, placeholders fine (its header).
 3. Fly auth state: lost with the home directory; flyctl authenticates from `FLY_API_TOKEN`, and `arm.sh` installs
    flyctl if missing and checks `flyctl auth whoami`.
 4. Pollers and staged scripts: lost; `arm.sh` re-arms the log/UA poller and the `/ready` watch from the committed
