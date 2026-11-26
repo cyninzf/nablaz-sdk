@@ -60,6 +60,10 @@ no other flags. It ran 14:00:34Z to 14:02:21Z, exit 0, no prompt, and produced
 `/live` 200 and `/ready` 503 at 14:02:26Z.
 
 Timings on record (`/ready` 503 until the index is ready):
+- Resume deploy, 2026-11-26 (S232, release 21, `READER_SCHEMA` = the live schema, build id fe32cfae51, 32 indexes):
+  40m45s of public `/ready` 503, 17:16:42Z to first 200 at 17:57:27Z (30 s poll). Deploy 17:15:41Z to 17:17:25Z;
+  `Detected crash recovery` 17:17:24Z, `Created database indexes count=32 (30m 55s)` 17:48:20Z, views 17:48:20Z, then
+  9m07s to `/ready` 200 (head gate). Compare S228's 42m42s below.
 - Same image, same schema (a `machine update` or restart, Ponder replays from its own schema): crash recovery, so the
   same index rebuild as a resume. Latest, and the figure to plan against: 2026-11-24 (S228, the `NABLAZ_TX=on` flip,
   32 indexes): 42m42s of `/ready` 503, `machine update` 17:47:47Z to first public `/ready` 200 at 18:30:29Z (polled
@@ -282,11 +286,19 @@ cd /workspaces/nablaz-sdk && scripts/arm.sh /workspaces/captures/<session>
   asks the reader's `/health`.
 - `GET /ready` is index readiness, the public signal: 503 until the index has caught up, 200 after. Since S213
   (B1) the front relays the reader's `GET /ready/head` (`packages/reader/src/api/head.ts`): 200 only when Ponder's
-  own `/ready` is 200 AND each chain's indexed block is within 15 s of chain time of that chain's head. The heads are
-  read with `eth_getBlockByNumber("latest")` on the indexer transport, cached per chain and refreshed at most every
+  own `/ready` is 200 AND each chain's indexed block is within 15 s of chain time of the omnichain frontier, the
+  minimum of the chains' head timestamps (R-S232-2; head-advance grace 12 s, R-S232-6; a head older than 300 s is
+  never current). The heads are read with `eth_getBlockByNumber("latest")` on the indexer transport, cached per chain and refreshed at most every
   10 s, never per request. It closes the S211 row where `/ready` turned 200 about 4.5 min before the index reached
   the chain head. The not-ready answer is unchanged: 503 `{"ready":false}`. `/ready`
   503 during backfill is expected, not an incident.
+- S232 figures (2026-11-26). Under the S213 per-chain rule, release 20 flapped: 34/119 loopback and 13/48 public
+  `/ready` samples were 503 (~28%), because omnichain ordering holds every chain at Linea's last block and Linea's
+  gaps reach 36 s. Release 21 (frontier gate, R-S232-2) cut it to 2/119 loopback (~2%). Its 30-min public watch
+  (60 s samples, 17:57:12Z to 18:27:12Z) had 1/31 non-200, and the 30 s edge log showed four 503 windows of 30-60 s:
+  18:01:27, 18:20:30, 18:25:00 and 18:27:12Z. The residual was a Linea race. After a Linea gap over 15 s, the 10 s
+  head cache saw the new block before Ponder's 2 s poll indexed it, so the lag read as the whole gap; R-S232-6's
+  head-advance grace closes that race.
 - A Sentry uptime monitor watches `https://read.nablaz.io/ready` every 60 s and fires after 3 failures, so every
   deploy with a 503 window (a resume included) raises an expected alert.
 - The `/ready` body (S204): `/ready` answers HTTP 200 with an EMPTY body when ready (the front's `relay()` passes
