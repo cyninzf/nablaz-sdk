@@ -37,8 +37,8 @@ export type Readiness = "ready" | "not ready" | "unreachable";
 
 /**
  * The reader's readiness with the head gate (S213 B1, packages/reader/src/api/head.ts): 200 only when Ponder's own
- * /ready is 200 (the running app's is_ready) AND every chain's indexed block is current with its chain head, read
- * from a cached head, never per request. The public GET /ready relays this path.
+ * /ready is 200 (the running app's is_ready) AND every chain's indexed block is current with the omnichain frontier
+ * (R-S232-2/6: the minimum of the chains' cached heads; stall detector, head-advance grace), never per request. The public GET /ready relays this path.
  */
 export const READER_READY_PATH = "/ready/head";
 

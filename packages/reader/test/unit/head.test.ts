@@ -1,10 +1,11 @@
-// S213 B1 / R-S232-2: the readiness head gate (src/api/head.ts): the omnichain-frontier rule and its stall detector,
+// S213 B1 / R-S232-2 / R-S232-6: the readiness head gate (src/api/head.ts): the omnichain-frontier rule, its stall
+// detector and the head-advance grace,
 // the bounded-index rule, and the cached head
 // (refreshed no more often than every HEAD_REFRESH_MS, one call in flight per chain, a failed refresh falling back
 // to a head read within HEAD_STALE_MS).
 
 import { describe, expect, it } from "vitest";
-import { HEAD_REFRESH_MS, HEAD_STALE_MS, HEAD_STALL_SECONDS, HEAD_TOLERANCE_SECONDS, boundedLag, endBlockOf, frontierLags, headCache, omnichainFrontier, type ChainHead, type HeadBlock } from "../../src/api/head";
+import { HEAD_ADVANCE_GRACE_SECONDS, HEAD_REFRESH_MS, HEAD_STALE_MS, HEAD_STALL_SECONDS, HEAD_TOLERANCE_SECONDS, boundedLag, endBlockOf, frontierLags, headCache, omnichainFrontier, type ChainHead, type HeadBlock } from "../../src/api/head";
 
 const head = (number: number, timestamp: number, sinceReadMs = 0) => ({ block: { number: BigInt(number), timestamp: BigInt(timestamp) }, sinceReadMs });
 
@@ -76,6 +77,73 @@ describe("frontierLags (R-S232-2)", () => {
     const noHead = frontierLags([at("base", [1, T0], null), at("arbitrum", [5, T0], [5, T0])], now);
     expect(noHead[0]).toEqual({ chain: "base", current: false, lagSeconds: null, reason: "chain head not read" });
     expect(ready(noHead)).toBe(false);
+  });
+});
+
+describe("head-advance grace (R-S232-6)", () => {
+  // The shape measured after the S232 deploy (readyhead-post.txt, 18:27:26Z): Linea indexed 32718635, its head just
+  // advanced to 32718636 after a 16 s gap, Ponder not yet polled; the other chains current.
+  const T = T0 + 1_000;
+  const advanced = (sinceMs: number, fromNumber = 32718635) => ({ fromNumber: BigInt(fromNumber), sinceMs });
+  const shape = (lineaHead: ChainHead["head"], lineaIndexed: [number, number] = [32718635, T - 16]): ChainHead[] => [
+    { chain: "linea", indexed: { number: lineaIndexed[0], timestamp: lineaIndexed[1] }, head: lineaHead },
+    at("base", [62637000, T - 6], [62637040, T + 2]),
+    at("arbitrum", [527799000, T - 6], [527799030, T + 2]),
+    at("optimism", [160059000, T - 6], [160059004, T + 2]),
+    at("polygon", [98008000, T - 6], [98008004, T + 2]),
+  ];
+  const lineaHead = (advance?: { fromNumber: bigint; sinceMs: number }) => ({ ...head(32718636, T, 0), ...(advance ? { advance } : {}) });
+
+  it("the grace is 12 s: one 2 s indexer poll plus the 10 s head refresh", () => {
+    expect(HEAD_ADVANCE_GRACE_SECONDS).toBe(12);
+    expect(HEAD_ADVANCE_GRACE_SECONDS * 1000).toBe(2_000 + HEAD_REFRESH_MS);
+  });
+
+  it("GRACE PIN: Linea indexed = head-1, gap 16 s, advance just observed -> READY", () => {
+    const lags = frontierLags(shape(lineaHead(advanced(2_000))), (T + 2) * 1000);
+    expect(ready(lags)).toBe(true);
+    expect(lags[0]).toEqual({ chain: "linea", current: true, lagSeconds: 16 });
+    // Up to and including 12 s after the advance.
+    expect(ready(frontierLags(shape(lineaHead(advanced(12_000))), (T + 2) * 1000))).toBe(true);
+  });
+
+  it("same shape, advance older than 12 s and still unindexed -> 503 with the existing reason", () => {
+    const lags = frontierLags(shape(lineaHead(advanced(12_001))), (T + 2) * 1000);
+    expect(ready(lags)).toBe(false);
+    expect(lags[0]).toEqual({ chain: "linea", current: false, lagSeconds: 16, reason: "indexed block 32718635 is 16 s behind the omnichain frontier (tolerance 15 s)" });
+    // No advance observed (first read) is no grace either.
+    expect(frontierLags(shape(lineaHead()), (T + 2) * 1000)[0]).toMatchObject({ current: false, lagSeconds: 16 });
+  });
+
+  it("HONESTY PIN: an index behind the PRE-advance head gets no grace (fast chains advance at every refresh)", () => {
+    // Base's head advanced 2 s ago from 62637040; its index stopped at 62636000, 40 s behind the frontier.
+    const lags = frontierLags(
+      [at("linea", [32718636, T], [32718636, T]), { chain: "base", indexed: { number: 62636000, timestamp: T - 40 }, head: { ...head(62637090, T + 10), advance: advanced(2_000, 62637040) } }],
+      (T + 10) * 1000,
+    );
+    expect(lags[1]).toEqual({ chain: "base", current: false, lagSeconds: 40, reason: "indexed block 62636000 is 40 s behind the omnichain frontier (tolerance 15 s)" });
+  });
+
+  it("the stall detector still fires inside a grace", () => {
+    const now = (T + HEAD_STALL_SECONDS + 1) * 1000;
+    const lags = frontierLags([{ chain: "linea", indexed: { number: 32718635, timestamp: T - 16 }, head: lineaHead(advanced(1_000)) }], now);
+    expect(lags[0]).toEqual({ chain: "linea", current: false, lagSeconds: null, reason: `chain head 32718636 is ${HEAD_STALL_SECONDS + 1} s old (stall limit ${HEAD_STALL_SECONDS} s)` });
+  });
+
+  it("the cache records an advance only when the number rises, from the second read on, aged by the clock", async () => {
+    let t = 5_000_000;
+    let n = 10n;
+    const cache = headCache(async () => ({ number: n, timestamp: n }), () => t);
+    expect((await cache.head("linea"))!.advance).toBeUndefined(); // first read: nothing to advance from
+    t += HEAD_REFRESH_MS;
+    expect((await cache.head("linea"))!.advance).toBeUndefined(); // same number: no advance
+    n = 11n;
+    t += HEAD_REFRESH_MS;
+    expect((await cache.head("linea"))!.advance).toEqual({ fromNumber: 10n, sinceMs: 0 });
+    t += 4_000;
+    expect((await cache.head("linea"))!.advance).toEqual({ fromNumber: 10n, sinceMs: 4_000 });
+    t += HEAD_REFRESH_MS; // refreshed, number unchanged: the last advance is kept, aging
+    expect((await cache.head("linea"))!.advance).toEqual({ fromNumber: 10n, sinceMs: 4_000 + HEAD_REFRESH_MS });
   });
 });
 
