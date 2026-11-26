@@ -89,7 +89,7 @@ public endpoint cannot be relied on for this field. Everything else rebuilds fro
 `GET /read/:chainId/:address` returns every indexed fact about an address. No key is needed: the endpoint
 is a read over public logs.
 
-`GET /feed` returns the most recent indexed facts across both chains, newest first: payments (the authorization and the settlement, both cited), grants and account openings, each with its source, block, log index and time, and no amounts or totals; `?limit` defaults to 100 (at most 500) and `?before` takes the previous page's `nextBefore`. Not live yet.
+`GET /feed` returns the most recent indexed facts across both chains, newest first: payments (the authorization and the settlement, both cited), grants and account openings, each with its source, block, log index and time, and no amounts or totals; `?limit` defaults to 100 (at most 500) and `?before` takes the previous page's `nextBefore`. Not live yet. History (S233): `?at=<epoch seconds>` or `?at=<chainId>:<block>` serves the window at that position (every item at or before it, newest first, continued by its `nextBefore`); a page whose bound (`before` or `at`) is an hour or more in the past is settled history and carries `cache-control: public, max-age=86400, immutable`; `?include=settledValue` adds, on payment items only, the token's raw settled amount and the one log that carries it. Without these parameters a response is what it was.
 
 ```json
 { "subject": "0x…", "chainId": 8453, "asOfBlock": "53160200",

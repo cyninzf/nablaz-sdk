@@ -182,7 +182,8 @@ It deploys only on the CTO's timing word (R-S215-6: at the start of a fresh sess
    table off its `*_feed` index stops the flip and is reported. ~~Any `Seq Scan` stops the flip~~: superseded by
    R-S217-1. The PR records the synthetic-row plans this gate repeats. Since R-S226-4 the same run also plans the
    any-hash door's lookup on its six tables (`chain_id = N and tx_hash = H`), under the same rule against each
-   `*_tx` index; `NABLAZ_TX` stays off on any FAIL. Plans of record, S224 (2026-11-19 18:11Z,
+   `*_tx` index; `NABLAZ_TX` stays off on any FAIL. Since S233 it also plans each feed table's window-by-position query
+   (GET /feed?at=…, the cursor query bounded at 2026-06-30T23:59:59Z), under the `*_feed` rule. Plans of record, S224 (2026-11-19 18:11Z,
    live schema `deployment-01m7njzvx0jw0bxzvwh0zqmpp3`): `external_payments` ~4,931,362 rows and
    `external_permissions` ~2,891,871 rows, each `Index Scan Backward using <table>_feed`; verdict PASS.
 6. Deploy-day flag flip, only after step 5 passes and on the word: `NABLAZ_FEED=on`, exactly `on` (the reader and
@@ -655,6 +656,7 @@ Every load-bearing default is set in the repository or accepted here with its re
 | Front rate limit | 60 per IP per minute | Set: `DEFAULT_RATE_LIMIT_PER_MIN`, keyed by `Fly-Client-IP`. |
 | Front relay fetch timeout | none | Accepted: a hung reader holds that request's socket only; the per-IP limit bounds how many one client can hold, and `/live` no longer calls the reader. |
 | GET /feed | on (`NABLAZ_FEED=on`, machine env, S221) | Set: off in code unless `NABLAZ_FEED` is exactly `on` (`feedEnabled`, S213-SE7); flipped on 2026-11-15 after the R-S217-1 EXPLAIN gate (schema event, step 6). |
+| GET /feed history (S233) | `?at`, `?include=settledValue`, settled-history `cache-control` | Set, additive, inside the feed's flag: `?at=<epoch s>` or `?at=<chainId>:<block>` serves the window at a position (`timeBound`/`blockBound`, `src/api/feed.ts`); a `<chainId>:<block>` position costs one `eth_getBlockByNumber` on the indexer's transport, bounded by the shared front window (60 per IP per minute, unchanged). A page whose bound is at least `HISTORY_SETTLED_SECONDS` (3600) old gets `HISTORY_CACHE_CONTROL` (`public, max-age=86400, immutable`), relayed by the front; the now-edge gets none. `?include=settledValue`: payment items' raw settled amount, cited (Task 3, S233). Measured record size and rate: `docs/measurements/s233-record-size.md`. |
 | GET /read/:chainId/tx/:txHash | on (`NABLAZ_TX=on` machine env since 2026-11-24, S228) | Set: off in code unless `NABLAZ_TX` is exactly `on` (`txEnabled`, R-S226-4). Flip gates, both held at S228: the EXPLAIN on its `*_tx` indexes passed on all three chains, AND the per-IP bound on its RPC path (one `eth_getTransactionByHash` per miss) is stated: the shared front window, 60 per IP per minute, ruled no change. |
 
 ## Deployment schemas (row J)

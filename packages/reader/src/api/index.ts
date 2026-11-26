@@ -32,7 +32,25 @@ import { CLASS_HEADER, DOOR_HEADER, countDoor, doorMetricsText } from "./callers
 import { PROBE_MS, dbWatchdog, heartbeatSql } from "./db-watchdog";
 import { boundedLag, endBlockOf, frontierLags, headCache, type IndexedBlock } from "./head";
 import { actorIdentityAt, type BindingRow } from "./actor-identity";
-import { FEED_RECORD_KINDS, externalPaymentItems, feedEnabled, page, parseFeedQuery, permissionIdOf, permissionItems, recordItems, vaultPaymentItems, type FeedKey } from "./feed";
+import {
+  FEED_RECORD_KINDS,
+  attachSettledValues,
+  blockBound,
+  externalPaymentItems,
+  feedEnabled,
+  historyCacheControl,
+  page,
+  parseFeedInclude,
+  parseFeedPosition,
+  parseFeedQuery,
+  permissionIdOf,
+  permissionItems,
+  recordItems,
+  settledValues,
+  timeBound,
+  vaultPaymentItems,
+  type FeedKey,
+} from "./feed";
 import { readTx, txEnabled, type TxDeps } from "./tx";
 import { bindingsAtTransferBlocks, boundHistoryAndMint, transfersFrom, walletAt } from "../grounding-rpc";
 import { groundingClient, rpcMetricsText } from "../rpc";
@@ -187,15 +205,39 @@ app.use("/feed", async (c, next) => {
 });
 
 // B2 (S213, R-S213-1): GET /feed, the Live Sky door (src/api/feed.ts). Existing tables only; no amounts, no counts.
+// S233 (R-S232-8), additive and optional, a request without them served as before: ?at (the window AT a time or a
+// block: the feed's page whose cursor is that position, continued by its nextBefore), ?include=settledValue (payment
+// items' settled value), and history-grade cache headers on a page whose upper bound is settled (historyCacheControl).
 app.get("/feed", async (c) => {
   // S213-SE7: gated by NABLAZ_FEED (feedEnabled, src/api/feed.ts); off, no statement is issued.
   if (!feedEnabled()) return c.json({ ready: false }, 503);
-  const q = parseFeedQuery(c.req.query("limit"), c.req.query("before"));
-  if ("error" in q) return c.json({ error: q.error }, 400);
+  const parsed = parseFeedQuery(c.req.query("limit"), c.req.query("before"));
+  if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+  const at = parseFeedPosition(c.req.query("at"), c.req.query("before"));
+  if (at && "error" in at) return c.json({ error: at.error }, 400);
+  const include = parseFeedInclude(c.req.query("include"));
+  if ("error" in include) return c.json({ error: include.error }, 400);
   const status = await indexedStatus(c.req.url);
   const chains = enabledChains();
   if (!status || chains.some((ch) => status[ch.name] === undefined)) return c.json({ ready: false }, 503);
   const asOf = new Map(chains.map((ch) => [ch.chainId, BigInt(status[ch.name]!.number)]));
+  let q = parsed;
+  if (at && "time" in at) q = { ...parsed, before: timeBound(at.time) };
+  else if (at) {
+    const chain = chains.find((ch) => ch.chainId === at.chainId);
+    if (!chain) return c.json({ error: `chain ${at.chainId} is not read here` }, 404);
+    if (at.block > asOf.get(chain.chainId)!) return c.json({ error: `block ${at.block} is past chain ${chain.chainId}'s indexed block ${asOf.get(chain.chainId)}` }, 404);
+    // The block's timestamp, on the indexer's transport (one call): the position in the feed's (timestamp, chain,
+    // block, logIndex) order. A block with no fact still has a place in it.
+    let ts: bigint;
+    try {
+      ts = (await (publicClients as Record<string, PublicClient>)[chain.name]!.getBlock({ blockNumber: at.block })).timestamp;
+    } catch (e) {
+      console.error(`feed at: block read failed for ${chain.name}: ${String((e as Error)?.message ?? e).split("\n")[0]}`);
+      return c.json({ error: "block timestamp not readable" }, 503);
+    }
+    q = { ...parsed, before: blockBound(ts, chain.chainId, at.block) };
+  }
   // Per table: rows at or below each chain's asOfBlock and at or before the cursor key (the page drops the cursor's
   // own item), newest first; a few more than the limit, for rows that share the cursor's key.
   const n = q.limit + 3;
@@ -229,8 +271,10 @@ app.get("/feed", async (c) => {
     asOf,
   );
   await withActorIdentity(items);
+  if (include.settledValue) attachSettledValues(items, settledValues(vpays, xpays));
   const asOfBlock = Object.fromEntries(chains.map((ch) => [String(ch.chainId), asOf.get(ch.chainId)!.toString()]));
-  return c.body(json({ asOfBlock, items, nextBefore: next }), 200, { "content-type": "application/json" });
+  const cache = historyCacheControl(q.before, Date.now() / 1000);
+  return c.body(json({ asOfBlock, items, nextBefore: next }), 200, { "content-type": "application/json", ...(cache ? { "cache-control": cache } : {}) });
 });
 
 /**
