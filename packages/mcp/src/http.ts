@@ -1,7 +1,7 @@
 // The HTTP front of one instance with two doors (R-S192-1). POST /mcp: Streamable HTTP onto the same read
 // server, stateless, one fresh server and transport per request, the same single read_subject tool. GET
 // /read/:chainId/:address, GET /read/:chainId/tx/:txHash, GET /feed and GET /ready: relayed to the reader, so the reader itself need not be public; a
-// reader-authored answer unchanged (status, content type, body bytes), a 5xx with a fixed body (relay below). GET /read
+// reader-authored answer unchanged (status, content type, cache-control if set (S233), body bytes), a 5xx with a fixed body (relay below). GET /read
 // and GET /feed answer 503 {"ready":false} with nothing read until the reader's readiness is 200 (R-S202-4, the check
 // shared with the MCP tool). GET /feed is OFF unless feedEnabled (NABLAZ_FEED=on, S213-SE7): off, it answers 503
 // {"ready":false} at once, with no readiness check and nothing relayed, until the index its queries need ships. GET
@@ -133,7 +133,7 @@ async function gatedRead(res: ServerResponse, readerUrl: string, path: string, g
 
 /**
  * GET `path` on the reader (R-S198-3/4). Below 500 the answer is reader-authored and goes back unchanged (status,
- * content type, body bytes). READER_READY_PATH at 503 is the index not caught up: the front's own {"ready":false}. Any other
+ * content type, cache-control when the reader set one (S233), body bytes). READER_READY_PATH at 503 is the index not caught up: the front's own {"ready":false}. Any other
  * 5xx: {"error":"internal error"}, the reader's body (a driver message, a filesystem path) to the server log only.
  */
 async function relay(res: ServerResponse, readerUrl: string, path: string, get: typeof fetch) {
@@ -144,7 +144,12 @@ async function relay(res: ServerResponse, readerUrl: string, path: string, get: 
     return plain(res, 502, "reader unreachable\n");
   }
   const body = Buffer.from(await r.arrayBuffer());
-  if (r.status < 500) return res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/octet-stream" }).end(body);
+  if (r.status < 500) {
+    // S233: the reader's cache-control (a settled-history /feed page only, packages/reader/src/api/feed.ts) passes
+    // through; an answer without one is relayed with no such header, as before.
+    const cache = r.headers.get("cache-control");
+    return res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/octet-stream", ...(cache ? { "cache-control": cache } : {}) }).end(body);
+  }
   if (path === READER_READY_PATH && r.status === 503) return notReady(res);
   logReaderError(r.status, path, body.toString("utf8"));
   json(res, r.status, { error: "internal error" });

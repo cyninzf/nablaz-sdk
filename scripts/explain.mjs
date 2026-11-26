@@ -16,6 +16,10 @@
 // CHAINS (S228: until then only CHAINS[0] was planned, so 8453 and 137 went unchecked), in the shape
 // src/api/index.ts issues (chain_id = N and tx_hash = H, a synthetic hash): a table of 1M rows or more must be read
 // through its `*_tx` index, under the same verdict rule. Both sets gate: NABLAZ_TX stays off on any FAIL.
+// S233 (R-S232-8, the window-by-position door): then each feed table's query for the window AT a position, in the shape
+// src/api/index.ts issues for GET /feed?at=<time> (the cursor query with the bound timeBound(T) of src/api/feed.ts:
+// (block_timestamp, chain_id, block_number, log_index) <= (T + 1, 0, 0, 0)), at T = 2026-06-30T23:59:59Z (the site's
+// "jump to June"), under the same verdict rule: a table of 1M rows or more must be read through its `*_feed` index.
 // Exit 0 on PASS, 1 on any FAIL. Nothing is written to the database.
 
 import { execFileSync } from "node:child_process";
@@ -38,6 +42,9 @@ const TABLES = [
 // The any-hash door's tables (R-S226-4; the six of src/api/tx.ts TX_SEARCHED) and the hash its plans use.
 const TX_TABLES = ["record_entries", "vault_payments", "external_permissions", "external_payments", "external_redemptions", "credit_line_events"];
 const TX_PROBE = `0x${"ab".repeat(32)}`;
+
+// The window-by-position probe (S233): ?at=1782863999, 2026-06-30T23:59:59Z; its bound is T + 1.
+const AT_PROBE = 1782863999;
 
 if (process.argv[2] === "--inside") await inside();
 else outside();
@@ -85,6 +92,18 @@ async function inside() {
       const verdict = feed ? "PASS" : rows >= BIG_TABLE ? "FAIL" : seq ? "NOTE (one-page Seq Scan = planner cost, R-S217-1)" : "NOTE";
       if (verdict === "FAIL") fail++;
       console.log(`\n== ${table}  ~${rows} rows  ${verdict}`);
+      for (const l of plan) console.log(`   ${l}`);
+    }
+    for (const { table, extra } of TABLES) {
+      const rows = Number((await c.query(`select reltuples::bigint as n from pg_class where oid = $1::regclass`, [`"${schema}".${table}`])).rows[0].n);
+      const bound = `(block_timestamp, chain_id, block_number, log_index) <= (${AT_PROBE + 1}::numeric(78), 0::integer, 0::numeric(78), 0::integer)`;
+      const sql = `select * from "${schema}".${table} where (${window}) and ${bound} ${extra} order by block_timestamp desc, chain_id desc, block_number desc, log_index desc limit ${LIMIT}`;
+      const plan = (await c.query(`explain ${sql}`)).rows.map((r) => r["QUERY PLAN"]);
+      const feed = plan.some((l) => l.includes(`${table}_feed`));
+      const seq = plan.some((l) => /Seq Scan/.test(l));
+      const verdict = feed ? "PASS" : rows >= BIG_TABLE ? "FAIL" : seq ? "NOTE (one-page Seq Scan = planner cost, R-S217-1)" : "NOTE";
+      if (verdict === "FAIL") fail++;
+      console.log(`\n== at ${AT_PROBE} ${table}  ~${rows} rows  ${verdict}`);
       for (const l of plan) console.log(`   ${l}`);
     }
     for (const chain of CHAINS) for (const table of TX_TABLES) {
