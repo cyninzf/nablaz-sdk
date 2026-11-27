@@ -2,7 +2,8 @@
 
 This was a read-only sitting: no build, no deploy, no env or flag change, and the reader untouched (one machine before
 and after every console). The figures come from `s234-attribution-feasibility.mjs` beside this file, read on
-2026-11-27 between 22:09Z and 22:37Z. Every number names its population. "Not measured" means it was not measured.
+2026-11-27 between 22:09Z and 22:37Z. A3 and A4 were completed the same day, 23:21Z to 23:27Z, by the no-join method
+described under A3. Every number names its population. "Not measured" means it was not measured.
 
 Ruling served (R-S234-2): one attribution object per fact,
 `{identityRef?, displayName?, rail, railClass, medium, kind, grade a|b|c, citations}`. The grades:
@@ -15,8 +16,8 @@ grade. ERC-8004 Identity is admitted; 8004 Reputation signals never are.
 |---|---|---|
 | A1 | Identity Registry on Base | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`, derived from the vendor README and verified on the rail |
 | A2 | Registrations on 8453 | **1,231,427** (agentIds 0..1,231,426, to block 63,138,341). The DB agrees exactly. Event shape and URI availability are below |
-| A3 | Overlap with our 8453 subjects | **Not measured.** The console session was cut twice and the DB lane was stopped under the pre-decided rule. Both populations were measured; their intersection was not |
-| A4 | Resolvable rate on the overlap set | **Not measured** (it depends on A3). A registry-wide rail sample was taken instead and is labelled as such: 276/300 pass the test as written, but 270 of the 300 sit on one host, so the test does not separate a bulk platform from an agent |
+| A3 | Overlap with our 8453 subjects | **16,778 of 236,961 subjects** (7.1%) were ever an agentWallet or owner of an ERC-8004 agentId. By intersection: grant subjects ∩ wallet **520**, grant subjects ∩ owner **16,773**, payers ∩ wallet **481**, payers ∩ owner **16,717**. These bind 18,744 agentIds |
+| A4 | Resolvable rate on the overlap set | 300 of the 18,744 agentIds were sampled: **269/300 (89.7%) pass the test as written, but 253/300 sit on one host (`centralcity.ai`).** Off that host, 16 of 47 resolve, and 6 of those 16 have an explorer page as their first endpoint. The registry-wide sample shows the same shape: 276/300, with 270 on that host |
 | B | x402 facilitator attribution | **Indexing-side: REINDEX-CLASS.** Nothing clears today. The only API-layer part is the signer→provider map, and only 1 of 15 listed facilitators publishes signers |
 
 ## A1. The Identity Registry address, derived
@@ -63,10 +64,63 @@ grade. ERC-8004 Identity is admitted; 8004 Reputation signals never are.
 
     That is **296/300 (98.7%) non-empty**.
 
-## A3. The join: overlap with our 8453 subjects (not measured)
+## A3. The join: overlap with our 8453 subjects
 
-**Not measured: the console session was cut twice; the DB read gets its own window.** The two cuts are recorded below
-as observed facts.
+**Measured (no-join method), 2026-11-27 23:21Z.** The two earlier cuts that left it unmeasured are recorded after the
+result as observed facts.
+
+**Method.** The DB never computes an intersection.
+- Every statement is one of three kinds, all on existing indexes:
+  - a per-table keyset page of 50,000 rows on the existing `(chain_id, <address>)` index
+    (`where chain_id = $1 and col > $2 order by chain_id, col limit 50000`);
+  - a `count(*)` on the same column (`col is not null`);
+  - a bounded `col = any($1)` probe of 5,000 addresses.
+- No join, no DISTINCT and no function on any column. `statement_timeout` is 120 s.
+- Normalization happens on the script side only: every stored value is checked to be lowercase.
+- Our two subject sets are held in memory. The two registry columns stream past them page by page and are tested for
+  membership; only the hits are kept. Peak console heap was about 50 MiB.
+- One `READ ONLY` repeatable-read transaction on the live schema `deployment-01m89nandm6z68gdjf7nfbbb9k`, 149
+  statements, 234 s, no cut.
+- Reader health (`/ready`, `/feed?limit=1`):
+
+  | | `/ready` | `/feed?limit=1` |
+  |---|---|---|
+  | Before | 200 in 308 ms | 200 in 85 ms, 1 item |
+  | After | 200 in 263 ms | 200 in 84 ms, 1 item |
+
+  One machine (`850dd3a4113e78`) before and after.
+- Provenance of the registry side: these are the reader's `agent_wallets` (MetadataSet "agentWallet") and
+  `agent_owners` (ERC-721 Transfer) tables. They were not re-enumerated from chain logs in this run. They mirror the
+  rail: per A2, the agentId count matches exactly.
+
+**Populations** (8453):
+
+| Side | Column | Non-null rows (`count(*)`) | Distinct |
+|---|---|---:|---:|
+| Our subjects | grant subjects (`external_permissions.subject`) | 1,035,469 | **236,961** |
+| Our subjects | payers (`external_payments.payer`) | 1,912,477 | **227,995** |
+| ERC-8004 bound | ever-agentWallet (`agent_wallets.wallet`) | 1,232,013 | **1,150,959** |
+| ERC-8004 bound | ever-owner (`agent_owners.owner`) | 2,356,179 | **2,273,428** |
+
+The union of grant subjects and payers is also 236,961 distinct. Every payer in the record is also a grant subject.
+
+**Intersections** (distinct addresses):
+
+| | ∩ ever-agentWallet | ∩ ever-owner | ∩ either |
+|---|---:|---:|---:|
+| grant subjects (236,961) | **520** | **16,773** | 16,778 |
+| payers (227,995) | **481** | **16,717** | 16,721 |
+| all subjects (236,961) | | | **16,778 (7.1%)** |
+
+- These 16,778 addresses were, at some block, the agentWallet or owner of **18,744 agentIds**. agentId 0 is not among
+  them.
+- "Ever" is address-level. Whether a given fact's subject was bound **at that fact's block** (R-S191-16, the
+  `actorIdentity` rule) was not computed in this run. The ever-overlap is an upper bound on rung-(a) candidates, and it
+  is not an identity claim.
+- The overlap is mostly by ownership: 16,773 by owner against 520 by agentWallet. An owner is the ERC-721 holder,
+  which the agent's operator or a platform can be.
+
+**History: the two cuts that preceded this result.**
 
 **Cut 1.**
 - When: the session opened at 2026-11-27 22:10:23Z and ended with pg `Connection terminated unexpectedly`. The exact
@@ -108,24 +162,39 @@ as observed facts.
 
   One machine before and after.
 
-**What cut 2 did measure** (distinct addresses on 8453, from the live schema
-`deployment-01m89nandm6z68gdjf7nfbbb9k` at 22:29:43Z). These are the two sides of the join; their intersection was
-not computed:
-
-| Side | Column | Non-null rows | Distinct |
-|---|---|---:|---:|
-| Our subjects | grant subjects (`external_permissions.subject`) | 1,028,653 | **236,947** |
-| Our subjects | payment subjects (`external_payments.payer`) | 1,808,562 | **227,984** |
-| ERC-8004 bound | ever-agentWallet (`agent_wallets.wallet`) | 1,231,741 | **1,150,958** |
-| ERC-8004 bound | ever-owner (`agent_owners.owner`) | 2,356,171 | **2,273,424** |
-
-For the next window, the fix is in the script, not the database: stream one side and probe the other. Load our
-subjects, about 0.4M distinct, into memory. Then probe the 8004 tables with `wallet = any($1)` / `owner = any($1)` in
-chunks. Or raise the console's `--max-old-space-size`. Either way, the DB statements stay as they were in cut 2.
+- What cut 2 measured, at 22:29:43Z: the distinct counts 236,947 / 227,984 / 1,150,958 / 2,273,424.
+  - These are consistent with the populations table above; the later read is 52 minutes on.
+  - **Correction:** the "non-null rows" this doc first printed beside them (1,028,653 / 1,808,562 / 1,231,741 /
+    2,356,171) were rows read by the keyset walk, not row counts. A keyset page on a non-unique column skips the rest
+    of a value's rows at a page boundary, so those figures were lower bounds. The distinct counts were exact.
+  - The populations table above uses `count(*)`.
 
 ## A4. Placeholder guard: the resolvable rate
 
-**On the overlap set: not measured** (it depends on A3).
+**On the overlap set.**
+- Sample: 300 of the 18,744 agentIds bound to an A3 intersection address, chosen as the smallest `keccak256(agentId)`
+  (deterministic).
+- Test: the same as the registry-wide sample below, reading `tokenURI` at latest. Read 23:25Z–23:27Z.
+
+| Step | Count | % |
+|---|---:|---:|
+| Non-empty URI (https 277, data: 16, http 1, empty 6) | 294/300 | 98.0% |
+| File fetched | 288/300 | 96.0% |
+| JSON | 283/300 | 94.3% |
+| `type` = `…eip-8004#registration-v1` | 281/300 | 93.7% |
+| Valid file | 279/300 | 93.0% |
+| Valid with ≥1 http(s) endpoint | 275/300 | 91.7% |
+| **Resolvable** | **269/300** | **89.7%** |
+| Resolvable, strict (a 2xx) | 263/300 | 87.7% |
+
+**Concentration on the overlap sample.**
+- **253 of 300 agentURIs are on `centralcity.ai`**, and the first endpoint of all 253 resolvable ones is on the same
+  host.
+- The other URI hosts: `data:` (16), a single S3 bucket (5), `eips.ethereum.org` (4, the spec's own page used as the
+  URI) and `gateway.pinata.cloud` (3).
+- **Off `centralcity.ai`, 16 of 47 are resolvable.** For 6 of those 16, the first endpoint is `basescan.org`: an
+  explorer page, live but not an agent's endpoint.
+- The 269 resolvable files carry 269 distinct names.
 
 **On the registry-wide rail sample** (the same 300 agentIds as A2; rail and HTTP only, no DB). This is a different
 population from the overlap set and must not be read as its rate.
@@ -214,8 +283,11 @@ That is for the ruling to weigh; this sitting proposes no rule.
   - Whether any of them is facilitator-sent is not measured.
 
 **Both lanes, stated:**
-- Rung (a), ERC-8004: the address is derived, the registrations are counted, and the DB matches the rail. The join
-  is not measured, and the guard as defined does not separate a bulk platform from an agent. **Nothing clears today.**
+- Rung (a), ERC-8004: the address is derived, the registrations are counted, and the DB matches the rail.
+  - 16,778 of our 236,961 subjects were ever bound to an agentId, an upper bound before the at-block rule.
+  - On their agentIds, the guard as defined passes 89.7%, but 84% of the sample (253/300) is one platform's files and
+    endpoints.
+  - The guard does not separate a bulk platform from an agent. **Nothing clears today** without a ruling on that.
 - Rung (b), x402: the engine is reindex-class, and 1 of 15 facilitators publishes its signers. **Nothing clears
   today.**
 
@@ -227,5 +299,6 @@ node docs/research/s234-attribution-feasibility.mjs --parts=rail,registry,x402  
 ```
 
 - Needs the Base RPC env named by `CHAINS[8453].rpcEnv` in `packages/reader/src/chains.ts`. The `join` part needs `~/.fly/bin/flyctl` with access to the app.
-- As committed, the `join` part is the cut-2 light form. **It will hit the same console heap limit.** Change it as
-  noted under A3 before giving it its window.
+- The `join` part is the no-join form described under A3, and it is what produced the A3 figures.
+  - The console runs `node --max-old-space-size=768`.
+  - It no longer takes the own-payments tx sample, so the §B "own facts" line stays not measured.
