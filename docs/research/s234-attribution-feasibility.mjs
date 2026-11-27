@@ -186,7 +186,7 @@ async function health(label) {
 }
 
 async function joinRead() {
-  console.log(`\n== A3 join: our 8453 subjects × ERC-8004 bound addresses (throwaway Fly console, read-only SQL, light form)`);
+  console.log(`\n== A3 join: our 8453 subjects × ERC-8004 bound addresses (throwaway Fly console, read-only SQL, no-join form)`);
   const flyctl = path.join(homedir(), ".fly/bin/flyctl");
   const self = fileURLToPath(import.meta.url);
   const healthBefore = await health("before");
@@ -195,11 +195,14 @@ async function joinRead() {
   if (before.length !== 1) { console.error("expected exactly ONE machine before the console; STOP and report"); process.exit(3); }
   let out = "";
   const started = new Date().toISOString();
-  const child = spawn(flyctl, ["console", "-a", APP, "--vm-size", "shared-cpu-1x", "--vm-memory", "1024", "--file-local", `/tmp/s234.mjs=${self}`, "-C", "node /tmp/s234.mjs --inside"], { stdio: ["ignore", "pipe", "inherit"] });
+  const child = spawn(flyctl, ["console", "-a", APP, "--vm-size", "shared-cpu-1x", "--vm-memory", "1024", "--file-local", `/tmp/s234.mjs=${self}`, "-C", "node --max-old-space-size=768 /tmp/s234.mjs --inside"], { stdio: ["ignore", "pipe", "inherit"] });
+  let partial = ""; // echo whole lines only: the JOIN-JSON line spans many stdout chunks
   child.stdout.on("data", (b) => {
     const s = b.toString().replace(/(postgres(ql)?|https?|wss?):\/\/[^"\s]+/g, "[url]");
     out += s;
-    for (const line of s.split("\n")) if (line && !line.startsWith("JOIN-JSON ")) process.stdout.write(`${line}\n`);
+    const lines = (partial + s).split("\n");
+    partial = lines.pop();
+    for (const line of lines) if (line && !line.startsWith("JOIN-JSON ")) process.stdout.write(`${line}\n`);
   });
   const code = await new Promise((r) => child.on("close", r));
   const ended = new Date().toISOString();
@@ -257,7 +260,8 @@ async function resolveRead(viem, rpc, join, registryWide = null) {
     console.log(`\n== A4 placeholder guard: registration-file resolvable rate`);
     ids = join.overlapAgentIds.map(BigInt);
     sample = sampleOf(ids, SAMPLE, viem);
-    console.log(`   population: ${ids.length} agentIds bound (agentWallet or owner, ever) to an overlap subject; ${sample.length === ids.length ? "all read" : `a deterministic sample of ${sample.length} read (smallest keccak(agentId))`}`);
+    if (join.overlapAgentIdCount > ids.length) console.log(`   (the console sent ${ids.length} of ${join.overlapAgentIdCount}: every k-th of the sorted list)`);
+    console.log(`   population: ${join.overlapAgentIdCount} agentIds bound (agentWallet or owner, ever) to an overlap subject; ${sample.length === ids.length ? "all read" : `a deterministic sample of ${sample.length} read (smallest keccak(agentId))`}`);
   }
   if (!sample.length) return { population: 0, read: 0 };
   const abi = viem.parseAbi(["function tokenURI(uint256) view returns (string)"]);
@@ -389,13 +393,17 @@ function require_(f) {
 
 // ───────────────────────────── inside ─────────────────────────────
 
-// The light form (CTO ruling on A3/A4, S234, after the first console session was cut): every statement is a keyset
-// page or a bounded ANY($1) probe on an existing (chain_id, <address>) or (chain_id, agent_id) index; no function on
-// any column; addresses are lowercased on the parameter side only (Ponder stores hex lowercase; the script checks);
-// no DISTINCT CTE; statement_timeout 120 s on every statement. Sets are built and intersected here, in the script.
+// The no-join form (S234 A3/A4 completion; the cut-twice lessons). The DB never computes an intersection: every
+// statement is a per-table keyset page or a bounded ANY($1) probe on an existing (chain_id, <address>) index, or a
+// count over one; no join, no DISTINCT, no function on any column; statement_timeout 120 s. Normalization is
+// script-side only (Ponder stores hex lowercase; the script checks every value). Memory: only OUR subject sets stay
+// resident (~0.46M addresses); the registry tables stream past them page by page and are tested for membership,
+// never held. Keyset pages on a non-unique column skip the rest of a value's rows at a page boundary, so a walk
+// counts distinct values exactly and rows not at all: row counts come from separate count(*) statements.
+// Cut 1 was a whole-table DISTINCT CTE with lower() on indexed columns; cut 2 was the console's Node heap holding all
+// four address sets at once (the run output's V8 stack).
 const PAGE = 50000;
 const CHUNK = 5000;
-const FACT_CAP = 400000;
 
 async function inside() {
   const pnpm = "/app/node_modules/.pnpm";
@@ -407,6 +415,7 @@ async function inside() {
   let statements = 0;
   const q = async (sql, params = []) => { statements++; return (await c.query(sql, params)).rows; };
   const t0 = Date.now();
+  const at = () => `${((Date.now() - t0) / 1000).toFixed(0)} s, ${statements} statements, heap ${(process.memoryUsage().heapUsed / 2 ** 20).toFixed(0)} MiB`;
   try {
     await c.query("begin isolation level repeatable read read only");
     await c.query("set local statement_timeout = '120s'");
@@ -415,94 +424,57 @@ async function inside() {
     if (!schema) throw new Error("live schema not found in the reader views");
     const s = (t) => `"${schema}".${t}`;
     const [{ now }] = await q(`select now()::text as now`);
-    console.log(`   at ${now} live schema ${schema} (one read-only repeatable-read transaction; light form)`);
-
-    // Distinct values of an indexed address column on CHAIN, by keyset pages over its (chain_id, col) index.
+    console.log(`   at ${now} live schema ${schema} (one read-only repeatable-read transaction; no-join form)`);
     const lowerOnly = (a) => { if (a !== a.toLowerCase()) throw new Error(`stored address not lowercase: ${a}`); return a; };
-    async function distinctOf(table, col) {
-      const out = new Set();
-      let last = "";
-      let rows = 0;
+
+    // Walk one indexed address column on CHAIN in keyset pages; call `each` once per distinct value; return the count.
+    async function walk(table, col, each) {
+      let last = "", distinct = 0, prev = null;
       for (;;) {
         const page = await q(`select ${col} as a from ${s(table)} where chain_id = $1 and ${col} > $2 order by chain_id, ${col} limit ${PAGE}`, [CHAIN, last]);
         if (!page.length) break;
-        rows += page.length;
-        for (const r of page) out.add(lowerOnly(r.a));
+        for (const r of page) { const a = lowerOnly(r.a); if (a !== prev) { distinct++; each(a); prev = a; } }
         last = page.at(-1).a;
       }
-      console.log(`   ${table}.${col}: ${rows} non-null rows, ${out.size} distinct (${((Date.now() - t0) / 1000).toFixed(0)} s, ${statements} statements)`);
-      return out;
+      const [{ n }] = await q(`select count(*)::bigint as n from ${s(table)} where chain_id = $1 and ${col} is not null`, [CHAIN]);
+      console.log(`   ${table}.${col}: ${n} non-null rows, ${distinct} distinct (${at()})`);
+      return { rows: Number(n), distinct };
     }
-    const G = await distinctOf("external_permissions", "subject");
-    const P = await distinctOf("external_payments", "payer");
-    const W = await distinctOf("agent_wallets", "wallet");
-    const O = await distinctOf("agent_owners", "owner");
-    const B = new Set([...W, ...O]);
-    const subj = new Set([...G, ...P]);
-    const inter = (a, b) => [...a].filter((x) => b.has(x));
-    const ov = inter(subj, B);
+    // (a) our subject sets, resident.
+    const G = new Set(), P = new Set();
+    const g = await walk("external_permissions", "subject", (a) => G.add(a));
+    const p = await walk("external_payments", "payer", (a) => P.add(a));
+    // (b) the registry columns, streamed past (a); only the hits are kept.
+    const GW = new Set(), PW = new Set(), GO = new Set(), PO = new Set();
+    const w = await walk("agent_wallets", "wallet", (a) => { if (G.has(a)) GW.add(a); if (P.has(a)) PW.add(a); });
+    const o = await walk("agent_owners", "owner", (a) => { if (G.has(a)) GO.add(a); if (P.has(a)) PO.add(a); });
+    const subj = new Set([...G, ...P]).size;
+    G.clear(); P.clear();
+    const ov = [...new Set([...GW, ...PW, ...GO, ...PO])].sort();
     const n = {
-      g: G.size, p: P.size, subj: subj.size, own: O.size, wal: W.size, bound: B.size,
-      g_bound: inter(G, B).length, p_bound: inter(P, B).length, subj_bound: ov.length, subj_own: inter(subj, O).length, subj_wal: inter(subj, W).length,
+      grantSubjects: g, payers: p, allSubjects: subj, agentWallets: w, agentOwners: o,
+      grant_x_wallet: GW.size, grant_x_owner: GO.size, payer_x_wallet: PW.size, payer_x_owner: PO.size,
+      grant_x_bound: new Set([...GW, ...GO]).size, payer_x_bound: new Set([...PW, ...PO]).size, subjects_x_bound: ov.length,
     };
-    console.log(`   populations (distinct addresses on ${CHAIN}): grant subjects ${n.g}; payment subjects (payers) ${n.p}; all subjects ${n.subj}`);
-    console.log(`   ERC-8004 bound addresses: ever-owner ${n.own}; ever-agentWallet ${n.wal}; either ${n.bound}`);
-    console.log(`   OVERLAP subjects ∩ bound: ${n.subj_bound} (grant subjects ${n.g_bound}, payment subjects ${n.p_bound}); ∩ ever-owner ${n.subj_own}; ∩ ever-agentWallet ${n.subj_wal}`);
+    console.log(`   INTERSECTIONS (distinct addresses on ${CHAIN}): grant subjects ∩ ever-agentWallet ${n.grant_x_wallet}; grant subjects ∩ ever-owner ${n.grant_x_owner}; payers ∩ ever-agentWallet ${n.payer_x_wallet}; payers ∩ ever-owner ${n.payer_x_owner}`);
+    console.log(`   derived: grant subjects ∩ (wallet ∪ owner) ${n.grant_x_bound}; payers ∩ (wallet ∪ owner) ${n.payer_x_bound}; all subjects ∩ (wallet ∪ owner) ${n.subjects_x_bound} of ${subj} subjects`);
 
-    const chunks = (xs) => Array.from({ length: Math.ceil(xs.length / CHUNK) }, (_, i) => xs.slice(i * CHUNK, (i + 1) * CHUNK));
-    // Facts whose subject is in the overlap: counted first (bounded probes), fetched only under the cap.
-    let nf = 0;
-    for (const ch of chunks(ov)) {
-      nf += Number((await q(`select count(*)::bigint n from ${s("external_permissions")} where chain_id = $1 and subject = any($2)`, [CHAIN, ch]))[0].n);
-      nf += Number((await q(`select count(*)::bigint n from ${s("external_payments")} where chain_id = $1 and payer = any($2)`, [CHAIN, ch]))[0].n);
+    // The intersection's agentIds: bounded ANY($1) probes on the two address indexes.
+    const ids = new Set();
+    for (let i = 0; i < ov.length; i += CHUNK) {
+      const ch = ov.slice(i, i + CHUNK);
+      for (const r of await q(`select agent_id::text id from ${s("agent_wallets")} where chain_id = $1 and wallet = any($2)`, [CHAIN, ch])) ids.add(r.id);
+      for (const r of await q(`select agent_id::text id from ${s("agent_owners")} where chain_id = $1 and owner = any($2)`, [CHAIN, ch])) ids.add(r.id);
     }
-    // agentIds bound (ever) to an overlap address.
-    const idSet = new Set();
-    for (const ch of chunks(ov)) {
-      for (const r of await q(`select agent_id::text id from ${s("agent_wallets")} where chain_id = $1 and wallet = any($2)`, [CHAIN, ch])) idSet.add(r.id);
-      for (const r of await q(`select agent_id::text id from ${s("agent_owners")} where chain_id = $1 and owner = any($2)`, [CHAIN, ch])) idSet.add(r.id);
-    }
-    const ids = [...idSet].sort((a, b) => (BigInt(a) < BigInt(b) ? -1 : 1));
-    console.log(`   facts whose subject is in the overlap: ${nf}; agentIds bound (ever) to an overlap subject: ${ids.length}`);
-
-    let atBlock = null;
-    const fk = { grant: 0, payment: 0 };
-    if (nf <= FACT_CAP && ids.length) {
-      atBlock = { grant: 0, payment: 0 };
-      const facts = [];
-      for (const ch of chunks(ov)) {
-        for (const r of await q(`select subject a, block_number::text b from ${s("external_permissions")} where chain_id = $1 and subject = any($2)`, [CHAIN, ch])) facts.push({ k: "grant", ...r });
-        for (const r of await q(`select payer a, block_number::text b from ${s("external_payments")} where chain_id = $1 and payer = any($2)`, [CHAIN, ch])) facts.push({ k: "payment", ...r });
-      }
-      const wr = [], or = [];
-      for (const ch of chunks(ids)) {
-        wr.push(...(await q(`select agent_id::text id, block_number::text b, log_index li, wallet v from ${s("agent_wallets")} where chain_id = $1 and agent_id = any($2::numeric[])`, [CHAIN, ch])));
-        or.push(...(await q(`select agent_id::text id, block_number::text b, log_index li, owner v from ${s("agent_owners")} where chain_id = $1 and agent_id = any($2::numeric[])`, [CHAIN, ch])));
-      }
-      const byAddr = new Map();
-      for (const r of [...wr, ...or]) if (r.v) (byAddr.get(r.v) ?? byAddr.set(r.v, new Set()).get(r.v)).add(r.id);
-      const hist = (rows) => { const m = new Map(); for (const r of rows) (m.get(r.id) ?? m.set(r.id, []).get(r.id)).push({ b: BigInt(r.b), li: r.li, v: r.v }); for (const v of m.values()) v.sort((x, y) => (x.b === y.b ? x.li - y.li : x.b < y.b ? -1 : 1)); return m; };
-      const WH = hist(wr), OH = hist(or);
-      const at = (h, id, b) => { let v; for (const r of h.get(id) ?? []) { if (r.b > b) break; v = r; } return v ? v.v : null; };
-      for (const f of facts) {
-        fk[f.k]++;
-        const b = BigInt(f.b);
-        for (const id of byAddr.get(f.a) ?? []) {
-          if (id === "0") continue; // R-S222: agentId 0 carries no identity
-          const w = at(WH, id, b);
-          if (w !== null ? w === f.a : at(OH, id, b) === f.a) { atBlock[f.k]++; break; }
-        }
-      }
-      console.log(`   of those: grants ${fk.grant}, payments ${fk.payment}; subject BOUND AT THE FACT'S BLOCK to a non-zero agentId (R-S191-16, the actorIdentity rule): grants ${atBlock.grant}, payments ${atBlock.payment}`);
-    } else if (nf > FACT_CAP) console.log(`   at-block binding not computed: ${nf} overlap facts exceed the cap ${FACT_CAP}`);
-
-    // Fact totals on CHAIN and a payment tx sample for §B: reltuples-free, by the (chain_id, payer) index's first page.
-    const sample = (await q(`select tx_hash from ${s("external_payments")} where chain_id = $1 and payer > $2 order by chain_id, payer limit ${SAMPLE}`, [CHAIN, "0x8"])).map((r) => r.tx_hash);
+    const idList = [...ids].sort((x, y) => (BigInt(x) < BigInt(y) ? -1 : 1));
+    console.log(`   agentIds bound (ever, agentWallet or owner) to an intersection address: ${idList.length} (agentId 0 among them: ${ids.has("0")}) (${at()})`);
     await c.query("rollback");
-    console.log(`   read in ${((Date.now() - t0) / 1000).toFixed(1)} s, ${statements} statements`);
+    console.log(`   read in ${at()}`);
     console.log(`JOIN-JSON ${JSON.stringify({
-      at: now, schema, statements, seconds: Math.round((Date.now() - t0) / 1000), populations: n, overlapFacts: nf, facts: fk, atBlock,
-      overlapAgentIdCount: ids.length, overlapAgentIds: ids.slice(0, 50000), paymentTxSample: sample,
+      at: now, schema, statements, seconds: Math.round((Date.now() - t0) / 1000), populations: n,
+      // Over 50,000: every k-th of the sorted list (evenly spaced, stated), not the first 50,000.
+      overlapAgentIdCount: idList.length,
+      overlapAgentIds: idList.length <= 50000 ? idList : idList.filter((_, i) => i % Math.ceil(idList.length / 50000) === 0),
     })}`);
   } finally {
     await c.end();
